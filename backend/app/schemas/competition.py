@@ -60,6 +60,28 @@ class CompetitionAwardRead(BaseModel):
     week_start: str
 
 
+class CategoryBoardEntryRead(BaseModel):
+    rank: int
+    user_id: str
+    username: str | None = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    score: int
+    gallery_item_id: str | None = None
+    look_title: str | None = None
+
+
+class CategoryBoardRead(BaseModel):
+    category: str
+    label: str
+    stars: int
+    week_start: str
+    week_end: str
+    group_index: int | None = None
+    entries: list[CategoryBoardEntryRead] = Field(default_factory=list)
+    empty_reason: str | None = None
+
+
 class StreakStatusRead(BaseModel):
     current_streak: int
     last_checkin_date: str | None = None

@@ -62,8 +62,38 @@ export type CompetitionAward = {
   week_start: string
 }
 
+export type CategoryBoardEntry = {
+  rank: number
+  user_id: string
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  score: number
+  gallery_item_id: string | null
+  look_title: string | null
+}
+
+export type CategoryBoard = {
+  category: string
+  label: string
+  stars: number
+  week_start: string
+  week_end: string
+  group_index: number | null
+  entries: CategoryBoardEntry[]
+  empty_reason: string | null
+}
+
 export function fetchCompetitionStatus() {
   return apiRequest<CompetitionStatus>('/competitions/status', { method: 'GET' })
+}
+
+export function fetchCategoryBoard(categoryId: string, limit = 20) {
+  const q = new URLSearchParams({ limit: String(limit) })
+  return apiRequest<CategoryBoard>(
+    `/competitions/categories/${encodeURIComponent(categoryId)}/board?${q}`,
+    { method: 'GET' },
+  )
 }
 
 export function fetchCompetitionAwards(params?: { week_start?: string; group_index?: number }) {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RunwayBoardScreen } from './RunwayBoardScreen'
 
 const listGallery = vi.fn()
+const fetchCategoryBoard = vi.fn()
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
@@ -21,21 +22,19 @@ vi.mock('@/services/competitionsApi', () => ({
     standing: null,
     top_designs: [],
     top_designers: [],
-    award_categories: [
-      { id: 'top_design', label: 'Top Design', stars: 50 },
-      { id: 'top_designer', label: 'Top Designer', stars: 50 },
-      { id: 'community_champion', label: 'Community Champion', stars: 50 },
-      { id: 'top_supporter', label: 'Top Supporter', stars: 20 },
-      { id: 'top_commenter', label: 'Top Commenter', stars: 20 },
-      { id: 'top_rater', label: 'Top Rater', stars: 20 },
-    ],
-    runway_note: 'Worldwide Runway Top 10/20/50 stays global',
+    award_categories: [],
+    runway_note: 'Worldwide Runway stays global',
     publish_note: 'Publish anytime.',
     weekly_rewards_enabled: false,
     weekly_rewards_launch_week_start: null,
   })),
   fetchCompetitionAwards: vi.fn(async () => []),
   fetchStreakStatus: vi.fn(async () => null),
+  fetchCategoryBoard: (...args: unknown[]) => fetchCategoryBoard(...args),
+}))
+
+vi.mock('@/services/profilesApi', () => ({
+  profileAvatarSrc: () => null,
 }))
 
 function item(id: string, title: string): Record<string, unknown> {
@@ -60,37 +59,54 @@ function item(id: string, title: string): Record<string, unknown> {
 describe('RunwayBoardScreen', () => {
   beforeEach(() => {
     listGallery.mockReset()
+    fetchCategoryBoard.mockReset()
     listGallery.mockResolvedValue([item('g1', 'Pink gown')])
+    fetchCategoryBoard.mockResolvedValue({
+      category: 'top_designer',
+      label: 'Top Designer',
+      stars: 50,
+      week_start: '2026-11-15T00:00:00+00:00',
+      week_end: '2026-11-22T00:00:00+00:00',
+      group_index: 0,
+      empty_reason: null,
+      entries: [
+        {
+          rank: 1,
+          user_id: 'u-noa',
+          username: 'NoaPeri',
+          display_name: 'Noa Peri',
+          avatar_url: null,
+          score: 42,
+          gallery_item_id: null,
+          look_title: null,
+        },
+        {
+          rank: 2,
+          user_id: 'u-peri',
+          username: 'PeriShilat',
+          display_name: 'Peri Shilat',
+          avatar_url: null,
+          score: 31,
+          gallery_item_id: null,
+          look_title: null,
+        },
+      ],
+    })
   })
 
-  it('shows Runway rankings with Top 10/20/50 and weekly categories', async () => {
+  it('opens a weekly category profile board on click', async () => {
     render(<RunwayBoardScreen />)
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
-    expect(screen.getByText(/Instagram-style scroll lives on FashionRise/i)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /Weekly categories/i })).toBeInTheDocument()
-    expect(screen.getByTestId('runway-cat-top_design')).toHaveTextContent('Top Design')
-    expect(screen.getByTestId('runway-cat-top_designer')).toHaveTextContent('Top Designer')
-    expect(screen.getByTestId('runway-cat-community_champion')).toHaveTextContent(
-      'Community Champion',
-    )
-    expect(screen.getByTestId('runway-cat-top_supporter')).toHaveTextContent('Top Supporter')
-    expect(screen.getByTestId('runway-cat-top_commenter')).toHaveTextContent('Top Commenter')
-    expect(screen.getByTestId('runway-cat-top_rater')).toHaveTextContent('Top Rater')
-
-    await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    expect(listGallery.mock.calls[0][0]).toMatchObject({ sort: 'top10', limit: 10 })
     expect(await screen.findByText('Pink gown')).toBeInTheDocument()
 
-    expect(screen.getAllByLabelText('Award categories').length).toBeGreaterThanOrEqual(1)
-
-    fireEvent.click(screen.getByTestId('runway-top-limit-50'))
+    fireEvent.click(screen.getByTestId('runway-cat-top_designer'))
     await waitFor(() =>
-      expect(listGallery.mock.calls.at(-1)?.[0]).toMatchObject({ sort: 'top10', limit: 50 }),
+      expect(fetchCategoryBoard).toHaveBeenCalledWith('top_designer', 20),
     )
-
-    fireEvent.click(screen.getByTestId('runway-scope-friends'))
-    await waitFor(() =>
-      expect(listGallery.mock.calls.at(-1)?.[0]).toMatchObject({ sort: 'circle' }),
-    )
+    expect(await screen.findByText('Noa Peri')).toBeInTheDocument()
+    expect(screen.getByText('@NoaPeri')).toBeInTheDocument()
+    expect(screen.getByText('Peri Shilat')).toBeInTheDocument()
+    expect(screen.getByText('Group 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Top Designer' })).toBeInTheDocument()
   })
 })

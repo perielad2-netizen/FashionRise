@@ -11,6 +11,7 @@ from app.auth.dependencies import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.competition import (
+    CategoryBoardRead,
     CompetitionAwardRead,
     CompetitionStatusRead,
     StreakStatusRead,
@@ -29,6 +30,20 @@ def competition_status(
 ) -> CompetitionStatusRead:
     raw = competition_service.build_competition_status(db, user)
     return CompetitionStatusRead.model_validate(raw)
+
+
+@router.get("/categories/{category_id}/board", response_model=CategoryBoardRead)
+def competition_category_board(
+    category_id: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+) -> CategoryBoardRead:
+    """Live weekly profile/design leaderboard for one award category."""
+    raw = competition_service.build_category_board(
+        db, user, category=category_id, limit=limit
+    )
+    return CategoryBoardRead.model_validate(raw)
 
 
 @router.get("/awards", response_model=list[CompetitionAwardRead])

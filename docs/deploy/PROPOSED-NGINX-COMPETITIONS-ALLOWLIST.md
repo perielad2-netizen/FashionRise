@@ -34,6 +34,17 @@
         proxy_set_header Authorization $http_authorization;
     }
 
+    location ~ "^/api/v1/competitions/categories/[a-z0-9_]+/board$" {
+        limit_except GET OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+
     location = /api/v1/competitions/streak {
         limit_except GET OPTIONS { deny all; }
         proxy_pass http://127.0.0.1:8010;

@@ -197,3 +197,19 @@ def test_competition_status_endpoint(client, db_session):
     assert "seconds_remaining" in body
     assert body["publish_note"]
     assert "Top Design" in [c["label"] for c in body["award_categories"]]
+
+
+def test_competition_category_board_endpoint(client, db_session):
+    tokens = register_with_invite(client, db_session, "comp_board@example.com", "compBoard")
+    res = client.get(
+        "/api/v1/competitions/categories/top_designer/board",
+        headers=_auth(tokens),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["category"] == "top_designer"
+    assert body["label"] == "Top Designer"
+    assert body["stars"] == 50
+    assert isinstance(body["entries"], list)
+    bad = client.get("/api/v1/competitions/categories/not_a_cat/board", headers=_auth(tokens))
+    assert bad.status_code == 404

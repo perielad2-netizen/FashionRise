@@ -8,12 +8,16 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+
 from app.models.competition import (
     CompetitionAward,
     CompetitionGroup,
     CompetitionWeek,
 )
+from app.models.gallery_item import GalleryItem
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.services.competition_awards import AWARD_DEFS, CATEGORY_LABELS
 from app.services.competition_clock import (
     competition_week_end,
@@ -25,9 +29,18 @@ from app.services.competition_clock import (
 )
 from app.services.competition_groups import get_membership, list_group_rows
 from app.services.competition_scoring import (
+    ScoredDesign,
+    ScoredUser,
+    community_champion_scores,
+    commenter_scores,
     design_engagement_scores,
     designer_scores_from_designs,
+    rater_scores,
+    supporter_scores,
 )
+
+BOARD_LIMIT = 20
+VALID_CATEGORIES = {cid for cid, _ in AWARD_DEFS}
 
 
 def _username_map(db: Session, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
@@ -184,3 +197,153 @@ def previous_locked_or_current(db: Session) -> datetime:
     if locked is not None:
         return locked.week_start
     return competition_week_start()
+
+
+def _profile_map(
+    db: Session, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str | None, str | None]]:
+    """user_id → (display_name, avatar_url)."""
+    if not user_ids:
+        return {}
+    rows = db.execute(
+        select(UserProfile.user_id, UserProfile.display_name, UserProfile.avatar_url).where(
+            UserProfile.user_id.in_(user_ids)
+        )
+    ).all()
+    return {row.user_id: (row.display_name, row.avatar_url) for row in rows}
+
+
+def _resolve_board_group(
+    db: Session,
+    user: User | None,
+    *,
+    week_start: datetime,
+) -> CompetitionGroup | None:
+    if user is not None:
+        member = get_membership(db, user.id, week_start=week_start)
+        if member is not None:
+            group = db.get(CompetitionGroup, member.group_id)
+            if group is not None:
+                return group
+    groups = list_group_rows(db, week_start)
+    return groups[0] if groups else None
+
+
+def build_category_board(
+    db: Session,
+    user: User | None,
+    *,
+    category: str,
+    limit: int = BOARD_LIMIT,
+    now: datetime | None = None,
+) -> dict:
+    """Live weekly leaderboard for one award category (group-scoped)."""
+    cat = (category or "").strip().lower()
+    if cat not in VALID_CATEGORIES:
+        raise HTTPException(status_code=404, detail="Unknown competition category")
+
+    now_utc = ensure_utc(now or datetime.now(timezone.utc))
+    week_start = competition_week_start(now_utc)
+    week_end = competition_week_end(week_start)
+    stars = next(s for cid, s in AWARD_DEFS if cid == cat)
+    group = _resolve_board_group(db, user, week_start=week_start)
+
+    base = {
+        "category": cat,
+        "label": CATEGORY_LABELS[cat],
+        "stars": stars,
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "group_index": group.group_index if group else None,
+        "entries": [],
+        "empty_reason": None,
+    }
+    if group is None:
+        base["empty_reason"] = (
+            "No competition group yet this week. Publish or engage on FashionRise to enter."
+        )
+        return base
+
+    designs = design_engagement_scores(
+        db, week_start=week_start, week_end=week_end, group_id=group.id
+    )
+    scored_users: list[ScoredUser] = []
+    scored_designs: list[ScoredDesign] = []
+    if cat == "top_design":
+        scored_designs = designs[: max(1, min(limit, 50))]
+    elif cat == "top_designer":
+        scored_users = designer_scores_from_designs(designs)[: max(1, min(limit, 50))]
+    elif cat == "community_champion":
+        scored_users = community_champion_scores(
+            db,
+            week_start=week_start,
+            week_end=week_end,
+            group_id=group.id,
+            design_scores=designs,
+        )[: max(1, min(limit, 50))]
+    elif cat == "top_supporter":
+        scored_users = supporter_scores(
+            db, week_start=week_start, week_end=week_end, group_id=group.id
+        )[: max(1, min(limit, 50))]
+    elif cat == "top_commenter":
+        scored_users = commenter_scores(
+            db, week_start=week_start, week_end=week_end, group_id=group.id
+        )[: max(1, min(limit, 50))]
+    elif cat == "top_rater":
+        scored_users = rater_scores(
+            db, week_start=week_start, week_end=week_end, group_id=group.id
+        )[: max(1, min(limit, 50))]
+
+    if cat == "top_design":
+        user_ids = [row.user_id for row in scored_designs]
+        item_ids = [row.gallery_item_id for row in scored_designs]
+        titles: dict[uuid.UUID, str] = {}
+        if item_ids:
+            for item_id, title in db.execute(
+                select(GalleryItem.id, GalleryItem.title).where(GalleryItem.id.in_(item_ids))
+            ).all():
+                titles[item_id] = title
+        names = _username_map(db, user_ids)
+        profiles = _profile_map(db, user_ids)
+        entries = []
+        for i, row in enumerate(scored_designs):
+            display, avatar = profiles.get(row.user_id, (None, None))
+            entries.append(
+                {
+                    "rank": i + 1,
+                    "user_id": str(row.user_id),
+                    "username": names.get(row.user_id),
+                    "display_name": display,
+                    "avatar_url": avatar,
+                    "score": row.score,
+                    "gallery_item_id": str(row.gallery_item_id),
+                    "look_title": titles.get(row.gallery_item_id),
+                }
+            )
+        base["entries"] = entries
+    else:
+        user_ids = [row.user_id for row in scored_users]
+        names = _username_map(db, user_ids)
+        profiles = _profile_map(db, user_ids)
+        entries = []
+        for i, row in enumerate(scored_users):
+            display, avatar = profiles.get(row.user_id, (None, None))
+            entries.append(
+                {
+                    "rank": i + 1,
+                    "user_id": str(row.user_id),
+                    "username": names.get(row.user_id),
+                    "display_name": display,
+                    "avatar_url": avatar,
+                    "score": row.score,
+                    "gallery_item_id": None,
+                    "look_title": None,
+                }
+            )
+        base["entries"] = entries
+
+    if not base["entries"]:
+        base["empty_reason"] = (
+            "No scores in this category yet this week. Publish looks and engage to climb."
+        )
+    return base
