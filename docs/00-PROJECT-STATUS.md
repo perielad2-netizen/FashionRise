@@ -3,15 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — My Designs Mobbin redesign LIVE (2026-11-16 22:15 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#386** merged → `main` @ **`76e4f736`** |
+| Tip | FE **`76e4f736`** · `/var/www/fashionrise/releases/76e4f736-my-designs-mobbin-polish` |
+| Change | Image-first My Designs tiles, pink Open, icon Delete, working-draft hero |
+| Preview | `/preview-designs/` removed after promote |
+| Series | Continuing: My Looks → Models → Fitting → Create |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/d89bbf3a-stars-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Stars Mobbin redesign LIVE (2026-11-16 21:57 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | PR | **#384** merged → `main` @ **`d89bbf3a`** |
 | Tip | FE **`d89bbf3a`** · `/var/www/fashionrise/releases/d89bbf3a-stars-mobbin-polish` |
-| Change | CapCut-style Stars sheet: FashionRise eyebrow, large balance hero, pack grid, gold Buy |
+| Change | CapCut-style Stars sheet: FashionRise eyebrow, large balance hero, pack grid |
 | Preview | `/preview-stars/` removed after promote |
-| Series | Social set complete · continuing studio pages: My Designs → Looks → Models → Fitting → Create |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/77dce926-profile-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Profile Mobbin redesign LIVE (2026-11-16 21:52 Asia/Jerusalem)
