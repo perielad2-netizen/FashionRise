@@ -86,7 +86,11 @@ def record_daily_checkin(
 ) -> StreakStatus:
     """Authenticated app visit for the UTC calendar day — not token refresh spam."""
     today = utc_today(now)
-    row = get_or_create_streak(db, user.id)
+    get_or_create_streak(db, user.id)
+    # Serialize same-user check-ins so concurrent foreground visits cannot double-count.
+    row = db.execute(
+        select(LoginStreak).where(LoginStreak.user_id == user.id).with_for_update()
+    ).scalar_one()
     last = row.last_checkin_date
 
     if last == today:

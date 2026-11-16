@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -21,6 +22,7 @@ MIN_COMMENT_CHARS = 12
 MAX_QUALIFYING_COMMENTS_PER_DESIGN = 2
 MAX_LIKES_PER_DESIGNER = 25
 MAX_RATINGS_PER_DESIGNER = 25
+COMMENT_POINTS_PER_QUALIFYING = 4
 
 
 def _normalize_comment(body: str) -> str:
@@ -38,6 +40,13 @@ class ScoredDesign:
 class ScoredUser:
     user_id: uuid.UUID
     score: int
+
+
+@dataclass(frozen=True)
+class QualifyingComment:
+    commenter_id: uuid.UUID
+    gallery_item_id: uuid.UUID
+    owner_id: uuid.UUID
 
 
 def _member_ids(db: Session, group_id: uuid.UUID) -> set[uuid.UUID]:
@@ -65,6 +74,42 @@ def _week_designs(
             )
         ).all()
     )
+
+
+def qualifying_comments(
+    rows: Sequence[tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID | None, str | None]]
+    | Iterable[tuple],
+) -> list[QualifyingComment]:
+    """Deterministic anti-spam filter shared by design and commenter prize scoring.
+
+    Input rows: (commenter_id, comment_id, gallery_item_id, owner_id, body)
+    ordered oldest-first for stable first-wins de-dupe.
+    """
+    out: list[QualifyingComment] = []
+    seen_bodies: dict[uuid.UUID, set[str]] = defaultdict(set)
+    per_design: dict[uuid.UUID, dict[uuid.UUID, int]] = defaultdict(lambda: defaultdict(int))
+
+    for commenter_id, _cid, item_id, owner_id, body in rows:
+        if owner_id is None or commenter_id == owner_id:
+            continue
+        text = (body or "").strip()
+        if len(text) < MIN_COMMENT_CHARS:
+            continue
+        norm = _normalize_comment(text)
+        if not norm or norm in seen_bodies[commenter_id]:
+            continue
+        if per_design[commenter_id][item_id] >= MAX_QUALIFYING_COMMENTS_PER_DESIGN:
+            continue
+        seen_bodies[commenter_id].add(norm)
+        per_design[commenter_id][item_id] += 1
+        out.append(
+            QualifyingComment(
+                commenter_id=commenter_id,
+                gallery_item_id=item_id,
+                owner_id=owner_id,
+            )
+        )
+    return out
 
 
 def design_engagement_scores(
@@ -111,20 +156,26 @@ def design_engagement_scores(
         scores[item_id] += 2 + max(0, min(10, int(score or 0))) // 2
 
     comments = db.execute(
-        select(GalleryComment.gallery_item_id, GalleryComment.user_id, GalleryComment.body).where(
+        select(
+            GalleryComment.user_id,
+            GalleryComment.id,
+            GalleryComment.gallery_item_id,
+            GalleryItem.user_id,
+            GalleryComment.body,
+        )
+        .join(GalleryItem, GalleryItem.id == GalleryComment.gallery_item_id)
+        .where(
             GalleryComment.gallery_item_id.in_(by_id.keys()),
             GalleryComment.moderation_status == "ok",
             GalleryComment.created_at >= start,
             GalleryComment.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
         )
+        .order_by(GalleryComment.created_at.asc(), GalleryComment.id.asc())
     ).all()
-    for item_id, commenter_id, body in comments:
-        owner = by_id[item_id].user_id
-        if commenter_id == owner:
-            continue
-        if len((body or "").strip()) < MIN_COMMENT_CHARS:
-            continue
-        scores[item_id] += 4
+    for qc in qualifying_comments(comments):
+        scores[qc.gallery_item_id] += COMMENT_POINTS_PER_QUALIFYING
 
     out = [
         ScoredDesign(gallery_item_id=item_id, user_id=by_id[item_id].user_id, score=score)
@@ -193,7 +244,7 @@ def commenter_scores(
     week_end: datetime,
     group_id: uuid.UUID,
 ) -> list[ScoredUser]:
-    """Meaningful comments only — length, uniqueness, per-design bound, distinct designers."""
+    """Meaningful comments only — shared qualifying filter + designer diversity."""
     start = ensure_utc(week_start)
     end = ensure_utc(week_end)
     members = _member_ids(db, group_id)
@@ -220,27 +271,11 @@ def commenter_scores(
     ).all()
 
     scores: dict[uuid.UUID, int] = defaultdict(int)
-    seen_bodies: dict[uuid.UUID, set[str]] = defaultdict(set)
-    per_design: dict[uuid.UUID, dict[uuid.UUID, int]] = defaultdict(lambda: defaultdict(int))
     designers_touched: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    for qc in qualifying_comments(rows):
+        scores[qc.commenter_id] += 1
+        designers_touched[qc.commenter_id].add(qc.owner_id)
 
-    for commenter_id, _cid, item_id, owner_id, body in rows:
-        if commenter_id == owner_id:
-            continue
-        text = (body or "").strip()
-        if len(text) < MIN_COMMENT_CHARS:
-            continue
-        norm = _normalize_comment(text)
-        if not norm or norm in seen_bodies[commenter_id]:
-            continue
-        if per_design[commenter_id][item_id] >= MAX_QUALIFYING_COMMENTS_PER_DESIGN:
-            continue
-        seen_bodies[commenter_id].add(norm)
-        per_design[commenter_id][item_id] += 1
-        designers_touched[commenter_id].add(owner_id)
-        scores[commenter_id] += 1
-
-    # Qualifying comments + unique designers (diversity over farming one creator).
     out: list[ScoredUser] = []
     for uid, comment_pts in scores.items():
         diversity = len(designers_touched[uid])
