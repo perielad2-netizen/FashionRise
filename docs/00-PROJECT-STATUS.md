@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Fitting Room camera + gallery** — FE tip pending this turn.)
+**Last updated:** 2026-11-16 (**Fitting Room camera + gallery** — FE tip `7dfc22a9` live.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,15 +12,25 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (Fitting Room camera tip+); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (`7dfc22a9+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
-| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** for person/clothing · BE `FITTING_ROOM_*` **ON** on VPS. |
+| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
 **Exact next step:** Hard-refresh Fitting Room · confirm Take photo / Take clothing photo open camera · rebuild Android from `main` for CAMERA permission.
+
+## Fitting Room — camera + gallery (2026-11-16) — tip LIVE / #346
+
+| Status | Detail |
+|---|---|
+| Change | My Photo + clothing: gallery **and** camera (`capture=environment`) · per-piece Replace/Camera |
+| Native | iOS usage strings · Android `CAMERA` permission |
+| Merge | **#346** → `main` @ **`7dfc22a9`** |
+| Production FE tip | **`7dfc22a9`** → `/var/www/fashionrise/releases/7dfc22a9-fitting-room-camera` · prior `e75ad0c3-brush-size-preview` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/e75ad0c3-brush-size-preview /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Studio polish — brush size preview contrast (2026-11-16) — tip LIVE / #344
 
