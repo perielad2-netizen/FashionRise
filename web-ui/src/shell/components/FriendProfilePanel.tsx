@@ -712,19 +712,19 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
                       {canFollow ? (
                         <button
                           type="button"
-                          className={person.following ? styles.ghostBtn : styles.primaryBtn}
+                          className={person.following ? styles.peopleFollowOn : styles.peopleFollow}
                           disabled={followerBusyId === person.user_id}
                           data-testid={`follower-follow-${person.user_id}`}
                           onClick={() => void onToggleFollowerFollow(person)}
                         >
                           {person.following ? (
                             <>
-                              <UserMinus size={14} aria-hidden />
+                              <UserMinus size={13} aria-hidden />
                               Following
                             </>
                           ) : (
                             <>
-                              <UserPlus size={14} aria-hidden />
+                              <UserPlus size={13} aria-hidden />
                               Follow
                             </>
                           )}
