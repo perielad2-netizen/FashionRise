@@ -103,8 +103,28 @@ const TABS: Array<{ id: Exclude<TabId, 'friends'>; label: string; hint: string }
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
 const DISCOVER_PAGE_SIZE = 24
 
-/** Session cache so Follow status is not re-fetched for every remount of the same designer. */
+/** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
 const followStatusCache = new Map<string, boolean>()
+
+export function followStatusCacheKey(viewerId: string, designerId: string): string {
+  return `${viewerId}:${designerId}`
+}
+
+/** Test-only helpers for account-switch Follow cache coverage. */
+export const __followStatusCacheTestUtils = {
+  clear() {
+    followStatusCache.clear()
+  },
+  set(viewerId: string, designerId: string, following: boolean) {
+    followStatusCache.set(followStatusCacheKey(viewerId, designerId), following)
+  },
+  get(viewerId: string, designerId: string): boolean | undefined {
+    return followStatusCache.get(followStatusCacheKey(viewerId, designerId))
+  },
+  size() {
+    return followStatusCache.size
+  },
+}
 
 /** Batch unique Discover impressions only after cards become meaningfully visible. */
 function useDiscoverImpressionReporter() {
@@ -1296,7 +1316,8 @@ function RunwayCard({
       setFollowingDesigner(false)
       return
     }
-    const cached = followStatusCache.get(item.user_id)
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
+    const cached = followStatusCache.get(cacheKey)
     if (cached !== undefined) {
       setFollowingDesigner(cached)
       setFollowKnown(true)
@@ -1309,7 +1330,7 @@ function RunwayCard({
         .then((row) => {
           if (cancelled) return
           const next = Boolean(row.following)
-          followStatusCache.set(item.user_id, next)
+          followStatusCache.set(cacheKey, next)
           setFollowingDesigner(next)
           setFollowKnown(true)
         })
@@ -1331,7 +1352,7 @@ function RunwayCard({
           .then((row) => {
             if (cancelled) return
             const next = Boolean(row.following)
-            followStatusCache.set(item.user_id, next)
+            followStatusCache.set(cacheKey, next)
             setFollowingDesigner(next)
             setFollowKnown(true)
           })
@@ -1440,15 +1461,16 @@ function RunwayCard({
     setBusy('follow')
     setActionError(null)
     const prev = followingDesigner
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
     setFollowingDesigner(!prev)
-    followStatusCache.set(item.user_id, !prev)
+    followStatusCache.set(cacheKey, !prev)
     try {
       if (prev) await unfollowCreator(item.user_id)
       else await followCreator(item.user_id)
       setFollowKnown(true)
     } catch (err) {
       setFollowingDesigner(prev)
-      followStatusCache.set(item.user_id, prev)
+      followStatusCache.set(cacheKey, prev)
       setActionError(err instanceof ApiError ? err.message : 'Could not update follow.')
     } finally {
       setBusy(null)

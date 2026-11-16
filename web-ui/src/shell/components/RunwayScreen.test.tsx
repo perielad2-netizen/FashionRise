@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { RunwayScreen } from './RunwayScreen'
+import {
+  RunwayScreen,
+  __followStatusCacheTestUtils,
+  followStatusCacheKey,
+} from './RunwayScreen'
 
 const listGallery = vi.fn()
 const recordGalleryImpressions = vi.fn()
@@ -113,7 +117,7 @@ vi.mock('@/services/pushApi', () => ({
   setPushDesired: vi.fn(),
 }))
 
-const authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
+let authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
 
 vi.mock('@/services/auth/AuthProvider', () => ({
   useAuth: () => ({
@@ -163,6 +167,8 @@ const topItem = {
 
 describe('RunwayScreen', () => {
   beforeEach(() => {
+    authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
+    __followStatusCacheTestUtils.clear()
     listGallery.mockReset()
     recordGalleryImpressions.mockReset()
     getGalleryItem.mockReset()
@@ -227,6 +233,85 @@ describe('RunwayScreen', () => {
       following_count: 0,
       reputation_score: 0,
     }))
+  })
+
+  it('scopes Follow cache by viewer+designer so account switches do not leak state', async () => {
+    expect(followStatusCacheKey('viewer-1', 'creator-a')).toBe('viewer-1:creator-a')
+    expect(followStatusCacheKey('viewer-2', 'creator-a')).toBe('viewer-2:creator-a')
+
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          this.cb(
+            [
+              {
+                isIntersecting: true,
+                intersectionRatio: 1,
+                target: el,
+              } as IntersectionObserverEntry,
+            ],
+            this as unknown as IntersectionObserver,
+          )
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
+
+    getFollowStatus.mockImplementation(async (userId: string) => {
+      if (authUser.id === 'viewer-1') return { user_id: userId, following: true }
+      return { user_id: userId, following: false }
+    })
+
+    try {
+      const first = render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByTestId('runway-follow-creator-a')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(getFollowStatus).toHaveBeenCalledWith('creator-a'),
+      )
+      await waitFor(() =>
+        expect(screen.getByTestId('runway-follow-creator-a')).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        ),
+      )
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+      expect(__followStatusCacheTestUtils.get('viewer-2', 'creator-a')).toBeUndefined()
+
+      first.unmount()
+      getFollowStatus.mockClear()
+      authUser = { id: 'viewer-2', email: 'viewer2@example.com', username: 'viewer2' }
+
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByTestId('runway-follow-creator-a')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(getFollowStatus).toHaveBeenCalledWith('creator-a'),
+      )
+      await waitFor(() =>
+        expect(screen.getByTestId('runway-follow-creator-a')).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        ),
+      )
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+      expect(__followStatusCacheTestUtils.get('viewer-2', 'creator-a')).toBe(false)
+      expect(screen.getByTestId('runway-follow-creator-a')).not.toHaveTextContent('Following')
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
   })
 
   async function openMoreMenu() {
