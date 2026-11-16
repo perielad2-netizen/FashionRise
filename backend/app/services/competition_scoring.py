@@ -61,16 +61,16 @@ def _member_ids(db: Session, group_id: uuid.UUID) -> set[uuid.UUID]:
 def _week_designs(
     db: Session, *, week_start: datetime, week_end: datetime, user_ids: set[uuid.UUID]
 ) -> list[GalleryItem]:
+    """Public member looks eligible for week scoring (publish week no longer required)."""
     if not user_ids:
         return []
+    _ = (week_start, week_end)  # engagement windows filter likes/ratings/comments instead
     return list(
         db.scalars(
             select(GalleryItem).where(
                 GalleryItem.user_id.in_(user_ids),
                 GalleryItem.visibility == "public",
                 GalleryItem.moderation_status == "ok",
-                GalleryItem.created_at >= week_start,
-                GalleryItem.created_at < week_end,
             )
         ).all()
     )
@@ -119,7 +119,12 @@ def design_engagement_scores(
     week_end: datetime,
     group_id: uuid.UUID,
 ) -> list[ScoredDesign]:
-    """Engagement recorded during the week on designs published in that week."""
+    """Engagement recorded during the week on public designs by group members.
+
+    Looks published in prior weeks still count when liked/rated/commented this week,
+    so FashionRise activity fills Top Design / Top Designer without waiting for a
+    brand-new publish every Sunday.
+    """
     start = ensure_utc(week_start)
     end = ensure_utc(week_end)
     members = _member_ids(db, group_id)

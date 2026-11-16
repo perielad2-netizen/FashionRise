@@ -52,6 +52,7 @@ class GalleryRead(BaseModel):
     rating_average: float | None
     rating_count: int
     likes_count: int
+    comments_count: int = 0
     moderation_status: str
     created_at: datetime
     updated_at: datetime

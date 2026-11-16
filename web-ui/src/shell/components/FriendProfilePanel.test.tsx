@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { __followStatusCacheTestUtils } from '@/lib/followStatusStore'
 import { FriendProfilePanel } from './FriendProfilePanel'
 
 const getPublicProfile = vi.fn()
 const getFollowStatus = vi.fn()
 const followCreator = vi.fn()
 const unfollowCreator = vi.fn()
+const listProfileFollowers = vi.fn()
 const listUserGallery = vi.fn()
 const updateMyProfile = vi.fn()
 const uploadMyAvatar = vi.fn()
@@ -15,6 +17,7 @@ vi.mock('@/services/profilesApi', () => ({
   getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
+  listProfileFollowers: (...args: unknown[]) => listProfileFollowers(...args),
   updateMyProfile: (...args: unknown[]) => updateMyProfile(...args),
   uploadMyAvatar: (...args: unknown[]) => uploadMyAvatar(...args),
   profileAvatarSrc: (userId: string, avatarUrl: string | null | undefined) =>
@@ -50,13 +53,16 @@ const own = {
 
 describe('FriendProfilePanel (premium designer card)', () => {
   beforeEach(() => {
+    __followStatusCacheTestUtils.clear()
     getPublicProfile.mockReset()
     getFollowStatus.mockReset()
     followCreator.mockReset()
     unfollowCreator.mockReset()
+    listProfileFollowers.mockReset()
     listUserGallery.mockReset()
     updateMyProfile.mockReset()
     uploadMyAvatar.mockReset()
+    listProfileFollowers.mockResolvedValue([])
     getPublicProfile.mockResolvedValue({
       id: 'p1',
       user_id: 'friend-1',
@@ -123,6 +129,27 @@ describe('FriendProfilePanel (premium designer card)', () => {
     fireEvent.click(btn)
     await waitFor(() => expect(followCreator).toHaveBeenCalledWith('friend-1'))
     expect(btn).toHaveTextContent(/Following/i)
+    expect(__followStatusCacheTestUtils.get('viewer-1', 'friend-1')).toBe(true)
+  })
+
+  it('opens Followers and lets the viewer follow someone from the list', async () => {
+    listProfileFollowers.mockResolvedValue([
+      {
+        user_id: 'fan-1',
+        username: 'fanone',
+        display_name: 'Fan One',
+        avatar_url: null,
+        following: false,
+      },
+    ])
+    followCreator.mockResolvedValue(undefined)
+    render(<FriendProfilePanel friend={friend} />)
+    fireEvent.click(await screen.findByTestId('designer-followers-btn'))
+    const sheet = await screen.findByTestId('designer-followers-sheet')
+    expect(within(sheet).getByText('@fanone')).toBeInTheDocument()
+    fireEvent.click(within(sheet).getByTestId('follower-follow-fan-1'))
+    await waitFor(() => expect(followCreator).toHaveBeenCalledWith('fan-1'))
+    expect(__followStatusCacheTestUtils.get('viewer-1', 'fan-1')).toBe(true)
   })
 
   it('shows an empty state when the friend has no published looks', async () => {

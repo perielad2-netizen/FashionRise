@@ -32,6 +32,14 @@ export type FollowStatus = {
   following: boolean
 }
 
+export type FollowerListItem = {
+  user_id: string
+  username: string
+  display_name?: string | null
+  avatar_url?: string | null
+  following: boolean
+}
+
 export async function getPublicProfile(
   userId: string,
   signal?: AbortSignal,
@@ -64,6 +72,34 @@ export async function unfollowCreator(userId: string, signal?: AbortSignal): Pro
     method: 'DELETE',
     signal,
   })
+}
+
+export async function listProfileFollowers(
+  userId: string,
+  opts?: { limit?: number; offset?: number; signal?: AbortSignal },
+): Promise<FollowerListItem[]> {
+  const q = new URLSearchParams({
+    limit: String(opts?.limit ?? 50),
+    offset: String(opts?.offset ?? 0),
+  })
+  return apiRequest<FollowerListItem[]>(
+    `/profiles/${encodeURIComponent(userId)}/followers?${q}`,
+    { method: 'GET', signal: opts?.signal },
+  )
+}
+
+export async function listProfileFollowing(
+  userId: string,
+  opts?: { limit?: number; offset?: number; signal?: AbortSignal },
+): Promise<FollowerListItem[]> {
+  const q = new URLSearchParams({
+    limit: String(opts?.limit ?? 50),
+    offset: String(opts?.offset ?? 0),
+  })
+  return apiRequest<FollowerListItem[]>(
+    `/profiles/${encodeURIComponent(userId)}/following?${q}`,
+    { method: 'GET', signal: opts?.signal },
+  )
 }
 
 export type ProfileUpdatePayload = {

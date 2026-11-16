@@ -282,6 +282,77 @@
   box-sizing: border-box;
 }
 
+.statBtn {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: -10px -12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+  font: inherit;
+}
+
+.statBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.peopleList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+.peopleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.peopleIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.peopleIdentity strong {
+  display: block;
+  font-size: 14px;
+  color: #fff;
+}
+
+.peopleAvatar,
+.peopleAvatarFallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.peopleAvatarFallback {
+  display: grid;
+  place-items: center;
+  background: rgba(244, 114, 182, 0.22);
+  color: #fce7f3;
+  font-weight: 700;
+}
+
 .stats strong {
   font-size: 16px;
   font-weight: 700;

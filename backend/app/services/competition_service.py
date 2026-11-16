@@ -125,7 +125,10 @@ def build_competition_status(
     stars_by_id = {cid: stars for cid, stars in AWARD_DEFS}
     launch = parse_weekly_rewards_launch_week_start()
     rewards_live = week_eligible_for_weekly_rewards(week_start)
-    publish_note = "Publish anytime. Designs compete in the week they are published."
+    publish_note = (
+        "Publish anytime. Likes, ratings, and comments this week score your public looks "
+        "for Top Design and Top Designer — even looks published in prior weeks."
+    )
     if not weekly_rewards_enabled() or not rewards_live:
         publish_note += " Weekly Star prizes are not active yet."
     return {
@@ -344,6 +347,7 @@ def build_category_board(
 
     if not base["entries"]:
         base["empty_reason"] = (
-            "No scores in this category yet this week. Publish looks and engage to climb."
+            "No scores in this category yet this week. Like, rate, or comment on public "
+            "looks to climb — older publishes still count for engagement this week."
         )
     return base

@@ -32,6 +32,16 @@ class FollowStatusRead(BaseModel):
     following: bool
 
 
+class FollowerListItem(BaseModel):
+    """One follower (or following) row for profile people sheets."""
+
+    user_id: uuid.UUID
+    username: str
+    display_name: str | None = None
+    avatar_url: str | None = None
+    following: bool = False
+
+
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     bio: str | None = None
