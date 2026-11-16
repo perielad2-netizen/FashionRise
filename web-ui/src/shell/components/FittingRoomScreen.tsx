@@ -73,12 +73,22 @@ function ownerSafeFittingRoomError(raw: string | null | undefined): string {
 
 export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const personInputId = useId()
+  const personCameraInputId = useId()
   const garmentInputId = useId()
+  const garmentCameraInputId = useId()
   const personRef = useRef<HTMLInputElement>(null)
+  const personCameraRef = useRef<HTMLInputElement>(null)
   const garmentRef = useRef<HTMLInputElement>(null)
+  const garmentCameraRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const noticeTimer = useRef<number | null>(null)
   const replacePieceId = useRef<string | null>(null)
+
+  const openGarmentPicker = (mode: 'gallery' | 'camera', replaceId: string | null = null) => {
+    replacePieceId.current = replaceId
+    const el = mode === 'camera' ? garmentCameraRef.current : garmentRef.current
+    el?.click()
+  }
 
   const [personUrl, setPersonUrl] = useState<string | null>(null)
   const [pieces, setPieces] = useState<FittingRoomOutfitPiece[]>([])
@@ -209,6 +219,10 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     [pieces, preflight?.conflicting_category_sets],
   )
 
+  const resetFileInput = (el: HTMLInputElement | null) => {
+    if (el) el.value = ''
+  }
+
   const onPickPerson = async (file: File | null) => {
     if (!file) return
     try {
@@ -224,6 +238,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setErrorMsg(null)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not save your photo.')
+    } finally {
+      resetFileInput(personRef.current)
+      resetFileInput(personCameraRef.current)
     }
   }
 
@@ -275,6 +292,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setErrorMsg(null)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not save clothing image.')
+    } finally {
+      resetFileInput(garmentRef.current)
+      resetFileInput(garmentCameraRef.current)
     }
   }
 
@@ -504,7 +524,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         <div className={styles.panel}>
           <h2 className={styles.panelTitle}>1 · My Photo</h2>
           <p className={styles.panelHint}>
-            Full-body photo works best. Saved privately on this device until you run try-on.
+            Full-body photo works best. Use your gallery or camera. Saved privately on this device
+            until you run try-on.
           </p>
           <div className={styles.preview}>
             {personUrl ? (
@@ -521,9 +542,32 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             accept="image/jpeg,image/png,image/webp"
             onChange={(e) => void onPickPerson(e.target.files?.[0] ?? null)}
           />
+          <input
+            ref={personCameraRef}
+            id={personCameraInputId}
+            className={styles.fileInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            data-testid="fitting-room-person-camera"
+            onChange={(e) => void onPickPerson(e.target.files?.[0] ?? null)}
+          />
           <div className={styles.actions}>
-            <button type="button" className={styles.btn} onClick={() => personRef.current?.click()}>
-              {personUrl ? 'Replace photo' : 'Choose photo'}
+            <button
+              type="button"
+              className={styles.btn}
+              data-testid="fitting-room-person-gallery"
+              onClick={() => personRef.current?.click()}
+            >
+              {personUrl ? 'Replace from gallery' : 'Choose photo'}
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              data-testid="fitting-room-person-take"
+              onClick={() => personCameraRef.current?.click()}
+            >
+              {personUrl ? 'Retake photo' : 'Take photo'}
             </button>
             {personUrl ? (
               <button type="button" className={styles.btnGhost} onClick={() => void clearPerson()}>
@@ -536,8 +580,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         <div className={styles.panel}>
           <h2 className={styles.panelTitle}>2 · Build Outfit</h2>
           <p className={styles.panelHint}>
-            Add or replace clothing pieces. Previous pieces stay in the session until you remove
-            them.
+            Add or replace clothing from your gallery or camera. Previous pieces stay until you
+            remove them.
           </p>
           <div className={styles.outfitGrid}>
             {pieces.length === 0 ? (
@@ -552,12 +596,21 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                       type="button"
                       className={styles.btnGhost}
                       onClick={() => {
-                        replacePieceId.current = piece.id
                         setDraftCategory(piece.category)
-                        garmentRef.current?.click()
+                        openGarmentPicker('gallery', piece.id)
                       }}
                     >
                       Replace
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => {
+                        setDraftCategory(piece.category)
+                        openGarmentPicker('camera', piece.id)
+                      }}
+                    >
+                      Camera
                     </button>
                     <button
                       type="button"
@@ -597,17 +650,34 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             accept="image/jpeg,image/png,image/webp"
             onChange={(e) => void onPickGarment(e.target.files?.[0] ?? null)}
           />
+          <input
+            ref={garmentCameraRef}
+            id={garmentCameraInputId}
+            className={styles.fileInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            data-testid="fitting-room-garment-camera"
+            onChange={(e) => void onPickGarment(e.target.files?.[0] ?? null)}
+          />
           <div className={styles.actions}>
             <button
               type="button"
               className={styles.btn}
               disabled={pieces.length >= maxPieces}
-              onClick={() => {
-                replacePieceId.current = null
-                garmentRef.current?.click()
-              }}
+              data-testid="fitting-room-garment-gallery"
+              onClick={() => openGarmentPicker('gallery', null)}
             >
               Add clothing
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={pieces.length >= maxPieces}
+              data-testid="fitting-room-garment-take"
+              onClick={() => openGarmentPicker('camera', null)}
+            >
+              Take clothing photo
             </button>
             {pieces.length ? (
               <button type="button" className={styles.btnGhost} onClick={() => void clearOutfit()}>

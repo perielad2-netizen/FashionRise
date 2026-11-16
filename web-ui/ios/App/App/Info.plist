@@ -45,11 +45,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<!-- Required: WKWebView <input type="file"> → Take Photo crashes without this key. -->
+	<!-- Required: WKWebView <input type="file" capture> → Take Photo crashes without this key. -->
 	<key>NSCameraUsageDescription</key>
-	<string>FashionRise uses the camera so you can photograph a fully clothed fashion pose for Create Model.</string>
+	<string>FashionRise uses the camera so you can photograph a fully clothed fashion pose for Create Model and capture person or clothing photos in Fitting Room.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>FashionRise uses your photo library so you can choose a fully clothed fashion pose for Create Model.</string>
+	<string>FashionRise uses your photo library so you can choose a fully clothed fashion pose for Create Model and pick person or clothing photos in Fitting Room.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>FashionRise saves look images you download to your photo library (FashionRise album).</string>
 	<!-- Remote notifications (APNs). Capability + entitlements still required in Xcode. -->

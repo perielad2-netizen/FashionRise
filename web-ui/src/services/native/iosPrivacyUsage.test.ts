@@ -12,9 +12,10 @@ describe('iOS privacy usage strings (Create Model camera)', () => {
     'utf8',
   )
 
-  it('declares camera usage for Take Photo from Create Model file input', () => {
+  it('declares camera usage for Take Photo from Create Model and Fitting Room', () => {
     expect(plist).toContain('<key>NSCameraUsageDescription</key>')
     expect(plist).toMatch(/Create Model/i)
+    expect(plist).toMatch(/Fitting Room/i)
     expect(plist).toMatch(/camera/i)
   })
 
