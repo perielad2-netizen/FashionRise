@@ -671,9 +671,7 @@ export function RunwayScreen({
           FashionRise
         </h1>
         <div className={styles.chromeTop}>
-          <span className={styles.modeLabel} aria-hidden>
-            FashionRise
-          </span>
+          <p className={styles.modeLabel}>FashionRise</p>
           <div className={styles.chromeActions}>
             <button
               type="button"
@@ -1766,24 +1764,30 @@ function RunwayCard({
           disabled={busy === 'like'}
           onClick={() => void onToggleLike()}
         >
-          <Heart size={immersive ? 18 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
-          {formatCount(item.likes_count)}
+          <Heart size={immersive ? 26 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+          <span className={immersive ? styles.actionCount : undefined}>
+            {formatCount(item.likes_count)}
+          </span>
         </button>
       ) : (
         <span className={styles.statChip} title="Others can like your look">
-          <Heart size={immersive ? 18 : 12} aria-hidden />
-          {formatCount(item.likes_count)}
+          <Heart size={immersive ? 26 : 12} aria-hidden />
+          <span className={immersive ? styles.actionCount : undefined}>
+            {formatCount(item.likes_count)}
+          </span>
         </span>
       )}
       {canReact ? (
         <label className={immersive ? styles.immersiveScore : styles.scoreLabel}>
           <span className={styles.scoreLabelText}>
-            <Star size={immersive ? 17 : 12} aria-hidden />
-            {item.rating_average != null
-              ? item.rating_average.toFixed(1)
-              : immersive
-                ? 'Rate'
-                : 'Score'}
+            <Star size={immersive ? 24 : 12} aria-hidden />
+            <span className={immersive ? styles.actionCount : undefined}>
+              {item.rating_average != null
+                ? item.rating_average.toFixed(1)
+                : immersive
+                  ? 'Rate'
+                  : 'Score'}
+            </span>
           </span>
           <select
             className={styles.scoreSelect}
@@ -1804,9 +1808,11 @@ function RunwayCard({
         </label>
       ) : (
         <span className={styles.statChip} title="Others can score your look">
-          <Star size={immersive ? 17 : 12} aria-hidden />
-          {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
-          {!immersive && item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+          <Star size={immersive ? 24 : 12} aria-hidden />
+          <span className={immersive ? styles.actionCount : undefined}>
+            {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
+            {!immersive && item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+          </span>
         </span>
       )}
       {!compact ? (
@@ -1817,8 +1823,10 @@ function RunwayCard({
           aria-expanded={commentsOpen}
           onClick={openComments}
         >
-          <MessageCircle size={immersive ? 18 : 12} aria-hidden />
-          {comments ? comments.length : immersive ? '0' : 'Chat'}
+          <MessageCircle size={immersive ? 26 : 12} aria-hidden />
+          <span className={immersive ? styles.actionCount : undefined}>
+            {comments ? comments.length : immersive ? '0' : 'Chat'}
+          </span>
         </button>
       ) : null}
       {!immersive && !isOwn && viewerId ? (
@@ -1901,6 +1909,9 @@ function RunwayCard({
                 )}
                 {followControl}
               </div>
+              {item.title?.trim() ? (
+                <p className={styles.immersiveCaption}>{item.title.trim()}</p>
+              ) : null}
               {actionError && !commentsOpen ? (
                 <p className={styles.cardError} role="alert">
                   {actionError}
