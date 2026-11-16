@@ -29,7 +29,7 @@
     18px
     4px
     calc(58px + env(safe-area-inset-left, 0px));
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0.12) 55%, transparent 100%);
   pointer-events: none;
 }
 
@@ -40,17 +40,9 @@
 .chromeTop {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
-  min-height: 32px;
-}
-
-.modeLabel {
-  /* Reserved spacer so ⋯ stays right-aligned without a visible feed mode. */
-  flex: 1;
-  min-width: 0;
-  visibility: hidden;
-  pointer-events: none;
+  min-height: 36px;
 }
 
 .chromeActions {
@@ -60,16 +52,17 @@
 }
 
 .iconBtn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 0;
-  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
   color: #fff;
   cursor: pointer;
+  backdrop-filter: blur(8px);
 }
 
 .iconBtn:focus-visible {
@@ -276,8 +269,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, transparent 16%),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.2) 34%, transparent 52%);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, transparent 18%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.28) 36%, transparent 56%);
   pointer-events: none;
 }
 
@@ -287,14 +280,15 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   /* Lift meta + actions into the look (above the bottom letterbox/safe edge). */
   padding:
     calc(56px + env(safe-area-inset-top, 0px))
-    10px
-    calc(36px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px))
+    12px
+    calc(40px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px))
     14px;
   pointer-events: none;
+  animation: frImmersiveIn 320ms ease-out;
 }
 
 .immersiveOverlay > * {
@@ -305,21 +299,21 @@
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding-right: 4px;
 }
 
 .designerRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .designerChip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   max-width: 100%;
   min-width: 0;
   padding: 0;
@@ -332,16 +326,17 @@
 
 .designerAvatar,
 .designerAvatarImg {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 2px solid rgba(244, 114, 182, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
   background: rgba(214, 51, 132, 0.55);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   object-fit: cover;
 }
@@ -357,36 +352,51 @@
 }
 
 .designerChipText strong {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 750;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
 }
 
 .designerChipText span {
   display: none;
 }
 
+.immersiveCaption {
+  margin: 0;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 550;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .followChip,
 .followChipOn {
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   background: transparent;
   color: #fff;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 750;
   cursor: pointer;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .followChipOn {
   border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .followChip:disabled,
@@ -395,15 +405,15 @@
   cursor: wait;
 }
 
-/* Reels/TikTok-scale rail: glyph + count, no heavy tiles. */
+/* Reels/TikTok-scale rail: larger glyph + spaced count. */
 .immersiveActions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex: 0 0 auto;
-  width: 32px;
-  padding-bottom: 2px;
+  width: 48px;
+  padding-bottom: 4px;
 }
 
 .immersiveActions .likeBtn,
@@ -415,21 +425,30 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   min-height: 0;
   width: auto;
   padding: 0;
   border: 0;
   border-radius: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   background: transparent;
   color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
   backdrop-filter: none;
   box-shadow: none;
+}
+
+.actionCount {
+  display: block;
+  min-height: 1em;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
 }
 
 .immersiveActions .likeBtnOn,
@@ -441,35 +460,46 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
 }
 
 .immersiveScore .scoreLabelText {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .immersiveScore .scoreSelect {
-  width: 32px;
-  min-height: 18px;
+  width: 40px;
+  min-height: 22px;
   padding: 0;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.35);
   color: #fff;
-  font-size: 9px;
+  font-size: 11px;
   text-align: center;
+}
+
+@keyframes frImmersiveIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .followBtn,
