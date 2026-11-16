@@ -12,6 +12,16 @@
 | Change | Image-first Look Details sheet, circular action icons, pink-glass Create Real Design CTA |
 | Prod | Unchanged until approve |
 
+## Deployed — Social feed sync + Runway boards LIVE (2026-11-17 00:13 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PRs | **#399** + **#400** → `main` @ **`d01d8fb1`** |
+| Tip | BE+FE **`d01d8fb1`** · FE `/var/www/fashionrise/releases/d01d8fb1-social-feed-sync` |
+| Change | Honest chat `comments_count`; profile Follow syncs FashionRise cards; Followers sheet; weekly boards score engagement this week + enroll catch-up |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/46db3f72-open-conflict-force /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 46db3f72 && systemctl restart fashionrise-api` |
+
 ## Deployed — Open OCC force-rebase + Look Details LIVE (2026-11-16 23:57 Asia/Jerusalem)
 
 | Field | Value |
