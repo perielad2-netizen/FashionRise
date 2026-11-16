@@ -290,17 +290,21 @@
   font-size: 12px;
 }
 
+/* Gallery tiles: hide Front/Back chrome so the look stays clear */
+.tile .badges,
+.tile .badge,
+.tile .favMark {
+  display: none;
+}
+
 .badges {
   position: absolute;
-  top: 50%;
+  top: 8px;
   left: 8px;
   z-index: 2;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 4px;
-  transform: translateY(-50%);
-  pointer-events: none;
 }
 
 .badge {
@@ -313,7 +317,6 @@
   color: #fff;
   background: rgba(12, 18, 32, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(8px);
 }
 
 .favMark {
@@ -325,7 +328,7 @@
 .favIconActive {
   position: absolute;
   z-index: 3;
-  right: 8px;
+  top: 8px;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -340,14 +343,15 @@
   padding: 0;
 }
 
-/* Stack on the right mid-side so face/head stay clear */
 .favIcon,
 .favIconActive {
-  top: calc(50% - 40px);
+  left: 8px;
+  right: auto;
 }
 
 .deleteIcon {
-  top: calc(50% + 4px);
+  right: 8px;
+  left: auto;
 }
 
 .favIconActive {
