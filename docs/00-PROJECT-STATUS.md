@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — FashionRise feed Mobbin polish LIVE (2026-11-16 21:23 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#380** merged → `main` @ **`1f750e3d`** |
+| Tip | FE **`1f750e3d`** · `/var/www/fashionrise/releases/1f750e3d-fashionrise-mobbin-polish` |
+| Change | Reels-style FashionRise chrome (rail, rose avatar ring, caption, immersion). Top wordmark removed so it does not cover the look. |
+| Preview | `/preview-fashionrise/` removed after promote |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/38648d70-runway-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Runway Mobbin polish LIVE (2026-11-16 21:08 Asia/Jerusalem)
 
 | Field | Value |

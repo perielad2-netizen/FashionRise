@@ -78,12 +78,9 @@ export function HomeBeforeAfterGallery({ examples }: Props) {
       data-testid="home-before-after-gallery"
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
-      <div className={styles.header}>
-        <h2 id={headingId} className={styles.title}>
-          Home Hero Gallery
-        </h2>
-        <p className={styles.subtitle}>Sketch → AI look — the FashionRise idea.</p>
-      </div>
+      <h2 id={headingId} className={styles.srOnly}>
+        Sketch to AI look gallery
+      </h2>
 
       <div className={styles.viewport}>
         <div
