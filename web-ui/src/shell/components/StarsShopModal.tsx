@@ -240,20 +240,32 @@ export function StarsShopModal({ open, onClose }: Props) {
         data-testid="stars-shop-modal"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className={styles.handle} aria-hidden />
         <header className={styles.header}>
-          <div className={styles.titleRow}>
-            <ShoppingBag size={18} aria-hidden />
-            <h2>Stars shop</h2>
+          <div className={styles.brandBlock}>
+            <p className={styles.eyebrow}>FashionRise</p>
+            <div className={styles.titleRow}>
+              <ShoppingBag size={18} aria-hidden />
+              <h2>Stars shop</h2>
+            </div>
           </div>
           <button type="button" className={styles.close} aria-label="Close" onClick={onClose}>
             <X size={18} />
           </button>
         </header>
 
-        <p className={styles.balance}>
-          <Star size={14} aria-hidden /> Your balance: <strong>{balance}</strong>
-          {unlimited ? ' (unlimited)' : null}
-        </p>
+        <div className={styles.balanceHero}>
+          <div className={styles.balanceGlow} aria-hidden />
+          <p className={styles.balanceLabel}>
+            <Star size={14} aria-hidden /> Your balance:
+          </p>
+          <p className={styles.balanceValue}>
+            <strong>{balance}</strong>
+          </p>
+          <p className={styles.balanceSub}>
+            {unlimited ? '(unlimited)' : 'Ready for Magic, Model, Fabric & PDF'}
+          </p>
+        </div>
 
         {nativeIos ? (
           <>
@@ -280,11 +292,14 @@ export function StarsShopModal({ open, onClose }: Props) {
               <ul className={styles.list}>
                 {iapProducts.map((pkg) => (
                   <li key={pkg.productId} className={styles.card}>
-                    <div>
-                      <div className={styles.pkgName}>{pkg.title}</div>
-                      <div className={styles.pkgMeta}>
-                        {pkg.stars} Stars
-                        {pkg.priceString ? <> · {pkg.priceString}</> : null}
+                    <div className={styles.packTop}>
+                      <div>
+                        <div className={styles.packStars}>{pkg.stars}</div>
+                        <div className={styles.pkgName}>{pkg.title}</div>
+                        <div className={styles.pkgMeta}>
+                          {pkg.stars} Stars
+                          {pkg.priceString ? <> · {pkg.priceString}</> : null}
+                        </div>
                       </div>
                     </div>
                     <button
@@ -329,17 +344,20 @@ export function StarsShopModal({ open, onClose }: Props) {
               <ul className={styles.list}>
                 {packages.map((pkg) => (
                   <li key={pkg.sku} className={styles.card}>
-                    <div>
-                      <div className={styles.pkgName}>{pkg.name}</div>
-                      <div className={styles.pkgMeta}>
-                        {pkg.stars} Stars · {formatUsdCents(pkg.price_usd_cents)}
-                        {pkg.list_price_usd_cents != null &&
-                        pkg.list_price_usd_cents > pkg.price_usd_cents ? (
-                          <>
-                            {' '}
-                            <s>{formatUsdCents(pkg.list_price_usd_cents)}</s>
-                          </>
-                        ) : null}
+                    <div className={styles.packTop}>
+                      <div>
+                        <div className={styles.packStars}>{pkg.stars}</div>
+                        <div className={styles.pkgName}>{pkg.name}</div>
+                        <div className={styles.pkgMeta}>
+                          {pkg.stars} Stars · {formatUsdCents(pkg.price_usd_cents)}
+                          {pkg.list_price_usd_cents != null &&
+                          pkg.list_price_usd_cents > pkg.price_usd_cents ? (
+                            <>
+                              {' '}
+                              <s>{formatUsdCents(pkg.list_price_usd_cents)}</s>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                     <button
@@ -361,7 +379,7 @@ export function StarsShopModal({ open, onClose }: Props) {
                 {!cart?.items.length ? (
                   <p className={styles.empty}>Cart is empty.</p>
                 ) : (
-                  <ul className={styles.list}>
+                  <ul className={styles.cartList}>
                     {cart.items.map((item) => (
                       <li key={item.package_sku} className={styles.cartLine}>
                         <span>

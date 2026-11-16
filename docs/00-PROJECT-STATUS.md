@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Profile Mobbin redesign LIVE (2026-11-16 21:52 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#383** merged → `main` @ **`77dce926`** |
+| Tip | FE **`77dce926`** · `/var/www/fashionrise/releases/77dce926-profile-mobbin-polish` |
+| Change | Centered designer Profile hero, wrap-safe stats, stacked CTAs, Looks empty card |
+| Preview | `/preview-profile/` removed after promote |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/f2121f17-friends-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Friends Mobbin redesign LIVE (2026-11-16 21:45 Asia/Jerusalem)
 
 | Field | Value |
