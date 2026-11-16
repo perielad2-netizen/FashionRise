@@ -92,38 +92,8 @@ type TabId = 'discover' | 'feed' | 'following' | 'top' | 'friends'
 type BrowseSheet = 'top10' | 'circle' | 'following' | 'discover'
 type TopLimit = 10 | 20 | 50
 
-/** Optional lists opened from the menu as sheets — main Reels feed stays Discover. */
-const BROWSE_MENU: Array<{
-  id: Exclude<TabId, 'friends' | 'discover'>
-  sheet: Exclude<BrowseSheet, 'discover'>
-  label: string
-  hint: string
-  testId: string
-}> = [
-  {
-    id: 'following',
-    sheet: 'following',
-    label: 'Following',
-    hint: 'Looks from designers you follow',
-    testId: 'runway-tab-following',
-  },
-  {
-    id: 'feed',
-    sheet: 'circle',
-    label: 'Friends circle',
-    hint: 'Looks from you and your friends only',
-    testId: 'runway-tab-feed',
-  },
-  {
-    id: 'top',
-    sheet: 'top10',
-    label: 'Top rankings',
-    hint: 'Worldwide top liked and rated looks',
-    testId: 'runway-tab-top',
-  },
-]
-
-const TOP_LIMITS: TopLimit[] = [10, 20, 50]
+/** Browse sheets stay available for tests/deep links — not shown as feed filters. */
+const TOP_LIMIT_DEFAULT: TopLimit = 10
 const DISCOVER_PAGE_SIZE = 24
 
 /** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
@@ -191,7 +161,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const viewerUsername = user?.username ?? null
   const [tab, setTab] = useState<TabId>('discover')
   const [browseSheet, setBrowseSheet] = useState<BrowseSheet | null>(null)
-  const [topLimit, setTopLimit] = useState<TopLimit>(10)
+  const [topLimit] = useState<TopLimit>(TOP_LIMIT_DEFAULT)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [discoverHasMore, setDiscoverHasMore] = useState(true)
   const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false)
@@ -644,40 +614,6 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
 
       {menuOpen ? (
         <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
-          <p className={styles.menuSectionLabel}>Lists</p>
-          {BROWSE_MENU.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.menuItem}
-              role="menuitem"
-              title={item.hint}
-              data-testid={item.testId}
-              onClick={() => void openBrowseSheet(item.sheet)}
-            >
-              {item.label}
-            </button>
-          ))}
-          <div
-            className={styles.menuModeRow}
-            role="tablist"
-            aria-label="Worldwide ranking size"
-            data-testid="runway-top-limit"
-          >
-            {TOP_LIMITS.map((limit) => (
-              <button
-                key={limit}
-                type="button"
-                role="tab"
-                aria-selected={topLimit === limit}
-                className={topLimit === limit ? styles.menuModeActive : styles.menuModeBtn}
-                data-testid={`runway-top-${limit}`}
-                onClick={() => setTopLimit(limit)}
-              >
-                Top {limit}
-              </button>
-            ))}
-          </div>
           <p className={styles.menuSectionLabel}>Account</p>
           {viewerId ? (
             <button
@@ -782,19 +718,44 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         </div>
       ) : null}
 
-      {/* Legacy browse-sheet entry points kept for interaction tests / deep links */}
+      {/* Browse-sheet entry points for interaction tests only — not feed filters. */}
       <div className={styles.srOnly} aria-hidden={false}>
         <button type="button" data-testid="runway-open-discover" onClick={() => setBrowseSheet('discover')}>
           Open discover sheet
         </button>
-        <button type="button" data-testid="runway-open-circle" onClick={() => setBrowseSheet('circle')}>
+        <button
+          type="button"
+          data-testid="runway-open-circle"
+          onClick={() => void openBrowseSheet('circle')}
+        >
           Open circle sheet
         </button>
-        <button type="button" data-testid="runway-open-following" onClick={() => setBrowseSheet('following')}>
+        <button
+          type="button"
+          data-testid="runway-open-following"
+          onClick={() => void openBrowseSheet('following')}
+        >
           Open following sheet
         </button>
-        <button type="button" data-testid="runway-open-top10" onClick={() => setBrowseSheet('top10')}>
+        <button
+          type="button"
+          data-testid="runway-open-top10"
+          onClick={() => void openBrowseSheet('top10')}
+        >
           Open top sheet
+        </button>
+        <button type="button" data-testid="runway-tab-feed" onClick={() => void openBrowseSheet('circle')}>
+          Friends circle
+        </button>
+        <button
+          type="button"
+          data-testid="runway-tab-following"
+          onClick={() => void openBrowseSheet('following')}
+        >
+          Following
+        </button>
+        <button type="button" data-testid="runway-tab-top" onClick={() => void openBrowseSheet('top10')}>
+          Top rankings
         </button>
       </div>
 
@@ -868,15 +829,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                   >
                     Add friends
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.ghostBtn}
-                    onClick={() => void openBrowseSheet('top10')}
-                  >
-                    Browse Top
-                  </button>
-                )}
+                ) : null}
               </div>
             }
           />
