@@ -92,12 +92,35 @@ type TabId = 'discover' | 'feed' | 'following' | 'top' | 'friends'
 type BrowseSheet = 'top10' | 'circle' | 'following' | 'discover'
 type TopLimit = 10 | 20 | 50
 
-/** Compact immersive modes — Friends = circle feed; manage-circle lives in the overflow menu. */
-const TABS: Array<{ id: Exclude<TabId, 'friends'>; label: string; hint: string }> = [
-  { id: 'discover', label: 'Discover', hint: 'Fair worldwide looks from many creators' },
-  { id: 'following', label: 'Following', hint: 'Looks from designers you follow' },
-  { id: 'feed', label: 'Friends', hint: 'Looks from you and your friends only' },
-  { id: 'top', label: 'Top', hint: 'Worldwide top liked and rated looks' },
+/** Optional lists opened from the menu as sheets — main Reels feed stays Discover. */
+const BROWSE_MENU: Array<{
+  id: Exclude<TabId, 'friends' | 'discover'>
+  sheet: Exclude<BrowseSheet, 'discover'>
+  label: string
+  hint: string
+  testId: string
+}> = [
+  {
+    id: 'following',
+    sheet: 'following',
+    label: 'Following',
+    hint: 'Looks from designers you follow',
+    testId: 'runway-tab-following',
+  },
+  {
+    id: 'feed',
+    sheet: 'circle',
+    label: 'Friends circle',
+    hint: 'Looks from you and your friends only',
+    testId: 'runway-tab-feed',
+  },
+  {
+    id: 'top',
+    sheet: 'top10',
+    label: 'Top rankings',
+    hint: 'Worldwide top liked and rated looks',
+    testId: 'runway-tab-top',
+  },
 ]
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
@@ -422,6 +445,48 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     }
   }, [discoverHasMore, discoverLoadingMore, state])
 
+  const openBrowseSheet = useCallback(
+    async (sheet: Exclude<BrowseSheet, 'discover'>) => {
+      setMenuOpen(false)
+      try {
+        if (sheet === 'top10') {
+          const top10 = await listGallery({ sort: 'top10', limit: topLimit })
+          setState((prev) =>
+            prev.status === 'ready'
+              ? { ...prev, top10 }
+              : { status: 'ready', discover: [], circle: [], following: [], top10 },
+          )
+        } else if (sheet === 'following') {
+          const following = await listGallery({ sort: 'following', limit: 48 })
+          setState((prev) =>
+            prev.status === 'ready'
+              ? { ...prev, following }
+              : { status: 'ready', discover: [], circle: [], following, top10: [] },
+          )
+        } else {
+          const circle = await listGallery({ sort: 'circle', limit: 48 })
+          setState((prev) =>
+            prev.status === 'ready'
+              ? { ...prev, circle }
+              : { status: 'ready', discover: [], circle, following: [], top10: [] },
+          )
+        }
+        setBrowseSheet(sheet)
+      } catch (err) {
+        setState({
+          status: 'error',
+          message:
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : 'Could not load FashionRise',
+        })
+      }
+    },
+    [topLimit],
+  )
+
   const discoverSentinelRef = useRef<HTMLLIElement | null>(null)
   const discoverCount = state.status === 'ready' ? state.discover.length : 0
   useEffect(() => {
@@ -546,14 +611,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             : state.discover
       : []
 
-  const feedLabel =
-    tab === 'top'
-      ? `Top ${topLimit} worldwide`
-      : tab === 'following'
-        ? 'Following feed'
-        : tab === 'feed'
-          ? 'Friends feed'
-          : 'Discover feed'
+  const feedLabel = 'FashionRise feed'
 
   return (
     <section
@@ -566,10 +624,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           FashionRise
         </h1>
         <div className={styles.chromeTop}>
-          <span className={styles.modeLabel} aria-live="polite">
-            {tab === 'friends'
-              ? 'Friends'
-              : TABS.find((item) => item.id === tab)?.label ?? 'Discover'}
+          <span className={styles.modeLabel} aria-hidden>
+            FashionRise
           </span>
           <div className={styles.chromeActions}>
             <button
@@ -588,48 +644,40 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
 
       {menuOpen ? (
         <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
-          <p className={styles.menuSectionLabel}>Feed</p>
-          <div className={styles.menuModeRow} role="tablist" aria-label="FashionRise views">
-            {TABS.map((item) => (
+          <p className={styles.menuSectionLabel}>Lists</p>
+          {BROWSE_MENU.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={styles.menuItem}
+              role="menuitem"
+              title={item.hint}
+              data-testid={item.testId}
+              onClick={() => void openBrowseSheet(item.sheet)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <div
+            className={styles.menuModeRow}
+            role="tablist"
+            aria-label="Worldwide ranking size"
+            data-testid="runway-top-limit"
+          >
+            {TOP_LIMITS.map((limit) => (
               <button
-                key={item.id}
+                key={limit}
                 type="button"
                 role="tab"
-                aria-selected={tab === item.id}
-                className={tab === item.id ? styles.menuModeActive : styles.menuModeBtn}
-                title={item.hint}
-                data-testid={`runway-tab-${item.id}`}
-                onClick={() => {
-                  setMenuOpen(false)
-                  setTab(item.id)
-                }}
+                aria-selected={topLimit === limit}
+                className={topLimit === limit ? styles.menuModeActive : styles.menuModeBtn}
+                data-testid={`runway-top-${limit}`}
+                onClick={() => setTopLimit(limit)}
               >
-                {item.label}
+                Top {limit}
               </button>
             ))}
           </div>
-          {tab === 'top' ? (
-            <div
-              className={styles.menuModeRow}
-              role="tablist"
-              aria-label="Worldwide ranking size"
-              data-testid="runway-top-limit"
-            >
-              {TOP_LIMITS.map((limit) => (
-                <button
-                  key={limit}
-                  type="button"
-                  role="tab"
-                  aria-selected={topLimit === limit}
-                  className={topLimit === limit ? styles.menuModeActive : styles.menuModeBtn}
-                  data-testid={`runway-top-${limit}`}
-                  onClick={() => setTopLimit(limit)}
-                >
-                  Top {limit}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <p className={styles.menuSectionLabel}>Account</p>
           {viewerId ? (
             <button
@@ -821,7 +869,11 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                     Add friends
                   </button>
                 ) : (
-                  <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    onClick={() => void openBrowseSheet('top10')}
+                  >
                     Browse Top
                   </button>
                 )}
@@ -1595,19 +1647,19 @@ function RunwayCard({
           disabled={busy === 'like'}
           onClick={() => void onToggleLike()}
         >
-          <Heart size={immersive ? 22 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+          <Heart size={immersive ? 18 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
           {formatCount(item.likes_count)}
         </button>
       ) : (
         <span className={styles.statChip} title="Others can like your look">
-          <Heart size={immersive ? 22 : 12} aria-hidden />
+          <Heart size={immersive ? 18 : 12} aria-hidden />
           {formatCount(item.likes_count)}
         </span>
       )}
       {canReact ? (
         <label className={immersive ? styles.immersiveScore : styles.scoreLabel}>
           <span className={styles.scoreLabelText}>
-            <Star size={immersive ? 20 : 12} aria-hidden />
+            <Star size={immersive ? 17 : 12} aria-hidden />
             {item.rating_average != null
               ? item.rating_average.toFixed(1)
               : immersive
@@ -1633,7 +1685,7 @@ function RunwayCard({
         </label>
       ) : (
         <span className={styles.statChip} title="Others can score your look">
-          <Star size={immersive ? 20 : 12} aria-hidden />
+          <Star size={immersive ? 17 : 12} aria-hidden />
           {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
           {!immersive && item.rating_count > 0 ? ` (${item.rating_count})` : ''}
         </span>
@@ -1646,7 +1698,7 @@ function RunwayCard({
           aria-expanded={commentsOpen}
           onClick={openComments}
         >
-          <MessageCircle size={immersive ? 22 : 12} aria-hidden />
+          <MessageCircle size={immersive ? 18 : 12} aria-hidden />
           {comments ? comments.length : immersive ? '0' : 'Chat'}
         </button>
       ) : null}
@@ -1718,7 +1770,6 @@ function RunwayCard({
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'View designer'}
                       </strong>
-                      <span>{item.title || 'Untitled look'}</span>
                     </span>
                   </button>
                 ) : (
@@ -1730,7 +1781,6 @@ function RunwayCard({
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'Designer'}
                       </strong>
-                      <span>{item.title || 'Untitled look'}</span>
                     </span>
                   </div>
                 )}

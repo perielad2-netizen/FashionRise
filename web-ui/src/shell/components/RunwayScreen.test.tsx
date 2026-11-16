@@ -318,7 +318,7 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId('runway-more-menu'))
   }
 
-  async function selectFeedTab(tabId: 'discover' | 'feed' | 'following' | 'top') {
+  async function openBrowseList(tabId: 'feed' | 'following' | 'top') {
     await openMoreMenu()
     fireEvent.click(await screen.findByTestId(`runway-tab-${tabId}`))
   }
@@ -361,14 +361,12 @@ describe('RunwayScreen', () => {
   })
 
   async function openCircleSheet() {
-    await selectFeedTab('feed')
-    fireEvent.click(await screen.findByTestId('runway-open-circle'))
+    await openBrowseList('feed')
     return screen.findByRole('list', { name: 'Circle feed' })
   }
 
   async function openTop10Sheet() {
-    await selectFeedTab('top')
-    fireEvent.click(await screen.findByTestId('runway-open-top10'))
+    await openBrowseList('top')
     return screen.findByRole('dialog', { name: /Top rankings worldwide/i })
   }
 
@@ -381,14 +379,17 @@ describe('RunwayScreen', () => {
       return [{ ...circleItem }]
     })
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    await selectFeedTab('following')
+    await openBrowseList('following')
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(
         expect.objectContaining({ sort: 'following' }),
       ),
     )
-    expect(await screen.findByText('Followed designer look')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId(`runway-open-designer-${circleItem.user_id}`))
+    const followingSheet = await screen.findByRole('dialog', { name: /Following/i })
+    expect(within(followingSheet).getByText('Followed designer look')).toBeInTheDocument()
+    fireEvent.click(
+      within(followingSheet).getByTestId(`runway-open-designer-${circleItem.user_id}`),
+    )
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
   })
 
@@ -450,7 +451,7 @@ describe('RunwayScreen', () => {
     })
     try {
       render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-      expect(await screen.findByText('Discover look')).toBeInTheDocument()
+      expect(await screen.findByTestId('runway-discover-card-discover-1')).toBeInTheDocument()
       await waitFor(() =>
         expect(listGallery).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -459,7 +460,7 @@ describe('RunwayScreen', () => {
           }),
         ),
       )
-      expect(await screen.findByText('Discover page two')).toBeInTheDocument()
+      expect(await screen.findByTestId('runway-discover-card-discover-next')).toBeInTheDocument()
       // Exhausted after short page-two → sentinel removed; no visible Load more CTA.
       expect(screen.queryByTestId('runway-discover-load-more')).toBeNull()
       expect(screen.queryByRole('button', { name: /Load more/i })).toBeNull()
@@ -470,7 +471,7 @@ describe('RunwayScreen', () => {
     }
   })
 
-  it('defaults to Discover immersive feed and keeps Friends/Top separate', async () => {
+  it('defaults to algorithmic Discover feed; optional lists open as sheets', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
@@ -479,6 +480,7 @@ describe('RunwayScreen', () => {
     expect(screen.queryByText(/Social fashion/i)).toBeNull()
     expect(screen.queryByText(/Fair Discover/i)).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Discover' })).toBeNull()
+    expect(screen.queryByText('Discover', { selector: 'span' })).toBeNull()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
@@ -488,45 +490,36 @@ describe('RunwayScreen', () => {
       expect.objectContaining({ sort: 'top10' }),
     )
     expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
-    expect(await screen.findByText('Discover look')).toBeInTheDocument()
-    expect(screen.getByText('@atelier_a')).toBeInTheDocument()
+    expect(await screen.findByText('@atelier_a')).toBeInTheDocument()
     expect(screen.queryByText('@Designer')).toBeNull()
+    expect(screen.queryByText('Look ·')).toBeNull()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
     expect(screen.queryByText('Worldwide hit')).toBeNull()
 
     await openMoreMenu()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('menuitem', { name: /Start creating/i })).toBeInTheDocument()
-    expect(screen.getByTestId('runway-tab-discover')).toBeInTheDocument()
+    expect(screen.getByTestId('runway-tab-feed')).toBeInTheDocument()
+    expect(screen.getByTestId('runway-tab-top')).toBeInTheDocument()
+    expect(screen.queryByTestId('runway-tab-discover')).toBeNull()
     fireEvent.click(screen.getByTestId('runway-more-menu'))
 
-    await selectFeedTab('feed')
+    const circle = await openCircleSheet()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
     )
-    expect(await screen.findByText('Friend circle look')).toBeInTheDocument()
+    expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('runway-browse-back'))
 
-    await selectFeedTab('top')
-    await waitFor(() =>
-      expect(listGallery).toHaveBeenCalledWith(
-        expect.objectContaining({ sort: 'top10', limit: 10 }),
-      ),
-    )
     await openMoreMenu()
-    expect(await screen.findByTestId('runway-top-limit')).toBeInTheDocument()
-    expect(screen.getByTestId('runway-top-10')).toHaveAttribute('aria-selected', 'true')
-    expect(await screen.findByText('Worldwide hit')).toBeInTheDocument()
-    expect(screen.queryByText('Friend circle look')).toBeNull()
-
     fireEvent.click(screen.getByTestId('runway-top-20'))
+    fireEvent.click(screen.getByTestId('runway-tab-top'))
+    const topDialog = await screen.findByRole('dialog', { name: /Top rankings worldwide/i })
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(
         expect.objectContaining({ sort: 'top10', limit: 20 }),
       ),
     )
-    fireEvent.click(screen.getByTestId('runway-more-menu'))
-
-    const topDialog = await openTop10Sheet()
     expect(within(topDialog).getByText('Worldwide hit')).toBeInTheDocument()
     expect(within(topDialog).getByTestId('runway-browse-back')).toHaveTextContent('Back')
     fireEvent.click(within(topDialog).getByRole('button', { name: /Close Top rankings worldwide/i }))
@@ -534,8 +527,7 @@ describe('RunwayScreen', () => {
       expect(screen.queryByRole('dialog', { name: /Top rankings worldwide/i })).toBeNull(),
     )
 
-    const circle = await openCircleSheet()
-    expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
+    expect(await screen.findByText('@atelier_a')).toBeInTheDocument()
 
     await openMoreMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: /Start creating/i }))

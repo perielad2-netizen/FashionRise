@@ -58,7 +58,8 @@
 .immersiveExit {
   position: absolute;
   z-index: 40;
-  top: calc(8px + env(safe-area-inset-top, 0px));
+  /* Match runway chrome — sit on the look, not above the image edge. */
+  top: calc(18px + env(safe-area-inset-top, 0px));
   left: calc(8px + env(safe-area-inset-left, 0px));
   pointer-events: none;
 }
