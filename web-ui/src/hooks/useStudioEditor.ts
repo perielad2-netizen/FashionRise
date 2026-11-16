@@ -254,6 +254,13 @@ export function useStudioEditor() {
   const saveInFlightRef = useRef(false)
   const exportingRef = useRef(false)
   const openRequestRef = useRef(0)
+  /**
+   * Saved design the operator asked to open, blocked by a draft conflict.
+   * After Keep-this-device / Use-cloud succeeds, resume open automatically so the
+   * old working sketch is not left on the canvas.
+   */
+  const pendingOpenAfterConflictRef = useRef<SavedDesignRecord | null>(null)
+  const performOpenRef = useRef<(record: SavedDesignRecord) => void>(() => {})
 
   const [activeSide, setActiveSide] = useState<StudioPaperSide>('front')
   const [frontStrokes, setFrontStrokes] = useState<Stroke[]>([])
@@ -3477,6 +3484,14 @@ export function useStudioEditor() {
     setComingSoon(`${label} — coming later`)
   }, [])
 
+  const resumePendingOpenAfterConflict = useCallback(() => {
+    const pending = pendingOpenAfterConflictRef.current
+    if (!pending) return
+    pendingOpenAfterConflictRef.current = null
+    // Let conflict UI clear and synced refs settle before replacing the draft.
+    queueMicrotask(() => performOpenRef.current(pending))
+  }, [])
+
   const resolveConflictKeepLocal = useCallback(() => {
     if (!draftConflict || !user?.id) return
     const prompt = draftConflict
@@ -3524,6 +3539,7 @@ export function useStudioEditor() {
         applyDocument(rebased, result.designId)
         setDraftConflict(null)
         setSaveStatus('saved')
+        resumePendingOpenAfterConflict()
         return
       }
       conflictOpenRef.current = true
@@ -3537,7 +3553,7 @@ export function useStudioEditor() {
       setSaveError(result.error)
       setSaveStatus('error')
     })()
-  }, [applyDocument, draftConflict, user?.id])
+  }, [applyDocument, draftConflict, resumePendingOpenAfterConflict, user?.id])
 
   const resolveConflictUseServer = useCallback(() => {
     if (!draftConflict || !user?.id) return
@@ -3565,8 +3581,9 @@ export function useStudioEditor() {
       applyDocument(prompt.server, prompt.designId)
       setDraftConflict(null)
       setSaveStatus('saved')
+      resumePendingOpenAfterConflict()
     })()
-  }, [applyDocument, draftConflict, user?.id])
+  }, [applyDocument, draftConflict, resumePendingOpenAfterConflict, user?.id])
 
   const resolveDamagedCloudContinueLocal = useCallback(() => {
     if (!damagedCloud) return
@@ -3901,6 +3918,8 @@ export function useStudioEditor() {
               finishOpen(record, server, result.conflict.designId, server.clientRevision)
               return
             }
+            // Stash the open request — after Keep/Use-cloud we resume automatically.
+            pendingOpenAfterConflictRef.current = record
             conflictOpenRef.current = true
             setDraftConflict({
               local: current,
@@ -3910,7 +3929,7 @@ export function useStudioEditor() {
             setSaveStatus('local-only')
             setOpenDesign(null)
             publishStudioNotice(
-              'Your working draft changed on another device, so the design was not opened. Choose which draft to keep, then open the design again.',
+              `Your working draft changed on another device. Choose which draft to keep — FashionRise will then open “${record.title}” automatically.`,
             )
             navigate('/studio')
             return
@@ -3946,6 +3965,7 @@ export function useStudioEditor() {
     (record: SavedDesignRecord) => {
       const state = workingCopyState()
       if (state === 'conflict') {
+        pendingOpenAfterConflictRef.current = record
         setOpenDesign({ phase: 'conflict', record })
       } else if (state === 'unsynced') {
         setOpenDesign({
@@ -3965,6 +3985,8 @@ export function useStudioEditor() {
     },
     [performOpen, workingCopyState],
   )
+
+  performOpenRef.current = performOpen
 
   const requestOpenDesign = useCallback(
     async (designId: string) => {
@@ -4012,6 +4034,14 @@ export function useStudioEditor() {
   }, [openDesign, performOpen])
 
   const cancelOpenDesign = useCallback(() => {
+    if (openDesign?.phase === 'opening') return
+    openRequestRef.current += 1
+    pendingOpenAfterConflictRef.current = null
+    setOpenDesign(null)
+  }, [openDesign])
+
+  /** Close the open prompt but keep the pending design for after conflict resolve. */
+  const continueOpenAfterConflictInStudio = useCallback(() => {
     if (openDesign?.phase === 'opening') return
     openRequestRef.current += 1
     setOpenDesign(null)
@@ -4357,6 +4387,7 @@ export function useStudioEditor() {
     confirmOpenDesign,
     retryOpenDesign,
     cancelOpenDesign,
+    continueOpenAfterConflictInStudio,
   }
 }
 
