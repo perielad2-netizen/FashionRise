@@ -317,6 +317,7 @@ export function MyCroquisScreen({
     <section className={styles.screen} aria-labelledby={titleId}>
       <header className={styles.head}>
         <div className={styles.titleBlock}>
+          <p className={styles.eyebrow}>FashionRise</p>
           <h1 id={titleId} className={styles.title}>
             My Models
           </h1>
@@ -362,7 +363,7 @@ export function MyCroquisScreen({
         ) : null}
 
         {state.status === 'error' ? (
-          <div className={styles.emptyBlock}>
+          <div className={styles.emptyCard}>
             <p className={styles.empty}>{state.message}</p>
             <button type="button" className={styles.ghostBtn} onClick={reload}>
               Try again
@@ -371,7 +372,8 @@ export function MyCroquisScreen({
         ) : null}
 
         {state.status === 'ready' && state.items.length === 0 ? (
-          <div className={styles.emptyBlock}>
+          <div className={styles.emptyCard}>
+            <p className={styles.emptyTitle}>No models yet</p>
             <p className={styles.empty}>No accepted personal model yet.</p>
             <button type="button" className={styles.primaryBtn} onClick={() => setWizardOpen(true)}>
               <Plus size={14} aria-hidden />
@@ -381,7 +383,7 @@ export function MyCroquisScreen({
         ) : null}
 
         {state.status === 'ready' && state.items.length > 0 ? (
-          <ul className={styles.grid}>
+          <ul className={styles.grid} aria-label="My Models gallery">
             {state.items.map((row) => {
               const version = acceptedVersionNumber(row)!
               const assetId = row.latest_accepted_version?.generated_asset_id ?? null
@@ -389,18 +391,29 @@ export function MyCroquisScreen({
               const active = activeStudioPinId === row.id
               return (
                 <li key={row.id} className={styles.card}>
-                  <CroquisThumb assetId={assetId} label={`Preview of ${title}`} />
-                  <div className={styles.cardBody}>
-                    <h2 className={styles.cardTitle} title={title}>
-                      {title}
-                      {active ? <span className={styles.activeBadge}>In Studio</span> : null}
-                    </h2>
-                    <p className={styles.cardMeta}>
-                      <span>v{version}</span>
-                      <span aria-hidden="true"> · </span>
-                      <span>{formatDate(row.updated_at || row.created_at)}</span>
-                    </p>
-                    <div className={styles.cardActions}>
+                  <div className={styles.tile}>
+                    <CroquisThumb assetId={assetId} label={`Preview of ${title}`} />
+                    <button
+                      type="button"
+                      className={styles.deleteIcon}
+                      onClick={() => beginDelete(row)}
+                      aria-label={`Delete ${title}`}
+                    >
+                      <Trash2 size={15} aria-hidden />
+                      <span className={styles.srOnly}>Delete</span>
+                    </button>
+                    <div className={styles.tileFooter}>
+                      <div className={styles.tileCopy}>
+                        <h2 className={styles.cardTitle} title={title}>
+                          {title}
+                          {active ? <span className={styles.activeBadge}>In Studio</span> : null}
+                        </h2>
+                        <p className={styles.cardMeta}>
+                          <span>v{version}</span>
+                          <span aria-hidden="true"> · </span>
+                          <span>{formatDate(row.updated_at || row.created_at)}</span>
+                        </p>
+                      </div>
                       <button
                         type="button"
                         className={styles.openBtn}
@@ -424,7 +437,7 @@ export function MyCroquisScreen({
                       ) : (
                         <button
                           type="button"
-                          className={styles.openBtn}
+                          className={styles.secondaryOpen}
                           onClick={() => beginPublish(row)}
                           aria-label={`Publish ${title} to FashionRise`}
                           data-testid="croquis-publish"
@@ -433,15 +446,6 @@ export function MyCroquisScreen({
                           Publish
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className={styles.deleteBtn}
-                        onClick={() => beginDelete(row)}
-                        aria-label={`Delete ${title}`}
-                      >
-                        <Trash2 size={14} aria-hidden />
-                        Delete
-                      </button>
                     </div>
                   </div>
                 </li>

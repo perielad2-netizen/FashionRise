@@ -3,6 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Preview — My Models Mobbin + croquis crop fixes (2026-11-16 22:35 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-my-models-mobbin-polish-77c6` |
+| Preview | https://fashionrise.app/preview-models/ |
+| Change | Image-first My Models tiles; Profile Looks + FashionRise immersive `object-fit: contain` (no head/feet cut) |
+| Prod | Unchanged — tip remains Looks LIVE until approve |
+| Series | Next after approve: Fitting → Create |
+
+## Deployed — My Looks Mobbin redesign LIVE (2026-11-16 22:28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#387** merged → `main` @ **`38e52ab3`** |
+| Tip | FE **`38e52ab3`** · `/var/www/fashionrise/releases/38e52ab3-my-looks-mobbin-polish` |
+| Change | Image-first My Looks tiles, side chrome then corner fav/delete, no Front/Back badges |
+| Preview | `/preview-looks/` removed after promote |
+| Series | Continuing: Models → Fitting → Create |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/76e4f736-my-designs-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — My Designs Mobbin redesign LIVE (2026-11-16 22:15 Asia/Jerusalem)
 
 | Field | Value |

@@ -375,11 +375,13 @@
   display: block;
   width: 100%;
   aspect-ratio: 3 / 4;
-  object-fit: cover;
+  /* Full croquis visible — cover was cropping heads/feet on Profile Looks. */
+  object-fit: contain;
+  object-position: center center;
   border-radius: 16px;
   background:
     linear-gradient(160deg, rgba(244, 114, 182, 0.12), transparent 40%),
-    rgba(15, 18, 28, 0.9);
+    #f7f1ea;
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -639,9 +641,10 @@
 .lookDialogPlaceholder {
   width: 100%;
   aspect-ratio: 3 / 4;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center center;
   border-radius: 14px;
-  background: #12141c;
+  background: #f7f1ea;
 }
 
 .avatarDialog {
