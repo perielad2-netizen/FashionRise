@@ -112,3 +112,54 @@ def test_following_circle_top_still_work_alongside_discover(client, db_session):
     disc = client.get("/api/v1/gallery?sort=discover", headers=_auth(peri))
     assert disc.status_code == 200
     assert any(row["id"] == item for row in disc.json())
+
+
+def test_discover_exclude_dedupes_load_more(client, db_session):
+    viewer = register_with_invite(client, db_session, "disc3_viewer@example.com", "disc3Viewer")
+    a = register_with_invite(client, db_session, "disc3_a@example.com", "disc3A")
+    b = register_with_invite(client, db_session, "disc3_b@example.com", "disc3B")
+    ids = [
+        _publish(client, db_session, a, "a1"),
+        _publish(client, db_session, a, "a2"),
+        _publish(client, db_session, b, "b1"),
+        _publish(client, db_session, b, "b2"),
+    ]
+    page1 = client.get("/api/v1/gallery?sort=discover&limit=2", headers=_auth(viewer))
+    assert page1.status_code == 200
+    p1_ids = [row["id"] for row in page1.json()]
+    assert len(p1_ids) == 2
+    q = "&".join(f"exclude={i}" for i in p1_ids)
+    page2 = client.get(f"/api/v1/gallery?sort=discover&limit=2&{q}", headers=_auth(viewer))
+    assert page2.status_code == 200
+    p2_ids = [row["id"] for row in page2.json()]
+    assert set(p1_ids).isdisjoint(set(p2_ids))
+    assert set(p1_ids + p2_ids).issubset(set(ids))
+
+
+def test_impression_concurrent_duplicate_is_idempotent(client, db_session):
+    viewer = register_with_invite(client, db_session, "disc4_viewer@example.com", "disc4Viewer")
+    author = register_with_invite(client, db_session, "disc4_author@example.com", "disc4Author")
+    item_id = _publish(client, db_session, author, "race look")
+    row = db_session.get(GalleryItem, uuid.UUID(item_id))
+    assert row is not None
+    before = int(row.unique_impressions_count or 0)
+
+    first = client.post(
+        "/api/v1/gallery/impressions",
+        headers=_auth(viewer),
+        json={"gallery_item_ids": [item_id]},
+    )
+    assert first.status_code == 200
+    assert first.json()["recorded"] == 1
+
+    # Second identical submission must not 500 or double-count.
+    second = client.post(
+        "/api/v1/gallery/impressions",
+        headers=_auth(viewer),
+        json={"gallery_item_ids": [item_id, item_id]},
+    )
+    assert second.status_code == 200
+    assert second.json()["recorded"] == 0
+
+    db_session.refresh(row)
+    assert int(row.unique_impressions_count or 0) == before + 1

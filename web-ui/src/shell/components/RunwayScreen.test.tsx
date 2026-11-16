@@ -195,6 +195,43 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
   })
 
+  it('loads more Discover results with exclude dedupe', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string; exclude?: string[] }) => {
+      if (opts?.sort === 'discover' && (opts.exclude?.length ?? 0) > 0) {
+        return [
+          {
+            ...circleItem,
+            id: 'discover-next',
+            title: 'Discover page two',
+            user_id: 'creator-b',
+          },
+        ]
+      }
+      if (opts?.sort === 'discover') {
+        return Array.from({ length: 24 }, (_, i) => ({
+          ...circleItem,
+          id: `discover-${i + 1}`,
+          title: i === 0 ? 'Discover look' : `Discover filler ${i + 1}`,
+          user_id: `creator-${i % 5}`,
+        }))
+      }
+      return []
+    })
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    expect(await screen.findByText('Discover look')).toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('runway-discover-load-more'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sort: 'discover',
+          exclude: expect.arrayContaining(['discover-1', 'discover-24']),
+        }),
+      ),
+    )
+    expect(await screen.findByText('Discover page two')).toBeInTheDocument()
+    expect(recordGalleryImpressions).not.toHaveBeenCalled()
+  })
+
   it('defaults to Discover and keeps Feed/Top separate', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
@@ -204,7 +241,8 @@ describe('RunwayScreen', () => {
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
-    expect(recordGalleryImpressions).toHaveBeenCalledWith(['discover-1'])
+    // Impressions fire only when cards are meaningfully visible — not on API load.
+    expect(recordGalleryImpressions).not.toHaveBeenCalled()
     expect(listGallery).not.toHaveBeenCalledWith(
       expect.objectContaining({ sort: 'top10' }),
     )

@@ -42,6 +42,8 @@ export async function listGallery(opts?: {
   sort?: GallerySort
   limit?: number
   offset?: number
+  /** Discover load-more: ids already shown (server skips duplicates). */
+  exclude?: string[]
   signal?: AbortSignal
 }): Promise<GalleryItem[]> {
   const sort = opts?.sort ?? 'newest'
@@ -52,6 +54,9 @@ export async function listGallery(opts?: {
     limit: String(limit),
     offset: String(offset),
   })
+  for (const id of opts?.exclude ?? []) {
+    if (id) q.append('exclude', id)
+  }
   return apiRequest<GalleryItem[]>(`/gallery?${q.toString()}`, {
     method: 'GET',
     signal: opts?.signal,

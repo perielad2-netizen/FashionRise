@@ -37,6 +37,10 @@ def list_gallery(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     sort: GallerySort = Query("newest"),
+    exclude: list[uuid.UUID] | None = Query(
+        None,
+        description="Discover load-more: gallery item ids already shown (dedupe).",
+    ),
     user: User | None = Depends(get_optional_user),
 ) -> list[GalleryRead]:
     if sort == "following":
@@ -48,7 +52,12 @@ def list_gallery(
             raise UnauthorizedError("Sign in to view your friends circle feed")
         rows = gallery_service.list_circle_feed(db, viewer=user, limit=limit, offset=offset)
     elif sort == "discover":
-        rows = gallery_service.list_discover_feed(db, limit=limit, offset=offset)
+        rows = gallery_service.list_discover_feed(
+            db,
+            limit=limit,
+            offset=offset,
+            exclude_ids=exclude or None,
+        )
     elif sort == "top10":
         # Worldwide board supports Top 10 / 20 / 50 selectors in the Runway UI.
         rows = gallery_service.list_top_worldwide(db, limit=min(limit, 50))

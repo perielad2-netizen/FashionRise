@@ -25,10 +25,10 @@ from app.schemas.gallery import (
 )
 from app.services import ai_service
 from app.services.gallery_discover import (
-    CANDIDATE_POOL_CAP,
     DISCOVER_WINDOW,
+    ELIGIBLE_HARD_CAP,
     DiscoverCandidate,
-    diversify_select,
+    diversify_select_page,
     rank_discover_candidates,
 )
 
@@ -288,35 +288,68 @@ def list_discover_feed(
     *,
     limit: int = 48,
     offset: int = 0,
+    exclude_ids: list[uuid.UUID] | None = None,
     now: datetime | None = None,
 ) -> list[GalleryItem]:
-    """Fair Discovery: 7-day eligible looks, cold-start + engagement/impressions, creator diversity."""
+    """Fair Discovery: full 7-day eligible pool, per-page creator diversity, optional exclude."""
     now_utc = now or datetime.now(timezone.utc)
     cutoff = now_utc - DISCOVER_WINDOW
-    rows = list(
-        db.scalars(
-            _public_gallery_base()
-            .where(GalleryItem.created_at >= cutoff)
-            .order_by(GalleryItem.created_at.desc())
-            .limit(CANDIDATE_POOL_CAP)
-        ).all()
-    )
-    by_id = {row.id: row for row in rows}
+    # Lightweight projection of the full eligibility window (not "newest 500 only").
+    rank_rows = db.execute(
+        select(
+            GalleryItem.id,
+            GalleryItem.user_id,
+            GalleryItem.likes_count,
+            GalleryItem.rating_count,
+            GalleryItem.unique_impressions_count,
+            GalleryItem.created_at,
+        )
+        .where(
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
+            GalleryItem.created_at >= cutoff,
+        )
+        .order_by(GalleryItem.created_at.desc())
+        .limit(ELIGIBLE_HARD_CAP)
+    ).all()
     candidates = [
         DiscoverCandidate(
             id=row.id,
             user_id=row.user_id,
             likes_count=int(row.likes_count or 0),
             rating_count=int(row.rating_count or 0),
-            unique_impressions_count=int(getattr(row, "unique_impressions_count", 0) or 0),
+            unique_impressions_count=int(row.unique_impressions_count or 0),
             created_at=row.created_at,
         )
-        for row in rows
+        for row in rank_rows
     ]
     scored = rank_discover_candidates(candidates, now=now_utc)
-    # Diversify the full ranked list, then page — avoids one creator filling every offset page.
-    diversified = diversify_select(scored, limit=len(scored))
-    page_ids = [c.id for c in diversified[offset : offset + limit]]
+    skip = list(exclude_ids or [])
+    # When exclude is provided (load-more), build the next diversified page from remaining.
+    # Offset still works for stable paging without exclude.
+    if skip:
+        page = diversify_select_page(scored, limit=limit, exclude_ids=skip)
+    else:
+        # Build a diversified stream page-by-page so creator caps reset each page.
+        stream: list[DiscoverCandidate] = []
+        seen: list[uuid.UUID] = []
+        need = offset + limit
+        guard = 0
+        while len(stream) < need and guard < need + 5:
+            guard += 1
+            nxt = diversify_select_page(
+                scored, limit=limit, exclude_ids=seen
+            )
+            if not nxt:
+                break
+            stream.extend(nxt)
+            seen.extend(c.id for c in nxt)
+        page = stream[offset : offset + limit]
+    if not page:
+        return []
+    page_ids = [c.id for c in page]
+    items = list(db.scalars(select(GalleryItem).where(GalleryItem.id.in_(page_ids))).all())
+    by_id = {item.id: item for item in items}
     return [by_id[item_id] for item_id in page_ids if item_id in by_id]
 
 
@@ -325,7 +358,9 @@ def record_gallery_impressions(
     viewer: User,
     gallery_item_ids: list[uuid.UUID],
 ) -> int:
-    """Record unique Discover impressions. Skips self-views and duplicates. Returns newly recorded count."""
+    """Record unique Discover impressions. Concurrent-safe; skips self/duplicates."""
+    from sqlalchemy.exc import IntegrityError
+
     if not gallery_item_ids:
         return 0
     # Preserve order, de-dupe request payload.
@@ -352,25 +387,35 @@ def record_gallery_impressions(
         item = by_id.get(item_id)
         if item is None or item.user_id == viewer.id:
             continue
-        existing = db.scalar(
-            select(GalleryImpression).where(
-                GalleryImpression.gallery_item_id == item.id,
-                GalleryImpression.viewer_user_id == viewer.id,
-            )
-        )
-        if existing is not None:
+        try:
+            # Savepoint so a race on the unique constraint does not abort the whole batch.
+            if hasattr(db, "begin_nested"):
+                with db.begin_nested():
+                    db.add(
+                        GalleryImpression(
+                            gallery_item_id=item.id,
+                            viewer_user_id=viewer.id,
+                        )
+                    )
+                    db.flush()
+                    item.impressions_count = int(item.impressions_count or 0) + 1
+                    item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
+                    recorded += 1
+            else:
+                db.add(
+                    GalleryImpression(
+                        gallery_item_id=item.id,
+                        viewer_user_id=viewer.id,
+                    )
+                )
+                db.flush()
+                item.impressions_count = int(item.impressions_count or 0) + 1
+                item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
+                recorded += 1
+        except IntegrityError:
+            # Concurrent duplicate for the same viewer×item — treat as already recorded.
             continue
-        db.add(
-            GalleryImpression(
-                gallery_item_id=item.id,
-                viewer_user_id=viewer.id,
-            )
-        )
-        item.impressions_count = int(item.impressions_count or 0) + 1
-        item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
-        recorded += 1
-    if recorded:
-        db.commit()
+    db.commit()
     return recorded
 
 

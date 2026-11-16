@@ -96,6 +96,36 @@ const TABS: Array<{ id: TabId; label: string; hint: string }> = [
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
 const SCORE_HINT = 'Looks earn FashionRise scores from likes + ratings (1–10).'
+const DISCOVER_PAGE_SIZE = 24
+
+/** Batch unique Discover impressions only after cards become meaningfully visible. */
+function useDiscoverImpressionReporter() {
+  const pendingRef = useRef<Set<string>>(new Set())
+  const sentRef = useRef<Set<string>>(new Set())
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return useCallback((galleryItemId: string) => {
+    if (!galleryItemId || sentRef.current.has(galleryItemId)) return
+    pendingRef.current.add(galleryItemId)
+    if (timerRef.current) return
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      const ids = [...pendingRef.current]
+      pendingRef.current.clear()
+      if (ids.length === 0) return
+      for (const id of ids) sentRef.current.add(id)
+      void recordGalleryImpressions(ids).catch(() => {
+        for (const id of ids) sentRef.current.delete(id)
+      })
+    }, 350)
+  }, [])
+}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
@@ -112,6 +142,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [browseSheet, setBrowseSheet] = useState<BrowseSheet | null>(null)
   const [topLimit, setTopLimit] = useState<TopLimit>(10)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [discoverHasMore, setDiscoverHasMore] = useState(true)
+  const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false)
+  const reportDiscoverImpression = useDiscoverImpressionReporter()
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
   const [friendUsername, setFriendUsername] = useState('')
   const [friendBusy, setFriendBusy] = useState(false)
@@ -296,12 +329,16 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         return
       }
       if (tab === 'discover') {
-        const discover = await listGallery({ sort: 'discover', limit: 48, signal })
+        const discover = await listGallery({
+          sort: 'discover',
+          limit: DISCOVER_PAGE_SIZE,
+          signal,
+        })
         if (signal?.aborted) return
+        setDiscoverHasMore(discover.length >= DISCOVER_PAGE_SIZE)
         setState({ status: 'ready', discover, circle: [], following: [], top10: [] })
-        if (discover.length > 0) {
-          void recordGalleryImpressions(discover.map((item) => item.id)).catch(() => undefined)
-        }
+        // Impressions are recorded only when cards become meaningfully visible
+        // (IntersectionObserver) — never for an entire API batch on load.
         return
       }
       const circle = await listGallery({ sort: 'circle', limit: 48, signal })
@@ -324,6 +361,36 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     void load(ac.signal)
     return () => ac.abort()
   }, [load])
+
+  const loadMoreDiscover = useCallback(async () => {
+    if (discoverLoadingMore || !discoverHasMore || state.status !== 'ready') return
+    setDiscoverLoadingMore(true)
+    try {
+      const exclude = state.discover.map((item) => item.id)
+      const more = await listGallery({
+        sort: 'discover',
+        limit: DISCOVER_PAGE_SIZE,
+        exclude,
+      })
+      setDiscoverHasMore(more.length >= DISCOVER_PAGE_SIZE)
+      if (more.length === 0) return
+      setState((prev) => {
+        if (prev.status !== 'ready') return prev
+        const seen = new Set(prev.discover.map((item) => item.id))
+        const merged = [...prev.discover]
+        for (const item of more) {
+          if (seen.has(item.id)) continue
+          seen.add(item.id)
+          merged.push(item)
+        }
+        return { ...prev, discover: merged }
+      })
+    } catch {
+      setDiscoverHasMore(false)
+    } finally {
+      setDiscoverLoadingMore(false)
+    }
+  }, [discoverHasMore, discoverLoadingMore, state])
 
   const onAddFriend = useCallback(
     async (event: FormEvent) => {
@@ -662,20 +729,40 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                 }
               />
             ) : (
-              <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Discover feed">
-                {state.discover.map((item) => (
-                  <RunwayCard
-                    key={item.id}
-                    item={item}
-                    layout="stack"
-                    isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                    viewerId={viewerId}
-                    viewerUsername={viewerUsername}
-                    onItemChange={patchItem}
-                    onOpenDesigner={(designer) => setViewingDesigner(designer)}
-                  />
-                ))}
-              </ul>
+              <>
+                <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Discover feed">
+                  {state.discover.map((item) => (
+                    <RunwayCard
+                      key={item.id}
+                      item={item}
+                      layout="stack"
+                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
+                      onItemChange={patchItem}
+                      onOpenDesigner={(designer) => setViewingDesigner(designer)}
+                      onVisibleImpression={
+                        viewerId && item.user_id !== viewerId
+                          ? reportDiscoverImpression
+                          : undefined
+                      }
+                    />
+                  ))}
+                </ul>
+                {discoverHasMore ? (
+                  <div className={styles.feedHubHints}>
+                    <button
+                      type="button"
+                      className={styles.ghostBtn}
+                      data-testid="runway-discover-load-more"
+                      disabled={discoverLoadingMore}
+                      onClick={() => void loadMoreDiscover()}
+                    >
+                      {discoverLoadingMore ? 'Loading…' : 'Load more'}
+                    </button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         ) : tab === 'following' ? (
@@ -804,6 +891,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             setBrowseSheet(null)
             setViewingDesigner(designer)
           }}
+          onVisibleImpression={
+            browseSheet === 'discover' ? reportDiscoverImpression : undefined
+          }
         />
       ) : null}
     </section>
@@ -820,6 +910,7 @@ function RunwayBrowseSheet({
   onOpenLooks,
   onOpenFriends,
   onOpenDesigner,
+  onVisibleImpression,
 }: {
   kind: BrowseSheet
   items: GalleryItem[]
@@ -830,6 +921,7 @@ function RunwayBrowseSheet({
   onOpenLooks: () => void
   onOpenFriends: () => void
   onOpenDesigner: (designer: DesignerRef) => void
+  onVisibleImpression?: (galleryItemId: string) => void
 }) {
   const titleId = useId()
   const isTop10 = kind === 'top10'
@@ -961,6 +1053,11 @@ function RunwayBrowseSheet({
                   viewerUsername={viewerUsername}
                   onItemChange={onItemChange}
                   onOpenDesigner={onOpenDesigner}
+                  onVisibleImpression={
+                    onVisibleImpression && viewerId && item.user_id !== viewerId
+                      ? onVisibleImpression
+                      : undefined
+                  }
                 />
               ))}
             </ul>
@@ -1168,6 +1265,7 @@ function RunwayCard({
   viewerUsername,
   onItemChange,
   onOpenDesigner,
+  onVisibleImpression,
 }: {
   item: GalleryItem
   rank?: number
@@ -1178,9 +1276,13 @@ function RunwayCard({
   viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
   onOpenDesigner?: (designer: DesignerRef) => void
+  /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
+  onVisibleImpression?: (galleryItemId: string) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const cardRef = useRef<HTMLLIElement | null>(null)
+  const impressionSentRef = useRef(false)
   const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -1191,6 +1293,31 @@ function RunwayCard({
   const canReact = !isOwn
   const chatTitleId = useId()
   const chatInputId = useId()
+
+  useEffect(() => {
+    impressionSentRef.current = false
+  }, [item.id])
+
+  useEffect(() => {
+    if (!onVisibleImpression || isOwn) return
+    const node = cardRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || entry.intersectionRatio < 0.55) continue
+          if (impressionSentRef.current) continue
+          impressionSentRef.current = true
+          onVisibleImpression(item.id)
+          observer.disconnect()
+          return
+        }
+      },
+      { threshold: [0.55], rootMargin: '0px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [isOwn, item.id, onVisibleImpression])
 
   const refreshItem = useCallback(async () => {
     const fresh = await getGalleryItem(item.id)
@@ -1356,7 +1483,12 @@ function RunwayCard({
           : styles.rankBadge
 
   return (
-    <li className={cardClass}>
+    <li
+      ref={cardRef}
+      className={cardClass}
+      data-gallery-item-id={item.id}
+      data-testid={onVisibleImpression ? `runway-discover-card-${item.id}` : undefined}
+    >
       <div className={ranked ? styles.rankThumb : styles.thumb}>
         {rank != null ? (
           <span className={badgeClass}>

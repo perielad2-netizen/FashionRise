@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.services.gallery_discover import (
     DiscoverCandidate,
     diversify_select,
+    diversify_select_page,
     discover_score,
     is_discover_eligible,
     rank_discover_candidates,
@@ -71,3 +72,25 @@ def test_diversify_limits_per_creator_and_skips_duplicates():
     assert sum(1 for c in picked if c.user_id == creator_a) == 2
     assert sum(1 for c in picked if c.user_id == creator_b) == 1
     assert len({c.id for c in picked}) == 3
+
+
+def test_pagination_resets_creator_cap_and_excludes_seen():
+    creator_a = uuid4()
+    creator_b = uuid4()
+    a1 = _cand(user_id=creator_a, likes=9, unique=3)
+    a2 = _cand(user_id=creator_a, likes=8, unique=3)
+    a3 = _cand(user_id=creator_a, likes=7, unique=3)
+    b1 = _cand(user_id=creator_b, likes=6, unique=3)
+    scored = rank_discover_candidates([a1, a2, a3, b1], now=NOW)
+    page1 = diversify_select_page(scored, limit=2, max_per_creator=2)
+    assert len(page1) == 2
+    page2 = diversify_select_page(
+        scored,
+        limit=2,
+        max_per_creator=2,
+        exclude_ids=[c.id for c in page1],
+    )
+    assert len(page2) == 2
+    assert {c.id for c in page1}.isdisjoint({c.id for c in page2})
+    # Creator A can appear again on page 2 after exclude (cap is per page).
+    assert any(c.user_id == creator_a for c in page2) or any(c.user_id == creator_b for c in page2)

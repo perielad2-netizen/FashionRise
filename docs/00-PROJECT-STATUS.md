@@ -36,17 +36,18 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no weekly Stars awards / login streak in PR2**.
 
-## FashionRise Social PR2 — Fair Discovery (2026-11-16) — PM REVIEW
+## FashionRise Social PR2 — Fair Discovery (2026-11-16) — PM REVIEW / #352
 
 | Status | Detail |
 |---|---|
 | Product | Global **Discover** tab (default) — fair ranking across creators |
-| Ranking | 7-day eligibility · cold-start exposure for new publishes · engagement relative to unique impressions · ≤2 looks/creator per page · no repeated design ids |
-| API | `GET /gallery?sort=discover` · `POST /gallery/impressions` (unique, skip self) · Alembic **031** |
+| Ranking | 7-day eligibility · cold-start exposure · engagement / unique impressions · ≤2 looks/creator **per page** · exclude-based load-more |
+| Impressions | **IntersectionObserver** (≥55% visible) only — never on API batch load · unique viewer×design · no self · concurrent-safe upsert |
+| API | `GET /gallery?sort=discover&exclude=` · `POST /gallery/impressions` · Alembic **031** |
 | Preserved | Following · Friends circle Feed · Top 10/20/50 · existing publish/`destination:'runway'` |
 | Not in PR2 | Weekly Stars awards · login streak · designer profile editor · My Models publish consent |
-| Branch | `cursor/web-fashionrise-fair-discovery-77c6` |
-| Merge | **Hold for PM** |
+| Branch | `cursor/web-fashionrise-fair-discovery-77c6` · [#352](https://github.com/perielad2-netizen/FashionRise/pull/352) |
+| Merge | **Hold for PM** (amendment: visibility impressions + fair pagination + idempotent counters) |
 
 ## FashionRise Social PR1 — feed / profiles / nav (2026-11-16) — MERGED / #349
 

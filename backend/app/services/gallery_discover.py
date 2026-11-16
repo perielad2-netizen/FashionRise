@@ -2,7 +2,8 @@
 
 Pure helpers — no DB. Eligibility is a rolling 7-day window. New designs get
 cold-start exposure; engagement relative to unique impressions raises rank;
-diversify_select caps per-creator slots so established accounts cannot monopolize.
+diversify_select_page caps per-creator slots **per page** so pagination stays
+fair without permanently excluding a creator after page 1.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from uuid import UUID
 DISCOVER_WINDOW = timedelta(days=7)
 NEW_EXPOSURE_TARGET = 25
 MAX_PER_CREATOR_DEFAULT = 2
-CANDIDATE_POOL_CAP = 500
+# Safety only — full 7-day eligible set is ranked; this is not a "newest N" cut.
+ELIGIBLE_HARD_CAP = 10_000
 
 
 @dataclass(frozen=True)
@@ -78,25 +80,33 @@ def rank_discover_candidates(
         if score < 0:
             continue
         scored.append((row, score))
-    scored.sort(key=lambda pair: (-pair[1], -ensure_utc(pair[0].created_at).timestamp(), str(pair[0].id)))
+    scored.sort(
+        key=lambda pair: (
+            -pair[1],
+            -ensure_utc(pair[0].created_at).timestamp(),
+            str(pair[0].id),
+        )
+    )
     return scored
 
 
-def diversify_select(
+def diversify_select_page(
     scored: Sequence[tuple[DiscoverCandidate, float]],
     *,
     limit: int,
     max_per_creator: int = MAX_PER_CREATOR_DEFAULT,
+    exclude_ids: Sequence[UUID] | None = None,
 ) -> list[DiscoverCandidate]:
-    """Pick a page that spreads creators and never repeats the same design id."""
+    """One Discover page: skip already-seen ids, cap creators on this page only."""
     if limit <= 0:
         return []
+    skip = set(exclude_ids or ())
     cap = max(1, int(max_per_creator))
     out: list[DiscoverCandidate] = []
     seen_ids: set[UUID] = set()
     per_creator: dict[UUID, int] = {}
     for candidate, _score in scored:
-        if candidate.id in seen_ids:
+        if candidate.id in skip or candidate.id in seen_ids:
             continue
         used = per_creator.get(candidate.user_id, 0)
         if used >= cap:
@@ -107,3 +117,13 @@ def diversify_select(
         if len(out) >= limit:
             break
     return out
+
+
+# Back-compat alias for older unit tests / imports.
+def diversify_select(
+    scored: Sequence[tuple[DiscoverCandidate, float]],
+    *,
+    limit: int,
+    max_per_creator: int = MAX_PER_CREATOR_DEFAULT,
+) -> list[DiscoverCandidate]:
+    return diversify_select_page(scored, limit=limit, max_per_creator=max_per_creator)
