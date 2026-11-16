@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Crown, Globe2, Users, UserPlus } from 'lucide-react'
+import { Crown, Globe2, Trophy, Users, UserPlus } from 'lucide-react'
 import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
@@ -15,6 +15,16 @@ type LoadState =
   | { status: 'ready'; items: GalleryItem[] }
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
+
+/** Weekly Star prize categories — always shown on Runway (live winners via CompetitionStrip). */
+const WEEKLY_CATEGORIES: ReadonlyArray<{ id: string; label: string; stars: number }> = [
+  { id: 'top_design', label: 'Top Design', stars: 50 },
+  { id: 'top_designer', label: 'Top Designer', stars: 50 },
+  { id: 'community_champion', label: 'Community Champion', stars: 50 },
+  { id: 'top_supporter', label: 'Top Supporter', stars: 20 },
+  { id: 'top_commenter', label: 'Top Commenter', stars: 20 },
+  { id: 'top_rater', label: 'Top Rater', stars: 20 },
+]
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
@@ -83,6 +93,25 @@ export function RunwayBoardScreen() {
           Instagram-style scroll lives on FashionRise.
         </p>
       </header>
+
+      <section className={styles.weekly} aria-labelledby="runway-weekly-title">
+        <div className={styles.weeklyHead}>
+          <h2 id="runway-weekly-title" className={styles.weeklyTitle}>
+            <Trophy size={16} aria-hidden /> Weekly categories
+          </h2>
+          <p className={styles.weeklyHint}>
+            One prize per designer each week. Star payouts stay off until rewards are enabled.
+          </p>
+        </div>
+        <ul className={styles.weeklyCats} aria-label="Award categories">
+          {WEEKLY_CATEGORIES.map((cat) => (
+            <li key={cat.id} className={styles.weeklyCat} data-testid={`runway-cat-${cat.id}`}>
+              {cat.label}
+              <span className={styles.weeklyStars}>{cat.stars}★</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <CompetitionStrip defaultOpen />
 

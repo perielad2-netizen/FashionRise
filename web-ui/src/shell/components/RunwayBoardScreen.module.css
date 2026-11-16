@@ -202,10 +202,70 @@
     0 0 28px rgba(214, 51, 132, 0.28);
 }
 
+.weekly {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weeklyHead {
+  display: grid;
+  gap: 4px;
+}
+
+.weeklyTitle {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.weeklyHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.weeklyCats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.weeklyCat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: rgba(244, 114, 182, 0.1);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.weeklyStars {
+  color: #f9a8d4;
+  font-weight: 800;
+}
+
 .rankThumb {
   position: relative;
-  min-height: 148px;
-  background: linear-gradient(165deg, #1a1520, #0f121a);
+  min-height: 168px;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(165deg, #f8f3ee, #efe6dc);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -214,7 +274,8 @@
 .rankThumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center top;
   position: absolute;
   inset: 0;
 }

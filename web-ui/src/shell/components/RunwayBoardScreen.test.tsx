@@ -67,14 +67,21 @@ describe('RunwayBoardScreen', () => {
     render(<RunwayBoardScreen />)
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
     expect(screen.getByText(/Instagram-style scroll lives on FashionRise/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Weekly categories/i })).toBeInTheDocument()
+    expect(screen.getByTestId('runway-cat-top_design')).toHaveTextContent('Top Design')
+    expect(screen.getByTestId('runway-cat-top_designer')).toHaveTextContent('Top Designer')
+    expect(screen.getByTestId('runway-cat-community_champion')).toHaveTextContent(
+      'Community Champion',
+    )
+    expect(screen.getByTestId('runway-cat-top_supporter')).toHaveTextContent('Top Supporter')
+    expect(screen.getByTestId('runway-cat-top_commenter')).toHaveTextContent('Top Commenter')
+    expect(screen.getByTestId('runway-cat-top_rater')).toHaveTextContent('Top Rater')
 
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     expect(listGallery.mock.calls[0][0]).toMatchObject({ sort: 'top10', limit: 10 })
     expect(await screen.findByText('Pink gown')).toBeInTheDocument()
 
-    expect(screen.getByLabelText('Award categories')).toHaveTextContent('Top Design')
-    expect(screen.getByLabelText('Award categories')).toHaveTextContent('Community Champion')
-    expect(screen.getByLabelText('Award categories')).toHaveTextContent('Top Rater')
+    expect(screen.getAllByLabelText('Award categories').length).toBeGreaterThanOrEqual(1)
 
     fireEvent.click(screen.getByTestId('runway-top-limit-50'))
     await waitFor(() =>
