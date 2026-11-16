@@ -3,6 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Android batch #406–#409 LIVE (2026-11-17 01:07 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PRs | **#406** OCC Keep Save · **#407** Profile Save + alive Discover · **#408** Magic top clip / More · **#409** native OS share |
+| Tip | FE+BE **`56177590`** → `/var/www/fashionrise/releases/56177590-android-batch` · public `/version.json` |
+| BE | `/opt/fashionrise/src` detached @ **`5617759`** · `fashionrise-api` restarted (uvicorn `:8010`) |
+| Change | Keep-this-device no longer false-fails after OCC rebase; Profile Edit body not double-stringified; Discover demotes seen + fresh boost + 3h explore jitter; Magic results pad under native header + hide stray More; Capacitor/Web Share API instead of custom sheet |
+| Verify | `https://fashionrise.app/version.json` → `56177590` · `auth/registration/status` **200** · `fr-app-version` meta **56177590** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/6bdb1532-followers-ui /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach d01d8fb && systemctl restart fashionrise-api` |
+| Android | Safe to Codemagic / local Capacitor build from **`main` @ `56177590`** |
+
 ## Preview — My Looks Look Details Mobbin polish (2026-11-16 23:45 Asia/Jerusalem)
 
 | Field | Value |
@@ -240,9 +253,9 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**Runway Mobbin polish LIVE** · tip **`38648d70`** · rewards **OFF**.)
+**Last updated:** 2026-11-17 (**Android batch #406–#409 LIVE** · tip **`56177590`** · rewards **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**. Android Codemagic can build from **`main` @ `56177590`**.
 
 ## Discover all-published #366 — BE LIVE (2026-11-16)
 
