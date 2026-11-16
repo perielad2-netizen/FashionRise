@@ -1,9 +1,9 @@
-"""Competition status + standings for the FashionRise social UX."""
+"""Competition status + standings — read-only for GET (no financial/group side effects)."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,11 +11,10 @@ from sqlalchemy.orm import Session
 from app.models.competition import (
     CompetitionAward,
     CompetitionGroup,
-    CompetitionGroupMember,
     CompetitionWeek,
 )
 from app.models.user import User
-from app.services.competition_awards import CATEGORY_LABELS, tick_competitions
+from app.services.competition_awards import AWARD_DEFS, CATEGORY_LABELS
 from app.services.competition_clock import (
     competition_week_end,
     competition_week_start,
@@ -24,11 +23,7 @@ from app.services.competition_clock import (
     seconds_remaining,
     week_key,
 )
-from app.services.competition_groups import (
-    ensure_competition_week,
-    ensure_participant_if_eligible,
-    list_group_rows,
-)
+from app.services.competition_groups import get_membership, list_group_rows
 from app.services.competition_scoring import (
     design_engagement_scores,
     designer_scores_from_designs,
@@ -48,26 +43,26 @@ def build_competition_status(
     *,
     now: datetime | None = None,
 ) -> dict:
-    from datetime import timezone
-
+    """Read-only status. Does not enroll, settle, or credit Stars."""
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
-    tick_competitions(db, now=now_utc)
-    db.flush()
+    week_start = competition_week_start(now_utc)
+    week_end = competition_week_end(week_start)
+    week = db.get(CompetitionWeek, week_start)
+    status = week.status if week is not None else "open"
+    groups = list_group_rows(db, week_start) if week is not None else []
 
-    week = ensure_competition_week(db, now=now_utc)
-    groups = list_group_rows(db, week.week_start)
     member = None
     standing = None
     top_designs: list[dict] = []
     top_designers: list[dict] = []
     if user is not None:
-        member = ensure_participant_if_eligible(db, user.id, now=now_utc)
+        member = get_membership(db, user.id, week_start=week_start)
         if member is not None:
             group = db.get(CompetitionGroup, member.group_id)
             all_designs = design_engagement_scores(
                 db,
-                week_start=week.week_start,
-                week_end=week.week_end,
+                week_start=week_start,
+                week_end=week_end,
                 group_id=member.group_id,
             )
             designers = designer_scores_from_designs(all_designs)
@@ -108,11 +103,12 @@ def build_competition_status(
                 for d in designers[:10]
             ]
 
+    stars_by_id = {cid: stars for cid, stars in AWARD_DEFS}
     return {
-        "week_start": week.week_start.isoformat(),
-        "week_end": week.week_end.isoformat(),
-        "week_key": week_key(week.week_start),
-        "status": week.status,
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "week_key": week_key(week_start),
+        "status": status,
         "days_remaining": round(days_remaining(now_utc), 2),
         "seconds_remaining": seconds_remaining(now_utc),
         "group_count": len(groups),
@@ -120,8 +116,8 @@ def build_competition_status(
         "top_designs": top_designs,
         "top_designers": top_designers,
         "award_categories": [
-            {"id": key, "label": label, "stars": 50}
-            for key, label in CATEGORY_LABELS.items()
+            {"id": cid, "label": CATEGORY_LABELS[cid], "stars": stars_by_id[cid]}
+            for cid, _ in AWARD_DEFS
         ],
         "runway_note": "Worldwide Runway Top 10/20/50 stays global — groups affect weekly prizes only.",
         "publish_note": "Publish anytime. Designs compete in the week they are published.",
@@ -148,10 +144,7 @@ def list_week_awards(
         q = q.where(CompetitionAward.group_id == group.id)
     rows = list(db.scalars(q.order_by(CompetitionAward.stars_amount.desc())).all())
     names = _username_map(db, [r.user_id for r in rows])
-    group_indexes = {
-        g.id: g.group_index
-        for g in list_group_rows(db, start)
-    }
+    group_indexes = {g.id: g.group_index for g in list_group_rows(db, start)}
     return [
         {
             "category": r.category,

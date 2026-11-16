@@ -51,6 +51,19 @@ vi.mock('@/lib/fabricAssetCache', () => ({
   bindFabricCacheToUser: vi.fn(),
 }))
 
+vi.mock('@/services/competitionsApi', () => ({
+  postStreakCheckIn: vi.fn(async () => ({
+    current_streak: 0,
+    last_checkin_date: null,
+    lifetime_checkins: 0,
+    days_until_reward: 7,
+    rewarded_this_checkin: false,
+    stars_awarded: 0,
+    reward_every_days: 7,
+    reward_stars: 10,
+  })),
+}))
+
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
 function Probe() {

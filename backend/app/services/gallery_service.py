@@ -97,6 +97,10 @@ def create_gallery_item(db: Session, user: User, data: GalleryCreate) -> Gallery
         visibility=data.visibility,
     )
     db.add(item)
+    if (data.visibility or "public") == "public":
+        from app.services.competition_groups import enroll_on_activity
+
+        enroll_on_activity(db, user.id)
     db.commit()
     db.refresh(item)
     return item
@@ -124,6 +128,9 @@ def publish_look(
         existing.visibility = "public"
         existing.moderation_status = "ok"
         db.add(existing)
+        from app.services.competition_groups import enroll_on_activity
+
+        enroll_on_activity(db, user.id)
         db.commit()
         db.refresh(existing)
         return existing
@@ -148,6 +155,9 @@ def publish_look(
         moderation_status="ok",
     )
     db.add(item)
+    from app.services.competition_groups import enroll_on_activity
+
+    enroll_on_activity(db, user.id)
     db.commit()
     db.refresh(item)
     return item
@@ -521,6 +531,9 @@ def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> Non
         raise ConflictError("Already liked")
     db.add(GalleryLike(user_id=user.id, gallery_item_id=item.id))
     item.likes_count += 1
+    from app.services.competition_groups import enroll_on_activity
+
+    enroll_on_activity(db, user.id)
     db.commit()
     from app.services import push_service as push_service
 
@@ -620,6 +633,9 @@ def add_gallery_comment(
         raise ValidationAppError("Comment is too long")
     row = GalleryComment(gallery_item_id=item.id, user_id=user.id, body=body, likes_count=0)
     db.add(row)
+    from app.services.competition_groups import enroll_on_activity
+
+    enroll_on_activity(db, user.id)
     db.commit()
     db.refresh(row)
     from app.services import push_service as push_service

@@ -17,7 +17,14 @@ from app.models.gallery_like import GalleryLike
 from app.models.rating import Rating
 from app.services.competition_clock import ensure_utc
 
-MIN_COMMENT_CHARS = 8
+MIN_COMMENT_CHARS = 12
+MAX_QUALIFYING_COMMENTS_PER_DESIGN = 2
+MAX_LIKES_PER_DESIGNER = 25
+MAX_RATINGS_PER_DESIGNER = 25
+
+
+def _normalize_comment(body: str) -> str:
+    return " ".join((body or "").lower().split())
 
 
 @dataclass(frozen=True)
@@ -144,6 +151,7 @@ def supporter_scores(
     week_end: datetime,
     group_id: uuid.UUID,
 ) -> list[ScoredUser]:
+    """Unique liked designs, capped per designer so farming one creator does not dominate."""
     start = ensure_utc(week_start)
     end = ensure_utc(week_end)
     members = _member_ids(db, group_id)
@@ -156,14 +164,24 @@ def supporter_scores(
             GalleryLike.user_id.in_(members),
             GalleryLike.created_at >= start,
             GalleryLike.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
         )
     ).all()
-    counts: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    per_user_designer: dict[uuid.UUID, dict[uuid.UUID, set[uuid.UUID]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for liker_id, item_id, owner_id in rows:
         if liker_id == owner_id:
             continue
-        counts[liker_id].add(item_id)
-    out = [ScoredUser(user_id=uid, score=len(items)) for uid, items in counts.items()]
+        per_user_designer[liker_id][owner_id].add(item_id)
+    out: list[ScoredUser] = []
+    for uid, by_designer in per_user_designer.items():
+        score = 0
+        for items in by_designer.values():
+            score += min(len(items), MAX_LIKES_PER_DESIGNER)
+        if score > 0:
+            out.append(ScoredUser(user_id=uid, score=score))
     out.sort(key=lambda row: (-row.score, str(row.user_id)))
     return out
 
@@ -175,29 +193,58 @@ def commenter_scores(
     week_end: datetime,
     group_id: uuid.UUID,
 ) -> list[ScoredUser]:
+    """Meaningful comments only — length, uniqueness, per-design bound, distinct designers."""
     start = ensure_utc(week_start)
     end = ensure_utc(week_end)
     members = _member_ids(db, group_id)
     if not members:
         return []
     rows = db.execute(
-        select(GalleryComment.user_id, GalleryComment.id, GalleryItem.user_id, GalleryComment.body)
+        select(
+            GalleryComment.user_id,
+            GalleryComment.id,
+            GalleryComment.gallery_item_id,
+            GalleryItem.user_id,
+            GalleryComment.body,
+        )
         .join(GalleryItem, GalleryItem.id == GalleryComment.gallery_item_id)
         .where(
             GalleryComment.user_id.in_(members),
             GalleryComment.moderation_status == "ok",
             GalleryComment.created_at >= start,
             GalleryComment.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
         )
+        .order_by(GalleryComment.created_at.asc(), GalleryComment.id.asc())
     ).all()
-    counts: dict[uuid.UUID, int] = defaultdict(int)
-    for commenter_id, _cid, owner_id, body in rows:
+
+    scores: dict[uuid.UUID, int] = defaultdict(int)
+    seen_bodies: dict[uuid.UUID, set[str]] = defaultdict(set)
+    per_design: dict[uuid.UUID, dict[uuid.UUID, int]] = defaultdict(lambda: defaultdict(int))
+    designers_touched: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+
+    for commenter_id, _cid, item_id, owner_id, body in rows:
         if commenter_id == owner_id:
             continue
-        if len((body or "").strip()) < MIN_COMMENT_CHARS:
+        text = (body or "").strip()
+        if len(text) < MIN_COMMENT_CHARS:
             continue
-        counts[commenter_id] += 1
-    out = [ScoredUser(user_id=uid, score=n) for uid, n in counts.items()]
+        norm = _normalize_comment(text)
+        if not norm or norm in seen_bodies[commenter_id]:
+            continue
+        if per_design[commenter_id][item_id] >= MAX_QUALIFYING_COMMENTS_PER_DESIGN:
+            continue
+        seen_bodies[commenter_id].add(norm)
+        per_design[commenter_id][item_id] += 1
+        designers_touched[commenter_id].add(owner_id)
+        scores[commenter_id] += 1
+
+    # Qualifying comments + unique designers (diversity over farming one creator).
+    out: list[ScoredUser] = []
+    for uid, comment_pts in scores.items():
+        diversity = len(designers_touched[uid])
+        out.append(ScoredUser(user_id=uid, score=comment_pts + diversity))
     out.sort(key=lambda row: (-row.score, str(row.user_id)))
     return out
 
@@ -209,6 +256,7 @@ def rater_scores(
     week_end: datetime,
     group_id: uuid.UUID,
 ) -> list[ScoredUser]:
+    """Unique rated designs, capped per designer."""
     start = ensure_utc(week_start)
     end = ensure_utc(week_end)
     members = _member_ids(db, group_id)
@@ -221,14 +269,24 @@ def rater_scores(
             Rating.user_id.in_(members),
             Rating.created_at >= start,
             Rating.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
         )
     ).all()
-    counts: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    per_user_designer: dict[uuid.UUID, dict[uuid.UUID, set[uuid.UUID]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for rater_id, item_id, owner_id in rows:
         if rater_id == owner_id:
             continue
-        counts[rater_id].add(item_id)
-    out = [ScoredUser(user_id=uid, score=len(items)) for uid, items in counts.items()]
+        per_user_designer[rater_id][owner_id].add(item_id)
+    out: list[ScoredUser] = []
+    for uid, by_designer in per_user_designer.items():
+        score = 0
+        for items in by_designer.values():
+            score += min(len(items), MAX_RATINGS_PER_DESIGNER)
+        if score > 0:
+            out.append(ScoredUser(user_id=uid, score=score))
     out.sort(key=lambda row: (-row.score, str(row.user_id)))
     return out
 

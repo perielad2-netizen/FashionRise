@@ -106,8 +106,13 @@ async def _competition_tick_loop(stop: asyncio.Event, interval_seconds: float) -
     while not stop.is_set():
         db = SessionLocal()
         try:
-            tick_competitions(db)
+            result = tick_competitions(db)
             db.commit()
+            if result.get("settled_weeks"):
+                _log.info(
+                    "competition_tick_settled weeks=%s",
+                    ",".join(result["settled_weeks"]),
+                )
         except Exception:
             _log.exception("competition tick failed")
             db.rollback()

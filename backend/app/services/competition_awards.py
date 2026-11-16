@@ -21,7 +21,11 @@ from app.services.competition_clock import (
     previous_week_start,
     week_key,
 )
-from app.services.competition_groups import ensure_competition_week, list_group_rows
+from app.services.competition_groups import (
+    _lock_week,
+    ensure_competition_week,
+    list_group_rows,
+)
 from app.services.competition_scoring import (
     ScoredDesign,
     ScoredUser,
@@ -53,6 +57,8 @@ CATEGORY_LABELS = {
     "top_commenter": "Top Commenter",
     "top_rater": "Top Rater",
 }
+
+SETTLE_LOOKBACK_WEEKS = 12
 
 
 @dataclass(frozen=True)
@@ -244,21 +250,8 @@ def settle_group_awards(
 
 
 def lock_and_settle_week(db: Session, week_start: datetime) -> CompetitionWeek:
-    week = db.get(CompetitionWeek, week_start)
-    if week is None:
-        week = CompetitionWeek(
-            week_start=week_start,
-            week_end=competition_week_end(week_start),
-            status="open",
-        )
-        try:
-            with db.begin_nested():
-                db.add(week)
-                db.flush()
-        except IntegrityError:
-            week = db.get(CompetitionWeek, week_start)
-            if week is None:
-                raise
+    """Settle one week under row lock — concurrent workers cannot double-pay."""
+    week = _lock_week(db, week_start)
     if week.status == "locked":
         return week
 
@@ -274,34 +267,43 @@ def lock_and_settle_week(db: Session, week_start: datetime) -> CompetitionWeek:
     return week
 
 
+def outstanding_past_weeks(db: Session, *, now: datetime | None = None) -> list[CompetitionWeek]:
+    now_utc = ensure_utc(now or datetime.now(timezone.utc))
+    current = competition_week_start(now_utc)
+    return list(
+        db.scalars(
+            select(CompetitionWeek)
+            .where(
+                CompetitionWeek.week_start < current,
+                CompetitionWeek.status != "locked",
+            )
+            .order_by(CompetitionWeek.week_start.asc())
+        ).all()
+    )
+
+
 def tick_competitions(db: Session, *, now: datetime | None = None) -> dict:
-    """Open current week; lock+settle previous week once the new week has started."""
+    """Open current week; settle every outstanding past week in order (catch-up safe)."""
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
     current = ensure_competition_week(db, now=now_utc)
     db.flush()
 
+    # Materialize the immediately previous week if missing so empty downtime still advances.
     prev = previous_week_start(now_utc)
-    prev_row = db.get(CompetitionWeek, prev)
-    settled = False
-    if competition_week_start(now_utc) > prev:
-        if prev_row is None:
-            prev_row = CompetitionWeek(
-                week_start=prev,
-                week_end=competition_week_end(prev),
-                status="open",
-            )
-            try:
-                with db.begin_nested():
-                    db.add(prev_row)
-                    db.flush()
-            except IntegrityError:
-                prev_row = db.get(CompetitionWeek, prev)
-        if prev_row is not None and prev_row.status != "locked":
-            lock_and_settle_week(db, prev)
-            settled = True
+    if db.get(CompetitionWeek, prev) is None and competition_week_start(now_utc) > prev:
+        ensure_competition_week(db, now=prev)
+        db.flush()
+
+    # Also walk lookback for any open rows created before downtime.
+    settled_keys: list[str] = []
+    for week in outstanding_past_weeks(db, now=now_utc):
+        lock_and_settle_week(db, week.week_start)
+        settled_keys.append(week_key(week.week_start))
+        db.flush()
 
     return {
         "current_week_start": current.week_start.isoformat(),
         "current_status": current.status,
-        "settled_previous": settled,
+        "settled_previous": bool(settled_keys),
+        "settled_weeks": settled_keys,
     }

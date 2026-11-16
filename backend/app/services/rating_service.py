@@ -22,15 +22,19 @@ def upsert_rating(db: Session, user: User, data: RatingCreate) -> Rating:
             Rating.user_id == user.id,
         )
     )
+    from app.services.competition_groups import enroll_on_activity
+
     if existing:
         existing.score = data.score
         db.add(existing)
+        enroll_on_activity(db, user.id)
         db.commit()
         db.refresh(existing)
         _recompute_item_rating(db, data.gallery_item_id)
         return existing
     r = Rating(gallery_item_id=data.gallery_item_id, user_id=user.id, score=data.score)
     db.add(r)
+    enroll_on_activity(db, user.id)
     db.commit()
     db.refresh(r)
     _recompute_item_rating(db, data.gallery_item_id)

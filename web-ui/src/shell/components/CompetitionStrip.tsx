@@ -3,7 +3,7 @@ import { Trophy, Flame, Globe2 } from 'lucide-react'
 import {
   fetchCompetitionAwards,
   fetchCompetitionStatus,
-  postStreakCheckIn,
+  fetchStreakStatus,
   type CompetitionAward,
   type CompetitionStatus,
   type StreakStatus,
@@ -42,13 +42,13 @@ export function CompetitionStrip() {
     let cancelled = false
     void (async () => {
       try {
-        const [comp, checkin] = await Promise.all([
+        const [comp, streakStatus] = await Promise.all([
           fetchCompetitionStatus(),
-          postStreakCheckIn().catch(() => null),
+          fetchStreakStatus().catch(() => null),
         ])
         if (cancelled) return
         setStatus(comp)
-        if (checkin) setStreak(checkin)
+        if (streakStatus) setStreak(streakStatus)
         const weekAwards = await fetchCompetitionAwards().catch(() => [])
         if (!cancelled) setAwards(weekAwards)
       } catch (err) {

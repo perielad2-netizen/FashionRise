@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 from datetime import datetime
 
@@ -26,6 +27,7 @@ from app.services.competition_clock import (
 )
 
 GROUP_CAPACITY = 50_000
+_log = logging.getLogger(__name__)
 
 
 def ensure_competition_week(db: Session, *, now: datetime | None = None) -> CompetitionWeek:
@@ -65,13 +67,33 @@ def list_group_rows(db: Session, week_start: datetime) -> list[CompetitionGroup]
     )
 
 
-def _create_group(db: Session, week_start: datetime, group_index: int) -> CompetitionGroup:
+def _create_group(db: Session, week_start: datetime, group_index: int) -> CompetitionGroup | None:
     group = CompetitionGroup(
         week_start=week_start, group_index=group_index, participant_count=0
     )
-    db.add(group)
-    db.flush()
-    return group
+    try:
+        with db.begin_nested():
+            db.add(group)
+            db.flush()
+        return group
+    except IntegrityError:
+        return None
+
+
+def _lock_week(db: Session, week_start: datetime) -> CompetitionWeek:
+    row = db.execute(
+        select(CompetitionWeek)
+        .where(CompetitionWeek.week_start == week_start)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if row is None:
+        ensure_competition_week(db, now=week_start)
+        row = db.execute(
+            select(CompetitionWeek)
+            .where(CompetitionWeek.week_start == week_start)
+            .with_for_update()
+        ).scalar_one()
+    return row
 
 
 def assign_participant(
@@ -80,19 +102,9 @@ def assign_participant(
     *,
     now: datetime | None = None,
 ) -> CompetitionGroupMember:
-    """Assign user to one weekly group. Sticky for the week; capacity-aware for newcomers."""
+    """Assign user to one weekly group. Sticky; capacity enforced transactionally."""
     week = ensure_competition_week(db, now=now)
-    if week.status != "open":
-        # Still allow read of existing membership after lock; no new assigns mid-settle.
-        existing = db.scalar(
-            select(CompetitionGroupMember).where(
-                CompetitionGroupMember.week_start == week.week_start,
-                CompetitionGroupMember.user_id == user_id,
-            )
-        )
-        if existing is not None:
-            return existing
-        raise RuntimeError("Competition week is locked")
+    week = _lock_week(db, week.week_start)
 
     existing = db.scalar(
         select(CompetitionGroupMember).where(
@@ -103,43 +115,80 @@ def assign_participant(
     if existing is not None:
         return existing
 
-    groups = list_group_rows(db, week.week_start)
-    if not groups:
-        groups = [_create_group(db, week.week_start, 0)]
+    if week.status != "open":
+        raise RuntimeError("Competition week is locked")
 
-    underfilled = [g for g in groups if int(g.participant_count or 0) < GROUP_CAPACITY]
-    if not underfilled:
-        next_index = max(g.group_index for g in groups) + 1
-        underfilled = [_create_group(db, week.week_start, next_index)]
-        groups.append(underfilled[0])
+    for _ in range(12):
+        groups = list_group_rows(db, week.week_start)
+        underfilled = [g for g in groups if int(g.participant_count or 0) < GROUP_CAPACITY]
+        if not underfilled:
+            next_index = (max((g.group_index for g in groups), default=-1) + 1)
+            created = _create_group(db, week.week_start, next_index)
+            if created is None:
+                # Concurrent creator won the unique index — retry with refreshed rows.
+                continue
+            underfilled = [created]
 
-    pick = underfilled[_stable_bucket(user_id, week.week_start, len(underfilled))]
-    member = CompetitionGroupMember(
-        week_start=week.week_start,
-        group_id=pick.id,
-        user_id=user_id,
-    )
-    try:
-        with db.begin_nested():
-            db.add(member)
-            db.flush()
+        # Fill least-loaded groups first; break ties deterministically.
+        min_count = min(int(g.participant_count or 0) for g in underfilled)
+        candidates = [g for g in underfilled if int(g.participant_count or 0) == min_count]
+        pick = candidates[_stable_bucket(user_id, week.week_start, len(candidates))]
+
+        bumped = db.execute(
+            update(CompetitionGroup)
+            .where(
+                CompetitionGroup.id == pick.id,
+                CompetitionGroup.participant_count < GROUP_CAPACITY,
+            )
+            .values(participant_count=CompetitionGroup.participant_count + 1)
+        )
+        if bumped.rowcount != 1:
+            continue
+
+        member = CompetitionGroupMember(
+            week_start=week.week_start,
+            group_id=pick.id,
+            user_id=user_id,
+        )
+        try:
+            with db.begin_nested():
+                db.add(member)
+                db.flush()
+            return member
+        except IntegrityError:
+            # Another request enrolled this user; undo the reserved seat.
             db.execute(
                 update(CompetitionGroup)
                 .where(CompetitionGroup.id == pick.id)
-                .values(participant_count=CompetitionGroup.participant_count + 1)
+                .values(
+                    participant_count=CompetitionGroup.participant_count - 1,
+                )
             )
-            db.flush()
-    except IntegrityError:
-        again = db.scalar(
-            select(CompetitionGroupMember).where(
-                CompetitionGroupMember.week_start == week.week_start,
-                CompetitionGroupMember.user_id == user_id,
+            again = db.scalar(
+                select(CompetitionGroupMember).where(
+                    CompetitionGroupMember.week_start == week.week_start,
+                    CompetitionGroupMember.user_id == user_id,
+                )
             )
-        )
-        if again is None:
+            if again is not None:
+                return again
             raise
-        return again
-    return member
+
+    raise RuntimeError("Could not assign competition group")
+
+
+def enroll_on_activity(
+    db: Session,
+    user_id: uuid.UUID,
+    *,
+    now: datetime | None = None,
+) -> CompetitionGroupMember | None:
+    """Auto-enroll after publish/like/comment/rate. Safe no-op if week is locked."""
+    try:
+        return assign_participant(db, user_id, now=now)
+    except RuntimeError as exc:
+        _log.info("competition_enroll_skipped user_id=%s reason=%s", user_id, exc)
+        return None
 
 
 def is_eligible_participant(
@@ -200,26 +249,35 @@ def is_eligible_participant(
     return rated is not None
 
 
+def get_membership(
+    db: Session, user_id: uuid.UUID, *, week_start: datetime
+) -> CompetitionGroupMember | None:
+    return db.scalar(
+        select(CompetitionGroupMember).where(
+            CompetitionGroupMember.week_start == week_start,
+            CompetitionGroupMember.user_id == user_id,
+        )
+    )
+
+
 def ensure_participant_if_eligible(
     db: Session,
     user_id: uuid.UUID,
     *,
     now: datetime | None = None,
 ) -> CompetitionGroupMember | None:
-    week = ensure_competition_week(db, now=now)
-    existing = db.scalar(
-        select(CompetitionGroupMember).where(
-            CompetitionGroupMember.week_start == week.week_start,
-            CompetitionGroupMember.user_id == user_id,
-        )
-    )
+    """Legacy helper — prefer enroll_on_activity at write paths; status is read-only."""
+    week_start = competition_week_start(now)
+    existing = get_membership(db, user_id, week_start=week_start)
     if existing is not None:
         return existing
+    week = db.get(CompetitionWeek, week_start)
+    week_end = competition_week_end(week_start) if week is None else week.week_end
     if not is_eligible_participant(
-        db, user_id, week_start=week.week_start, week_end=week.week_end
+        db, user_id, week_start=week_start, week_end=week_end
     ):
         return None
-    return assign_participant(db, user_id, now=now)
+    return enroll_on_activity(db, user_id, now=now)
 
 
 def required_group_count(participant_total: int) -> int:

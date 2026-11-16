@@ -16,7 +16,6 @@ from app.schemas.competition import (
     StreakStatusRead,
 )
 from app.services import competition_service, login_streak
-from app.services.competition_awards import AWARD_DEFS, CATEGORY_LABELS
 from app.services.competition_clock import competition_week_start, ensure_utc
 from app.services.login_streak import STREAK_REWARD_DAYS, STREAK_REWARD_STARS
 
@@ -29,16 +28,6 @@ def competition_status(
     user: User | None = Depends(get_optional_user),
 ) -> CompetitionStatusRead:
     raw = competition_service.build_competition_status(db, user)
-    # Normalize award category stars from defs.
-    stars_by_id = {cid: stars for cid, stars in AWARD_DEFS}
-    raw["award_categories"] = [
-        {
-            "id": cid,
-            "label": CATEGORY_LABELS[cid],
-            "stars": stars_by_id[cid],
-        }
-        for cid, _ in AWARD_DEFS
-    ]
     return CompetitionStatusRead.model_validate(raw)
 
 

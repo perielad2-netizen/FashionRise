@@ -62,6 +62,22 @@ vi.mock('@/services/native/platform', () => ({
   nativePlatform: () => 'web',
 }))
 
+vi.mock('@/services/competitionsApi', () => ({
+  postStreakCheckIn: vi.fn(async () => ({
+    current_streak: 1,
+    last_checkin_date: '2026-11-16',
+    lifetime_checkins: 1,
+    days_until_reward: 6,
+    rewarded_this_checkin: false,
+    stars_awarded: 0,
+    reward_every_days: 7,
+    reward_stars: 10,
+  })),
+  fetchStreakStatus: vi.fn(),
+  fetchCompetitionStatus: vi.fn(),
+  fetchCompetitionAwards: vi.fn(),
+}))
+
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
 function Probe() {
