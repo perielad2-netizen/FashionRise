@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — FashionRise ≠ Runway split (2026-11-16 20:33 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#377** merged → `main` @ **`28642b6a`** |
+| FE tip | **`28642b6a`** → `/var/www/fashionrise/releases/28642b6a-runway-vs-fashionrise` · public `/version.json` |
+| BE tip | unchanged |
+| Change | **FashionRise** immersive feed (`/studio/fashionrise`) separate from **Runway** rankings Top 10/20/50 + Friends/Following + weekly award categories |
+| Smoke | loopback `:8099` `/studio/home` · `/studio/fashionrise` · `/studio/runway` **200** · public `version.json` sha `28642b6a` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/021c3cd1-android-nav-safe-avatar /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Product correction — FashionRise ≠ Runway (2026-11-16 Asia/Jerusalem)
 
 | Surface | Role |
@@ -38,9 +49,9 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**Discover all-published #366 LIVE** · BE **`43ab55dd`** · FE **`c1fed241`** · discover **8/8** · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**FashionRise ≠ Runway #377 LIVE** · FE **`28642b6a`** · prior FE `021c3cd1` · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. Discover endless feed restored (#366 on `main` + BE tip). Designer profile #371 + friends full-profile #372 FE tip remain live. Rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
 
 ## Discover all-published #366 — BE LIVE (2026-11-16)
 
