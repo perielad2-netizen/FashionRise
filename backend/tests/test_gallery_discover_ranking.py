@@ -94,3 +94,67 @@ def test_pagination_resets_creator_cap_and_excludes_seen():
     assert {c.id for c in page1}.isdisjoint({c.id for c in page2})
     # Creator A can appear again on page 2 after exclude (cap is per page).
     assert any(c.user_id == creator_a for c in page2) or any(c.user_id == creator_b for c in page2)
+
+
+def test_candidate_cap_stratifies_older_days_not_newest_only(db_session, client):
+    """When eligible pool exceeds hard_cap, older-day cold starts stay candidates."""
+    from app.models.gallery_item import GalleryItem
+    from app.models.user import User
+    from app.services.gallery_service import fetch_discover_candidate_rows
+    from tests.auth_test_helpers import register_with_invite
+
+    author = register_with_invite(client, db_session, "cap_author@example.com", "capAuthor")
+    user = db_session.query(User).filter(User.email == "cap_author@example.com").one()
+    now = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    cutoff = now - timedelta(days=7)
+
+    # Flood the newest day with 6 saturated looks; put 2 cold-starts on day 0 (oldest).
+    rows: list[GalleryItem] = []
+    for i in range(6):
+        rows.append(
+            GalleryItem(
+                user_id=user.id,
+                title=f"newest-{i}",
+                image_url="https://example.com/n.png",
+                visibility="public",
+                moderation_status="ok",
+                likes_count=10,
+                unique_impressions_count=500,
+                impressions_count=500,
+                created_at=now - timedelta(hours=i + 1),
+            )
+        )
+    older_a = GalleryItem(
+        user_id=user.id,
+        title="older-cold-a",
+        image_url="https://example.com/o.png",
+        visibility="public",
+        moderation_status="ok",
+        likes_count=0,
+        unique_impressions_count=1,
+        impressions_count=1,
+        created_at=cutoff + timedelta(hours=2),
+    )
+    older_b = GalleryItem(
+        user_id=user.id,
+        title="older-cold-b",
+        image_url="https://example.com/o2.png",
+        visibility="public",
+        moderation_status="ok",
+        likes_count=0,
+        unique_impressions_count=2,
+        impressions_count=2,
+        created_at=cutoff + timedelta(hours=5),
+    )
+    rows.extend([older_a, older_b])
+    db_session.add_all(rows)
+    db_session.flush()
+    older_ids = {older_a.id, older_b.id}
+
+    # Newest-only cut of 6 would drop both older looks; stratified hard_cap=7 keeps them.
+    picked = fetch_discover_candidate_rows(
+        db_session, cutoff=cutoff, now=now, hard_cap=7
+    )
+    picked_ids = {r.id for r in picked}
+    assert older_ids & picked_ids, "older-day cold starts must remain under stratified cap"
+    assert len(picked) <= 7

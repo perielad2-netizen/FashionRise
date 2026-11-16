@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
@@ -283,6 +283,80 @@ def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
     return list(db.scalars(q).all())
 
 
+def _discover_eligible_filter(cutoff: datetime):
+    return (
+        GalleryItem.visibility == "public",
+        GalleryItem.moderation_status == "ok",
+        GalleryItem.created_at >= cutoff,
+    )
+
+
+def _discover_projection():
+    return (
+        GalleryItem.id,
+        GalleryItem.user_id,
+        GalleryItem.likes_count,
+        GalleryItem.rating_count,
+        GalleryItem.unique_impressions_count,
+        GalleryItem.created_at,
+    )
+
+
+def fetch_discover_candidate_rows(
+    db: Session,
+    *,
+    cutoff: datetime,
+    now: datetime,
+    hard_cap: int = ELIGIBLE_HARD_CAP,
+):
+    """Bounded candidate set that spans the full 7-day window.
+
+    Under the cap: load every eligible row. Over the cap: take a fair per-day
+    quota (cold-start first) so older eligible days are not wiped by a newest flood.
+    """
+    filters = _discover_eligible_filter(cutoff)
+    total = int(
+        db.scalar(select(func.count()).select_from(GalleryItem).where(*filters)) or 0
+    )
+    if total <= hard_cap:
+        return list(
+            db.execute(
+                select(*_discover_projection())
+                .where(*filters)
+                .order_by(GalleryItem.created_at.desc())
+            ).all()
+        )
+
+    # Stratify across UTC day buckets inside the rolling window.
+    bucket_count = 7
+    per_bucket = max(1, hard_cap // bucket_count)
+    out: list = []
+    seen: set[uuid.UUID] = set()
+    for i in range(bucket_count):
+        start = cutoff + timedelta(days=i)
+        end = min(start + timedelta(days=1), now + timedelta(seconds=1))
+        bucket_rows = db.execute(
+            select(*_discover_projection())
+            .where(
+                *filters,
+                GalleryItem.created_at >= start,
+                GalleryItem.created_at < end,
+            )
+            .order_by(
+                GalleryItem.unique_impressions_count.asc(),
+                (GalleryItem.likes_count + GalleryItem.rating_count).desc(),
+                GalleryItem.created_at.desc(),
+            )
+            .limit(per_bucket)
+        ).all()
+        for row in bucket_rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            out.append(row)
+    return out
+
+
 def list_discover_feed(
     db: Session,
     *,
@@ -294,24 +368,7 @@ def list_discover_feed(
     """Fair Discovery: full 7-day eligible pool, per-page creator diversity, optional exclude."""
     now_utc = now or datetime.now(timezone.utc)
     cutoff = now_utc - DISCOVER_WINDOW
-    # Lightweight projection of the full eligibility window (not "newest 500 only").
-    rank_rows = db.execute(
-        select(
-            GalleryItem.id,
-            GalleryItem.user_id,
-            GalleryItem.likes_count,
-            GalleryItem.rating_count,
-            GalleryItem.unique_impressions_count,
-            GalleryItem.created_at,
-        )
-        .where(
-            GalleryItem.visibility == "public",
-            GalleryItem.moderation_status == "ok",
-            GalleryItem.created_at >= cutoff,
-        )
-        .order_by(GalleryItem.created_at.desc())
-        .limit(ELIGIBLE_HARD_CAP)
-    ).all()
+    rank_rows = fetch_discover_candidate_rows(db, cutoff=cutoff, now=now_utc)
     candidates = [
         DiscoverCandidate(
             id=row.id,
@@ -389,19 +446,8 @@ def record_gallery_impressions(
             continue
         try:
             # Savepoint so a race on the unique constraint does not abort the whole batch.
-            if hasattr(db, "begin_nested"):
-                with db.begin_nested():
-                    db.add(
-                        GalleryImpression(
-                            gallery_item_id=item.id,
-                            viewer_user_id=viewer.id,
-                        )
-                    )
-                    db.flush()
-                    item.impressions_count = int(item.impressions_count or 0) + 1
-                    item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
-                    recorded += 1
-            else:
+            # Counters use SQL +1 so concurrent *different* viewers cannot lose updates.
+            def _insert_and_bump() -> None:
                 db.add(
                     GalleryImpression(
                         gallery_item_id=item.id,
@@ -409,9 +455,21 @@ def record_gallery_impressions(
                     )
                 )
                 db.flush()
-                item.impressions_count = int(item.impressions_count or 0) + 1
-                item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
-                recorded += 1
+                db.execute(
+                    update(GalleryItem)
+                    .where(GalleryItem.id == item.id)
+                    .values(
+                        impressions_count=GalleryItem.impressions_count + 1,
+                        unique_impressions_count=GalleryItem.unique_impressions_count + 1,
+                    )
+                )
+
+            if hasattr(db, "begin_nested"):
+                with db.begin_nested():
+                    _insert_and_bump()
+            else:
+                _insert_and_bump()
+            recorded += 1
         except IntegrityError:
             # Concurrent duplicate for the same viewer×item — treat as already recorded.
             continue

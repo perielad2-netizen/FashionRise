@@ -42,12 +42,13 @@
 |---|---|
 | Product | Global **Discover** tab (default) — fair ranking across creators |
 | Ranking | 7-day eligibility · cold-start exposure · engagement / unique impressions · ≤2 looks/creator **per page** · exclude-based load-more |
-| Impressions | **IntersectionObserver** (≥55% visible) only — never on API batch load · unique viewer×design · no self · concurrent-safe upsert |
+| Impressions | **IntersectionObserver** (≥55% visible) only — never on API batch load · unique viewer×design · no self · savepoint upsert + **SQL `col=col+1`** aggregate bumps (multi-viewer safe) |
+| Candidates | Under 10k: full 7-day pool · over 10k: **per-day stratified quota** (cold-start first) — not newest-only cut |
 | API | `GET /gallery?sort=discover&exclude=` · `POST /gallery/impressions` · Alembic **031** |
 | Preserved | Following · Friends circle Feed · Top 10/20/50 · existing publish/`destination:'runway'` |
 | Not in PR2 | Weekly Stars awards · login streak · designer profile editor · My Models publish consent |
 | Branch | `cursor/web-fashionrise-fair-discovery-77c6` · [#352](https://github.com/perielad2-netizen/FashionRise/pull/352) |
-| Merge | **Hold for PM** (amendment: visibility impressions + fair pagination + idempotent counters) |
+| Merge | Corrections in · merge after green CI (no prod deploy) |
 
 ## FashionRise Social PR1 — feed / profiles / nav (2026-11-16) — MERGED / #349
 

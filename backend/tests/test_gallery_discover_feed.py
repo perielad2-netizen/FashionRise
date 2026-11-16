@@ -163,3 +163,71 @@ def test_impression_concurrent_duplicate_is_idempotent(client, db_session):
 
     db_session.refresh(row)
     assert int(row.unique_impressions_count or 0) == before + 1
+
+
+def test_different_viewers_increment_aggregate_counters_atomically(client, db_session):
+    """Different viewers each bump aggregates; SQL col=col+1 stacks (no RMW loss)."""
+    from sqlalchemy import update
+
+    from app.services.gallery_service import record_gallery_impressions
+    from app.models.user import User as UserModel
+
+    register_with_invite(client, db_session, "disc5_v1@example.com", "disc5V1")
+    register_with_invite(client, db_session, "disc5_v2@example.com", "disc5V2")
+    author = register_with_invite(client, db_session, "disc5_author@example.com", "disc5Author")
+    item_id = _publish(client, db_session, author, "atomic look")
+    item_uuid = uuid.UUID(item_id)
+    row = db_session.get(GalleryItem, item_uuid)
+    assert row is not None
+    before_unique = int(row.unique_impressions_count or 0)
+    before_total = int(row.impressions_count or 0)
+
+    # Classic RMW would both read `before` and write `before+1` → lost update.
+    # Two atomic SQL increments must yield before+2 even when applied back-to-back.
+    for _ in range(2):
+        db_session.execute(
+            update(GalleryItem)
+            .where(GalleryItem.id == item_uuid)
+            .values(
+                impressions_count=GalleryItem.impressions_count + 1,
+                unique_impressions_count=GalleryItem.unique_impressions_count + 1,
+            )
+        )
+    db_session.flush()
+    db_session.expire_all()
+    mid = db_session.get(GalleryItem, item_uuid)
+    assert int(mid.unique_impressions_count or 0) == before_unique + 2
+    assert int(mid.impressions_count or 0) == before_total + 2
+
+    # Reset to the published baseline, then record via the real service path.
+    db_session.execute(
+        update(GalleryItem)
+        .where(GalleryItem.id == item_uuid)
+        .values(
+            impressions_count=before_total,
+            unique_impressions_count=before_unique,
+        )
+    )
+    db_session.flush()
+
+    u1 = db_session.query(UserModel).filter(UserModel.email == "disc5_v1@example.com").one()
+    u2 = db_session.query(UserModel).filter(UserModel.email == "disc5_v2@example.com").one()
+    assert record_gallery_impressions(db_session, u1, [item_uuid]) == 1
+    assert record_gallery_impressions(db_session, u2, [item_uuid]) == 1
+    db_session.expire_all()
+    refreshed = db_session.get(GalleryItem, item_uuid)
+    assert int(refreshed.unique_impressions_count or 0) == before_unique + 2
+    assert int(refreshed.impressions_count or 0) == before_total + 2
+
+    # Third viewer through the HTTP API also increments.
+    v3 = register_with_invite(client, db_session, "disc5_v3@example.com", "disc5V3")
+    api = client.post(
+        "/api/v1/gallery/impressions",
+        headers=_auth(v3),
+        json={"gallery_item_ids": [item_id]},
+    )
+    assert api.status_code == 200
+    assert api.json()["recorded"] == 1
+    db_session.expire_all()
+    refreshed = db_session.get(GalleryItem, item_uuid)
+    assert int(refreshed.unique_impressions_count or 0) == before_unique + 3
