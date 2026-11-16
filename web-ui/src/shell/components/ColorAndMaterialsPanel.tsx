@@ -417,28 +417,28 @@ export function ColorAndMaterialsPanel({
           <section className={styles.card} role="tabpanel" aria-label="Fabrics">
             <div className={styles.head}>
               <h3>Fabrics</h3>
-              <div className={styles.fabricActions}>
-                <button
-                  type="button"
-                  className={styles.addFabric}
-                  onClick={() => {
-                    setAiError(null)
-                    setAiOpen(true)
-                  }}
-                  disabled={uploading || aiBusy}
-                >
-                  Create with AI
-                </button>
-                <button
-                  type="button"
-                  className={styles.addFabric}
-                  onClick={openPicker}
-                  disabled={uploading || aiBusy}
-                >
-                  <Plus size={14} aria-hidden="true" />
-                  Upload
-                </button>
-              </div>
+            </div>
+            <div className={styles.fabricActions}>
+              <button
+                type="button"
+                className={styles.addFabric}
+                onClick={() => {
+                  setAiError(null)
+                  setAiOpen(true)
+                }}
+                disabled={uploading || aiBusy}
+              >
+                Create with AI
+              </button>
+              <button
+                type="button"
+                className={styles.addFabric}
+                onClick={openPicker}
+                disabled={uploading || aiBusy}
+              >
+                <Plus size={18} aria-hidden="true" />
+                Upload
+              </button>
             </div>
             <p className={styles.note}>
               Pick a fabric, set pattern scale, then Fill a closed outline.
