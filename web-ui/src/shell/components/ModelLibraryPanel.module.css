@@ -4,16 +4,17 @@
   gap: 12px;
   padding: 14px 12px;
   min-height: 0;
-  background: #e8e4df;
-  color: #1c1c1e;
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  background:
+    linear-gradient(180deg, rgba(22, 16, 28, 0.98), rgba(10, 12, 22, 0.96));
+  color: #f5f5f7;
+  border-right: 1px solid rgba(244, 114, 182, 0.14);
   overflow: hidden;
 }
 
 .tabs {
   display: flex;
   gap: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .tab,
@@ -23,7 +24,7 @@
   padding: 0 0 10px;
   font-size: 13px;
   font-weight: 600;
-  color: #6b7280;
+  color: rgba(245, 245, 247, 0.55);
   cursor: default;
   position: relative;
 }
@@ -38,11 +39,11 @@
   font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #9ca3af;
+  color: rgba(245, 245, 247, 0.4);
 }
 
 .tabActive {
-  color: #111827;
+  color: #fff;
 }
 
 .tabActive::after {
@@ -54,6 +55,7 @@
   height: 2px;
   background: var(--fr-pink);
   border-radius: 2px;
+  box-shadow: 0 0 10px rgba(214, 51, 132, 0.55);
 }
 
 .filters {
@@ -67,18 +69,19 @@
   min-height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: white;
-  color: #4b5563;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(245, 245, 247, 0.82);
   font-size: 11px;
   cursor: default;
 }
 
 .filterActive {
-  border-color: var(--fr-pink);
-  background: rgba(214, 51, 132, 0.12);
-  color: var(--fr-pink-deep);
+  border-color: rgba(214, 51, 132, 0.65);
+  background: rgba(214, 51, 132, 0.22);
+  color: #ffd0e6;
   font-weight: 600;
+  box-shadow: 0 0 14px rgba(214, 51, 132, 0.28);
 }
 
 .grid {
@@ -97,16 +100,19 @@
   position: relative;
   border-radius: 14px;
   overflow: hidden;
-  border: 1.5px solid transparent;
-  background: linear-gradient(180deg, #fffaf5, #f3ebe3);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, #1a2236, #121a2c);
   aspect-ratio: 3 / 4;
   cursor: default;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
 }
 
 .cardSelected {
-  border-color: var(--fr-pink);
-  box-shadow: 0 0 0 1px rgba(214, 51, 132, 0.35), 0 10px 22px rgba(214, 51, 132, 0.18);
+  border-color: rgba(214, 51, 132, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(214, 51, 132, 0.45),
+    0 12px 28px rgba(214, 51, 132, 0.28),
+    0 0 22px rgba(214, 51, 132, 0.22);
 }
 
 .thumb {
@@ -128,9 +134,9 @@
   gap: 1px;
   font-size: 10px;
   font-weight: 600;
-  color: #111827;
+  color: #fff;
   text-align: center;
-  background: rgba(255, 250, 245, 0.92);
+  background: rgba(12, 16, 28, 0.92);
   border-radius: 8px;
   padding: 3px 4px 4px;
   line-height: 1.15;
@@ -144,7 +150,7 @@
 .cardPose {
   font-size: 9px;
   font-weight: 500;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 /* V2-0002: only fine pointers get hover chrome — sticky :hover on touch mimicked dual selection. */
@@ -177,7 +183,7 @@
 .note {
   margin: 0;
   font-size: 10px;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.55);
   line-height: 1.35;
 }
 
@@ -196,22 +202,22 @@
   gap: 10px;
   padding: 18px 14px;
   border-radius: 16px;
-  border: 1px dashed rgba(0, 0, 0, 0.14);
-  background: rgba(255, 255, 255, 0.55);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .mineEmptyTitle {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #111827;
+  color: #fff;
 }
 
 .mineStatus {
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.45;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .createMineBtn {
@@ -224,7 +230,9 @@
   font-size: 0.9rem;
   font-weight: 650;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(214, 51, 132, 0.28);
+  box-shadow:
+    0 8px 18px rgba(214, 51, 132, 0.35),
+    0 0 18px rgba(214, 51, 132, 0.28);
 }
 
 .createMineBtn:hover {

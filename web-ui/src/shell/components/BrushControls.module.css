@@ -4,10 +4,14 @@
   max-width: 420px;
   margin: 0 auto;
   padding: 12px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
-  color: #111827;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  border-radius: 16px;
+  background:
+    linear-gradient(165deg, rgba(28, 18, 30, 0.98), rgba(12, 14, 24, 0.96));
+  color: #f5f5f7;
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .flat {
@@ -22,8 +26,9 @@
   margin: 0 0 8px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: #f9a8d4;
 }
 
 .kindGrid {
@@ -40,18 +45,24 @@
   align-items: stretch;
   gap: 4px;
   padding: 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: #f8fafc;
-  color: #111827;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f5f7;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .kindActive {
-  border-color: var(--fr-pink, #d63384);
-  background: rgba(214, 51, 132, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(214, 51, 132, 0.35);
+  border-color: rgba(244, 114, 182, 0.7);
+  background: rgba(214, 51, 132, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(214, 51, 132, 0.35),
+    0 8px 20px rgba(214, 51, 132, 0.22);
 }
 
 .kind strong,
@@ -62,7 +73,7 @@
 .kind span,
 .kindActive span {
   font-size: 10px;
-  color: #6b7280;
+  color: rgba(245, 245, 247, 0.58);
   line-height: 1.25;
 }
 
@@ -70,9 +81,9 @@
   width: 100%;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(180deg, #f8fafc, #eef2f7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  color: #111827;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
 }
 
 .layerRow {
@@ -85,25 +96,26 @@
 
 .layerLabel {
   font-size: 11px;
-  color: #4b5563;
+  color: rgba(245, 245, 247, 0.62);
   margin-right: 4px;
 }
 
 .layerBtn,
 .layerActive {
   border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #fff;
-  color: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f5f7;
   font-size: 11px;
   padding: 4px 10px;
   cursor: pointer;
 }
 
 .layerActive {
-  border-color: var(--fr-pink, #d63384);
-  background: rgba(214, 51, 132, 0.12);
+  border-color: rgba(244, 114, 182, 0.65);
+  background: rgba(214, 51, 132, 0.28);
   font-weight: 600;
+  box-shadow: 0 0 12px rgba(214, 51, 132, 0.28);
 }
 
 .row,
@@ -113,7 +125,7 @@
   justify-content: space-between;
   gap: 8px;
   font-size: 11px;
-  color: #4b5563;
+  color: rgba(245, 245, 247, 0.68);
   margin-bottom: 4px;
 }
 
@@ -136,7 +148,7 @@
   margin: 0 0 4px;
   font-size: 10px;
   line-height: 1.35;
-  color: #6b7280;
+  color: rgba(245, 245, 247, 0.52);
 }
 
 .layerBlock {
@@ -150,7 +162,7 @@
   margin-bottom: 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #374151;
+  color: #f5f5f7;
 }
 
 .colorSwatch,
@@ -158,7 +170,7 @@
   width: 36px;
   height: 28px;
   padding: 0;
-  border: 1px solid rgba(15, 23, 42, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
@@ -166,21 +178,23 @@
 }
 
 .colorSwatchBtn {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0 10px rgba(214, 51, 132, 0.18);
 }
 
 .colorSwatchReadonly {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .colorMore {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: #1e3a8a;
+  color: #f9a8d4;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -189,14 +203,14 @@
 
 .advanced {
   margin-top: 8px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 8px;
 }
 
 .advancedToggle {
   border: 0;
   background: transparent;
-  color: #1e3a8a;
+  color: #f9a8d4;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -209,9 +223,9 @@
 
 .select {
   border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.16);
-  background: #fff;
-  color: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 12, 22, 0.85);
+  color: #f5f5f7;
   font-size: 12px;
   padding: 4px 8px;
 }
@@ -221,7 +235,7 @@
   align-items: flex-start;
   gap: 8px;
   font-size: 11px;
-  color: #4b5563;
+  color: rgba(245, 245, 247, 0.68);
   margin-top: 6px;
 }
 

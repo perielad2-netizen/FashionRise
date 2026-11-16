@@ -53,7 +53,7 @@ export function FloatingToolRail({
         title="Pencil"
         onClick={() => onTool('draw')}
       >
-        <PenToolIcon size={20} />
+        <PenToolIcon size={20} glow={tool === 'draw'} />
       </button>
       <button
         type="button"
@@ -63,7 +63,7 @@ export function FloatingToolRail({
         title="Eraser"
         onClick={() => onTool('erase')}
       >
-        <EraserToolIcon size={20} />
+        <EraserToolIcon size={20} glow={tool === 'erase'} />
       </button>
       <button
         type="button"
@@ -73,7 +73,7 @@ export function FloatingToolRail({
         title="Fill a closed outline"
         onClick={() => onTool('fill')}
       >
-        <FillToolIcon size={20} />
+        <FillToolIcon size={20} glow={tool === 'fill'} />
       </button>
       {showCloseSmallGaps && onCloseSmallGaps ? (
         <button
@@ -96,7 +96,7 @@ export function FloatingToolRail({
         title="Sample a color from your sketch"
         onClick={() => onTool('eyedropper')}
       >
-        <EyedropperToolIcon size={20} />
+        <EyedropperToolIcon size={20} glow={tool === 'eyedropper'} />
       </button>
       <div className={styles.sep} aria-hidden />
       <button

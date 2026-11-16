@@ -21,6 +21,11 @@ import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
+import {
+  BrushDockIcon,
+  MaterialsDockIcon,
+  ModelsDockIcon,
+} from '@/shell/components/StudioToolIcons'
 import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
 import { BetaNotice } from '@/shell/components/BetaNotice'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
@@ -581,7 +586,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           className={dock === 'models' ? styles.dockActive : styles.dockBtn}
           onClick={toggleModels}
         >
-          Models
+          <ModelsDockIcon size={15} />
+          <span>Models</span>
         </button>
         <button
           type="button"
@@ -589,14 +595,16 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           onClick={() => setDock(dock === 'brush' ? null : 'brush')}
           aria-label="Brush panel"
         >
-          Brush
+          <BrushDockIcon size={15} />
+          <span>Brush</span>
         </button>
         <button
           type="button"
           className={dock === 'materials' ? styles.dockActive : styles.dockBtn}
           onClick={() => setDock(dock === 'materials' ? null : 'materials')}
         >
-          Materials
+          <MaterialsDockIcon size={15} />
+          <span>Materials</span>
         </button>
       </div>
 
@@ -841,6 +849,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               opacity={editor.opacity}
               brushColor={editor.color}
               brushEngine={editor.brushEngine}
+              variant="flat"
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
               onBrushColor={editor.setColor}

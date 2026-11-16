@@ -179,8 +179,15 @@
 }
 
 .btnActive {
-  background: rgba(214, 51, 132, 0.28);
+  background: linear-gradient(145deg, rgba(214, 51, 132, 0.42), rgba(244, 114, 182, 0.22));
   color: #ffd0e6;
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.35),
+    0 0 18px rgba(214, 51, 132, 0.4);
+}
+
+.btnActive svg {
+  filter: drop-shadow(0 0 6px rgba(255, 209, 230, 0.55));
 }
 
 .textBtn,

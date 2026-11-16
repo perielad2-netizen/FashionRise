@@ -109,13 +109,13 @@ export function ImmersiveToolbar({
         <div className={`${styles.row} ${styles.rowPrimary}`}>
           <div className={styles.cluster} role="group" aria-label="Drawing tools">
             <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-              <PenToolIcon size={20} />
+              <PenToolIcon size={20} glow={tool === 'draw'} />
             </ToolBtn>
             <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-              <EraserToolIcon size={20} />
+              <EraserToolIcon size={20} glow={tool === 'erase'} />
             </ToolBtn>
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-              <FillToolIcon size={20} />
+              <FillToolIcon size={20} glow={tool === 'fill'} />
             </ToolBtn>
             <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
               <Hand size={18} strokeWidth={1.75} />
@@ -178,16 +178,16 @@ export function ImmersiveToolbar({
       <div className={`${styles.row} ${styles.rowPrimary}`}>
         <div className={styles.cluster} role="group" aria-label="Drawing tools">
           <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-            <PenToolIcon size={20} />
+            <PenToolIcon size={20} glow={tool === 'draw'} />
           </ToolBtn>
           <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-            <EraserToolIcon size={20} />
+            <EraserToolIcon size={20} glow={tool === 'erase'} />
           </ToolBtn>
           <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-            <FillToolIcon size={20} />
+            <FillToolIcon size={20} glow={tool === 'fill'} />
           </ToolBtn>
           <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
-            <EyedropperToolIcon size={20} />
+            <EyedropperToolIcon size={20} glow={tool === 'eyedropper'} />
           </ToolBtn>
           <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
             <Hand size={18} strokeWidth={1.75} />
