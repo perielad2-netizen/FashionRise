@@ -38,18 +38,30 @@ def to_gallery_read(
     *,
     liked_by_me: bool | None = None,
     my_score: int | None = None,
+    username: str | None = None,
 ) -> GalleryRead:
     base = GalleryRead.model_validate(item)
     image_path = f"/gallery/{item.id}/image" if item.look_id is not None else None
+    author = username
+    if author is None:
+        # Prefer already-loaded relationship when present (no extra query).
+        related = getattr(item, "user", None)
+        if related is not None:
+            author = getattr(related, "username", None)
     return base.model_copy(
-        update={"liked_by_me": liked_by_me, "my_score": my_score, "image_path": image_path}
+        update={
+            "liked_by_me": liked_by_me,
+            "my_score": my_score,
+            "image_path": image_path,
+            "username": author,
+        }
     )
 
 
 def to_gallery_reads_for_viewer(
     db: Session, items: list[GalleryItem], viewer: User | None
 ) -> list[GalleryRead]:
-    """Attach liked_by_me / my_score in one pass for Runway list cards."""
+    """Attach liked_by_me / my_score / author username in one pass for Runway cards."""
     if not items:
         return []
     liked_ids: set[uuid.UUID] = set()
@@ -71,11 +83,21 @@ def to_gallery_reads_for_viewer(
             )
         ):
             my_scores[gallery_item_id] = int(score)
+
+    usernames: dict[uuid.UUID, str] = {}
+    author_ids = list({item.user_id for item in items})
+    if author_ids:
+        for user_id, username in db.execute(
+            select(User.id, User.username).where(User.id.in_(author_ids))
+        ):
+            usernames[user_id] = username
+
     return [
         to_gallery_read(
             item,
             liked_by_me=(item.id in liked_ids) if viewer is not None else None,
             my_score=my_scores.get(item.id) if viewer is not None else None,
+            username=usernames.get(item.user_id),
         )
         for item in items
     ]

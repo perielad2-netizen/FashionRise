@@ -117,6 +117,7 @@ export function StudioPage() {
         onComingSoon={editor.showComingSoon}
         currentNav={currentNav}
         onNavigate={onNavigate}
+        immersive={view === 'runway'}
       >
         {view === 'home' ? (
           <HomeScreen

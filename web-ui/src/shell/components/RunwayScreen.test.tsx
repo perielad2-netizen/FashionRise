@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { RunwayScreen } from './RunwayScreen'
+import {
+  RunwayScreen,
+  __followStatusCacheTestUtils,
+  followStatusCacheKey,
+} from './RunwayScreen'
 
 const listGallery = vi.fn()
 const recordGalleryImpressions = vi.fn()
@@ -113,7 +117,7 @@ vi.mock('@/services/pushApi', () => ({
   setPushDesired: vi.fn(),
 }))
 
-const authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
+let authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
 
 vi.mock('@/services/auth/AuthProvider', () => ({
   useAuth: () => ({
@@ -163,6 +167,8 @@ const topItem = {
 
 describe('RunwayScreen', () => {
   beforeEach(() => {
+    authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
+    __followStatusCacheTestUtils.clear()
     listGallery.mockReset()
     recordGalleryImpressions.mockReset()
     getGalleryItem.mockReset()
@@ -193,13 +199,21 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'granted' })
     recordGalleryImpressions.mockResolvedValue({ recorded: 0 })
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
-      if (opts?.sort === 'top10') return [{ ...topItem }]
+      if (opts?.sort === 'top10') return [{ ...topItem, username: 'topstar' }]
       if (opts?.sort === 'discover') {
-        return [{ ...circleItem, id: 'discover-1', title: 'Discover look', user_id: 'creator-a' }]
+        return [
+          {
+            ...circleItem,
+            id: 'discover-1',
+            title: 'Discover look',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+        ]
       }
-      if (opts?.sort === 'circle') return [{ ...circleItem }]
+      if (opts?.sort === 'circle') return [{ ...circleItem, username: 'friendone' }]
       if (opts?.sort === 'following') return []
-      return [{ ...circleItem }]
+      return [{ ...circleItem, username: 'friendone' }]
     })
     listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
@@ -221,6 +235,89 @@ describe('RunwayScreen', () => {
     }))
   })
 
+  it('scopes Follow cache by viewer+designer so account switches do not leak state', async () => {
+    expect(followStatusCacheKey('viewer-1', 'creator-a')).toBe('viewer-1:creator-a')
+    expect(followStatusCacheKey('viewer-2', 'creator-a')).toBe('viewer-2:creator-a')
+
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          this.cb(
+            [
+              {
+                isIntersecting: true,
+                intersectionRatio: 1,
+                target: el,
+              } as IntersectionObserverEntry,
+            ],
+            this as unknown as IntersectionObserver,
+          )
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
+
+    getFollowStatus.mockImplementation(async (userId: string) => {
+      if (authUser.id === 'viewer-1') return { user_id: userId, following: true }
+      return { user_id: userId, following: false }
+    })
+
+    try {
+      const first = render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByTestId('runway-follow-creator-a')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(getFollowStatus).toHaveBeenCalledWith('creator-a'),
+      )
+      await waitFor(() =>
+        expect(screen.getByTestId('runway-follow-creator-a')).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        ),
+      )
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+      expect(__followStatusCacheTestUtils.get('viewer-2', 'creator-a')).toBeUndefined()
+
+      first.unmount()
+      getFollowStatus.mockClear()
+      authUser = { id: 'viewer-2', email: 'viewer2@example.com', username: 'viewer2' }
+
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByTestId('runway-follow-creator-a')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(getFollowStatus).toHaveBeenCalledWith('creator-a'),
+      )
+      await waitFor(() =>
+        expect(screen.getByTestId('runway-follow-creator-a')).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        ),
+      )
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+      expect(__followStatusCacheTestUtils.get('viewer-2', 'creator-a')).toBe(false)
+      expect(screen.getByTestId('runway-follow-creator-a')).not.toHaveTextContent('Following')
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
+  })
+
+  async function openMoreMenu() {
+    fireEvent.click(await screen.findByTestId('runway-more-menu'))
+  }
+
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
@@ -236,6 +333,7 @@ describe('RunwayScreen', () => {
     })
     listUserGallery.mockResolvedValue([])
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     fireEvent.click(await screen.findByTestId('runway-my-profile'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
@@ -289,7 +387,39 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
   })
 
-  it('loads more Discover results with exclude dedupe', async () => {
+  it('auto-loads more Discover results near the end with exclude dedupe', async () => {
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          if (el.getAttribute('data-testid') === 'runway-discover-load-more') {
+            this.cb(
+              [
+                {
+                  isIntersecting: true,
+                  intersectionRatio: 1,
+                  target: el,
+                } as IntersectionObserverEntry,
+              ],
+              this as unknown as IntersectionObserver,
+            )
+          }
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
     listGallery.mockImplementation(async (opts?: { sort?: string; exclude?: string[] }) => {
       if (opts?.sort === 'discover' && (opts.exclude?.length ?? 0) > 0) {
         return [
@@ -298,6 +428,7 @@ describe('RunwayScreen', () => {
             id: 'discover-next',
             title: 'Discover page two',
             user_id: 'creator-b',
+            username: 'creator_b',
           },
         ]
       }
@@ -307,31 +438,41 @@ describe('RunwayScreen', () => {
           id: `discover-${i + 1}`,
           title: i === 0 ? 'Discover look' : `Discover filler ${i + 1}`,
           user_id: `creator-${i % 5}`,
+          username: `creator_${i % 5}`,
         }))
       }
       return []
     })
-    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    expect(await screen.findByText('Discover look')).toBeInTheDocument()
-    fireEvent.click(await screen.findByTestId('runway-discover-load-more'))
-    await waitFor(() =>
-      expect(listGallery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sort: 'discover',
-          exclude: expect.arrayContaining(['discover-1', 'discover-24']),
-        }),
-      ),
-    )
-    expect(await screen.findByText('Discover page two')).toBeInTheDocument()
-    expect(recordGalleryImpressions).not.toHaveBeenCalled()
+    try {
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByText('Discover look')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(listGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sort: 'discover',
+            exclude: expect.arrayContaining(['discover-1', 'discover-24']),
+          }),
+        ),
+      )
+      expect(await screen.findByText('Discover page two')).toBeInTheDocument()
+      // Exhausted after short page-two → sentinel removed; no visible Load more CTA.
+      expect(screen.queryByTestId('runway-discover-load-more')).toBeNull()
+      expect(screen.queryByRole('button', { name: /Load more/i })).toBeNull()
+      expect(recordGalleryImpressions).not.toHaveBeenCalled()
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
   })
 
-  it('defaults to Discover and keeps Feed/Top separate', async () => {
+  it('defaults to Discover immersive feed and keeps Friends/Top separate', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
+    expect(screen.queryByText(/Social fashion/i)).toBeNull()
+    expect(screen.queryByText(/Fair Discover/i)).toBeNull()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
@@ -342,10 +483,15 @@ describe('RunwayScreen', () => {
     )
     expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
     expect(await screen.findByText('Discover look')).toBeInTheDocument()
+    expect(screen.getByText('@atelier_a')).toBeInTheDocument()
+    expect(screen.queryByText('@Designer')).toBeNull()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
     expect(screen.queryByText('Worldwide hit')).toBeNull()
+
+    await openMoreMenu()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Start creating/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('runway-more-menu'))
 
     fireEvent.click(screen.getByTestId('runway-tab-feed'))
     await waitFor(() =>
@@ -382,9 +528,11 @@ describe('RunwayScreen', () => {
     const circle = await openCircleSheet()
     expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Start creating/i }))
     expect(onOpenCreate).toHaveBeenCalled()
-    fireEvent.click(screen.getAllByRole('button', { name: /My Looks/i })[0]!)
+    await openMoreMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /My Looks/i }))
     expect(onOpenLooks).toHaveBeenCalled()
   })
 
@@ -544,7 +692,8 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     listGallery.mockClear()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Friends/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
     expect(await screen.findByText('@yanivprbk')).toBeInTheDocument()
     expect(listGallery).not.toHaveBeenCalled()
     expect(listFriends).toHaveBeenCalled()
@@ -627,7 +776,8 @@ describe('RunwayScreen', () => {
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('tab', { name: /Friends/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
     expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
     expect(screen.getByTestId('friend-remove-yaniv')).toBeInTheDocument()
 
@@ -648,6 +798,7 @@ describe('RunwayScreen', () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await screen.findByTestId('runway-open-discover')
     await waitFor(() => expect(ensureDefaultRunwayPush).toHaveBeenCalled())
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText(/Push on — we’ll notify/i)).toBeInTheDocument()
@@ -657,6 +808,7 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'already' })
     runwayPushIsEnabled.mockResolvedValue(true)
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
@@ -668,6 +820,7 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: false, result: 'disabled' })
     runwayPushIsEnabled.mockResolvedValue(false)
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     await waitFor(() => expect(toggle).toBeDisabled())
     expect(toggle).toHaveAttribute('aria-checked', 'false')

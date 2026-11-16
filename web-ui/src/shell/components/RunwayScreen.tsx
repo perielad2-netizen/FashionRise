@@ -15,11 +15,12 @@ import {
   Crown,
   Globe2,
   Heart,
-  Info,
   MessageCircle,
+  MoreHorizontal,
   RefreshCw,
   Sparkles,
   Star,
+  User,
   UserPlus,
   Users,
   X,
@@ -58,8 +59,12 @@ import {
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
+import {
+  followCreator,
+  getFollowStatus,
+  unfollowCreator,
+} from '@/services/profilesApi'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
-import { CompetitionStrip } from '@/shell/components/CompetitionStrip'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -87,17 +92,39 @@ type TabId = 'discover' | 'feed' | 'following' | 'top' | 'friends'
 type BrowseSheet = 'top10' | 'circle' | 'following' | 'discover'
 type TopLimit = 10 | 20 | 50
 
-const TABS: Array<{ id: TabId; label: string; hint: string }> = [
+/** Compact immersive modes — Friends = circle feed; manage-circle lives in the overflow menu. */
+const TABS: Array<{ id: Exclude<TabId, 'friends'>; label: string; hint: string }> = [
   { id: 'discover', label: 'Discover', hint: 'Fair worldwide looks from many creators' },
-  { id: 'feed', label: 'Feed', hint: 'Looks from you and your friends only' },
   { id: 'following', label: 'Following', hint: 'Looks from designers you follow' },
+  { id: 'feed', label: 'Friends', hint: 'Looks from you and your friends only' },
   { id: 'top', label: 'Top', hint: 'Worldwide top liked and rated looks' },
-  { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
-const SCORE_HINT = 'Looks earn FashionRise scores from likes + ratings (1–10).'
 const DISCOVER_PAGE_SIZE = 24
+
+/** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
+const followStatusCache = new Map<string, boolean>()
+
+export function followStatusCacheKey(viewerId: string, designerId: string): string {
+  return `${viewerId}:${designerId}`
+}
+
+/** Test-only helpers for account-switch Follow cache coverage. */
+export const __followStatusCacheTestUtils = {
+  clear() {
+    followStatusCache.clear()
+  },
+  set(viewerId: string, designerId: string, following: boolean) {
+    followStatusCache.set(followStatusCacheKey(viewerId, designerId), following)
+  },
+  get(viewerId: string, designerId: string): boolean | undefined {
+    return followStatusCache.get(followStatusCacheKey(viewerId, designerId))
+  },
+  size() {
+    return followStatusCache.size
+  },
+}
 
 /** Batch unique Discover impressions only after cards become meaningfully visible. */
 function useDiscoverImpressionReporter() {
@@ -157,6 +184,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [pushNeedsGesture, setPushNeedsGesture] = useState(false)
   const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
   const [openOwnProfileEditing, setOpenOwnProfileEditing] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -388,11 +416,29 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         return { ...prev, discover: merged }
       })
     } catch {
-      setDiscoverHasMore(false)
+      // Keep hasMore true so a later scroll near the end can retry.
     } finally {
       setDiscoverLoadingMore(false)
     }
   }, [discoverHasMore, discoverLoadingMore, state])
+
+  const discoverSentinelRef = useRef<HTMLLIElement | null>(null)
+  const discoverCount = state.status === 'ready' ? state.discover.length : 0
+  useEffect(() => {
+    if (tab !== 'discover' || !discoverHasMore || state.status !== 'ready') return
+    const node = discoverSentinelRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const root = node.parentElement
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        void loadMoreDiscover()
+      },
+      { root, rootMargin: '140% 0px', threshold: 0 },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [discoverCount, discoverHasMore, loadMoreDiscover, state.status, tab])
 
   const onAddFriend = useCallback(
     async (event: FormEvent) => {
@@ -489,37 +535,116 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     )
   }
 
+  const feedItems =
+    state.status === 'ready'
+      ? tab === 'top'
+        ? state.top10
+        : tab === 'following'
+          ? state.following
+          : tab === 'feed'
+            ? state.circle
+            : state.discover
+      : []
+
+  const feedLabel =
+    tab === 'top'
+      ? `Top ${topLimit} worldwide`
+      : tab === 'following'
+        ? 'Following feed'
+        : tab === 'feed'
+          ? 'Friends feed'
+          : 'Discover feed'
+
   return (
     <section
       className={styles.screen}
       aria-labelledby="runway-title"
       onPointerDown={onRunwayGestureForPush}
     >
-      <header className={styles.head}>
-        <div className={styles.titleBlock}>
-          <p className={styles.eyebrow}>Social fashion</p>
-          <h1 id="runway-title" className={styles.title}>
+      <header className={styles.chrome}>
+        <div className={styles.chromeTop}>
+          <h1 id="runway-title" className={styles.brand}>
             FashionRise
           </h1>
-          <p className={styles.subtitle}>
-            {tab === 'discover'
-              ? `Fair Discover — new looks get a chance, strong engagement rises, many creators. ${SCORE_HINT}`
-              : tab === 'top'
-                ? `Worldwide rankings of the top fashion looks, based on likes and ratings. ${SCORE_HINT}`
-                : tab === 'following'
-                  ? `Designers you follow — new looks as they publish. ${SCORE_HINT}`
-                  : tab === 'feed'
-                    ? `Your friends circle feed — looks from you and your friends. ${SCORE_HINT}`
-                    : 'Add friends and manage your private circle.'}
-          </p>
+          <div className={styles.chromeActions}>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              aria-label={pushOn ? 'Push notifications on' : 'Push notifications off'}
+              title="Push notifications"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              {pushOn ? <Bell size={16} aria-hidden /> : <BellOff size={16} aria-hidden />}
+            </button>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              aria-label="More"
+              aria-expanded={menuOpen}
+              data-testid="runway-more-menu"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <MoreHorizontal size={18} aria-hidden />
+            </button>
+          </div>
         </div>
-        <div className={styles.headActions}>
+
+        {tab !== 'friends' ? (
+          <div className={styles.modeRow} role="tablist" aria-label="FashionRise views">
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                className={tab === item.id ? styles.modeActive : styles.modeBtn}
+                onClick={() => {
+                  setMenuOpen(false)
+                  setTab(item.id)
+                }}
+                title={item.hint}
+                data-testid={`runway-tab-${item.id}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {tab === 'top' ? (
+          <div
+            className={styles.topLimitRow}
+            role="tablist"
+            aria-label="Worldwide ranking size"
+            data-testid="runway-top-limit"
+          >
+            {TOP_LIMITS.map((limit) => (
+              <button
+                key={limit}
+                type="button"
+                role="tab"
+                aria-selected={topLimit === limit}
+                className={topLimit === limit ? styles.topLimitActive : styles.topLimitBtn}
+                data-testid={`runway-top-${limit}`}
+                onClick={() => setTopLimit(limit)}
+              >
+                Top {limit}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </header>
+
+      {menuOpen ? (
+        <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
           {viewerId ? (
             <button
               type="button"
-              className={styles.ghostBtn}
+              className={styles.menuItem}
+              role="menuitem"
               data-testid="runway-my-profile"
               onClick={() => {
+                setMenuOpen(false)
                 setOpenOwnProfileEditing(true)
                 setViewingDesigner({
                   user_id: viewerId,
@@ -527,107 +652,133 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                 })
               }}
             >
+              <User size={14} aria-hidden />
               My Profile
             </button>
           ) : null}
-          <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
+          <button
+            type="button"
+            className={styles.menuItem}
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false)
+              onOpenLooks()
+            }}
+          >
             My Looks
           </button>
-          <button type="button" className={styles.primaryBtn} onClick={onOpenCreate}>
-            <Sparkles size={16} aria-hidden />
+          <button
+            type="button"
+            className={styles.menuItem}
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false)
+              onOpenCreate()
+            }}
+          >
+            <Sparkles size={14} aria-hidden />
             Start creating
+          </button>
+          <button
+            type="button"
+            className={styles.menuItem}
+            role="menuitem"
+            data-testid="runway-tab-friends"
+            onClick={() => {
+              setMenuOpen(false)
+              setTab('friends')
+            }}
+          >
+            <Users size={14} aria-hidden />
+            Manage friends
           </button>
           {tab === 'discover' || tab === 'feed' || tab === 'following' || tab === 'top' ? (
             <button
               type="button"
-              className={styles.refreshBtn}
-              onClick={() => void load()}
-              aria-label={
-                tab === 'top'
-                  ? 'Refresh Top rankings'
-                  : tab === 'following'
-                    ? 'Refresh Following feed'
-                    : tab === 'discover'
-                      ? 'Refresh Discover feed'
-                      : 'Refresh feed'
-              }
+              className={styles.menuItem}
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                void load()
+              }}
             >
               <RefreshCw size={14} aria-hidden />
-              Refresh
+              Refresh feed
             </button>
           ) : null}
+          <div className={styles.menuPush}>
+            <div className={styles.pushCopy}>
+              <span className={styles.pushLabel}>
+                {pushOn ? <Bell size={14} aria-hidden /> : <BellOff size={14} aria-hidden />}
+                Push notifications
+              </span>
+              <span className={styles.pushHint}>
+                {pushNotice ||
+                  (pushOn
+                    ? 'On — likes, scores, and comments'
+                    : pushLocked
+                      ? isNativeShell()
+                        ? 'Unavailable until native push is enabled on the server'
+                        : 'Unavailable until push is configured on the server'
+                      : isNativeShell()
+                        ? 'Off — app notifications pending native push setup'
+                        : 'Off until you turn it on (browser / PWA)')}
+              </span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              className={pushOn ? styles.pushToggleOn : styles.pushToggle}
+              aria-checked={pushOn}
+              aria-label="Push notifications"
+              aria-disabled={pushLocked && !pushOn}
+              disabled={pushBusy || (pushLocked && !pushOn)}
+              data-testid="runway-push-toggle"
+              onClick={() => void onTogglePush()}
+            />
+          </div>
         </div>
-      </header>
+      ) : null}
 
-      <div className={styles.pushRow}>
-        <div className={styles.pushCopy}>
-          <span className={styles.pushLabel}>
-            {pushOn ? <Bell size={14} aria-hidden /> : <BellOff size={14} aria-hidden />}
-            Push notifications
-          </span>
-          <span className={styles.pushHint}>
-            {pushNotice ||
-              (pushOn
-                ? 'On — likes, scores, and comments'
-                : pushLocked
-                  ? isNativeShell()
-                    ? 'Unavailable until native push is enabled on the server'
-                    : 'Unavailable until push is configured on the server'
-                  : isNativeShell()
-                    ? 'Off — app notifications pending native push setup'
-                    : 'Off until you turn it on (browser / PWA)')}
-          </span>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          className={pushOn ? styles.pushToggleOn : styles.pushToggle}
-          aria-checked={pushOn}
-          aria-label="Push notifications"
-          aria-disabled={pushLocked && !pushOn}
-          disabled={pushBusy || (pushLocked && !pushOn)}
-          data-testid="runway-push-toggle"
-          onClick={() => void onTogglePush()}
-        />
+      {/* Legacy browse-sheet entry points kept for interaction tests / deep links */}
+      <div className={styles.srOnly} aria-hidden={false}>
+        <button type="button" data-testid="runway-open-discover" onClick={() => setBrowseSheet('discover')}>
+          Open discover sheet
+        </button>
+        <button type="button" data-testid="runway-open-circle" onClick={() => setBrowseSheet('circle')}>
+          Open circle sheet
+        </button>
+        <button type="button" data-testid="runway-open-following" onClick={() => setBrowseSheet('following')}>
+          Open following sheet
+        </button>
+        <button type="button" data-testid="runway-open-top10" onClick={() => setBrowseSheet('top10')}>
+          Open top sheet
+        </button>
       </div>
-
-      <div className={styles.tabs} role="tablist" aria-label="FashionRise views">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={tab === item.id ? styles.tabActive : styles.tab}
-            onClick={() => setTab(item.id)}
-            title={item.hint}
-            data-testid={`runway-tab-${item.id}`}
-          >
-            {item.id === 'discover' ? <Globe2 size={14} aria-hidden /> : null}
-            {item.id === 'friends' ? <Users size={14} aria-hidden /> : null}
-            {item.id === 'feed' ? <Users size={14} aria-hidden /> : null}
-            {item.id === 'following' ? <UserPlus size={14} aria-hidden /> : null}
-            {item.id === 'top' ? <Crown size={14} aria-hidden /> : null}
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      <CompetitionStrip />
 
       <div className={styles.body}>
         {tab === 'friends' ? (
-          <FriendsPanel
-            state={friendsState}
-            username={friendUsername}
-            busy={friendBusy}
-            notice={friendNotice}
-            onUsernameChange={setFriendUsername}
-            onAdd={(e) => void onAddFriend(e)}
-            onAccept={(id) => void onAccept(id)}
-            onRemove={(id, label) => void onRemove(id, label)}
-            onRetry={() => void load()}
-          />
+          <div className={styles.friendsWrap}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={() => setTab('discover')}
+            >
+              <ChevronLeft size={14} aria-hidden />
+              Back to feed
+            </button>
+            <FriendsPanel
+              state={friendsState}
+              username={friendUsername}
+              busy={friendBusy}
+              notice={friendNotice}
+              onUsernameChange={setFriendUsername}
+              onAdd={(e) => void onAddFriend(e)}
+              onAccept={(id) => void onAccept(id)}
+              onRemove={(id, label) => void onRemove(id, label)}
+              onRetry={() => void load()}
+            />
+          </div>
         ) : state.status === 'loading' ? (
           <p className={styles.status} role="status">
             Loading FashionRise…
@@ -642,251 +793,84 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               </button>
             }
           />
-        ) : tab === 'top' ? (
-          <div className={styles.feedHub}>
-            <div
-              className={styles.topLimitRow}
-              role="tablist"
-              aria-label="Worldwide ranking size"
-              data-testid="runway-top-limit"
-            >
-              {TOP_LIMITS.map((limit) => (
-                <button
-                  key={limit}
-                  type="button"
-                  role="tab"
-                  aria-selected={topLimit === limit}
-                  className={topLimit === limit ? styles.topLimitActive : styles.topLimitBtn}
-                  data-testid={`runway-top-${limit}`}
-                  onClick={() => setTopLimit(limit)}
-                >
-                  <Crown size={13} aria-hidden />
-                  Top {limit}
+        ) : feedItems.length === 0 ? (
+          <EmptyState
+            title={
+              tab === 'top'
+                ? 'No Top rankings yet'
+                : tab === 'following'
+                  ? 'No follows yet'
+                  : tab === 'feed'
+                    ? 'Your circle is quiet'
+                    : 'Nothing to discover yet'
+            }
+            body={
+              tab === 'top'
+                ? 'Publish a look from My Looks to appear on the worldwide board.'
+                : tab === 'following'
+                  ? 'Follow designers from their FashionRise profiles to fill this feed.'
+                  : tab === 'feed'
+                    ? 'Publish a look or add friends to fill this feed.'
+                    : 'Publish a look from My Looks — new designs get a fair chance here.'
+            }
+            actions={
+              <div className={styles.feedHubHints}>
+                <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
+                  Go to My Looks
                 </button>
-              ))}
-            </div>
-
-            <p className={styles.rankInfo}>
-              <Info size={13} aria-hidden />
-              Shows worldwide rankings of real, available looks only.
-            </p>
-
-            <div className={styles.rankBoard}>
-              <div className={styles.rankBoardHead}>
-                <h2 className={styles.sectionTitle}>
-                  <Globe2 size={18} aria-hidden />
-                  Top {topLimit} worldwide
-                </h2>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  onClick={() => setBrowseSheet('top10')}
-                  data-testid="runway-open-top10"
-                >
-                  Open full board
-                </button>
+                {tab === 'feed' ? (
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    onClick={() => setTab('friends')}
+                  >
+                    Add friends
+                  </button>
+                ) : (
+                  <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
+                    Browse Top
+                  </button>
+                )}
               </div>
-
-              {state.top10.length === 0 ? (
-                <EmptyState
-                  title="No Top rankings yet"
-                  body="Publish a look from My Looks to appear on the worldwide board."
-                  actions={
-                    <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
-                      Go to My Looks
-                    </button>
+            }
+          />
+        ) : (
+          <>
+            <ul className={`${styles.immersiveFeed} ${styles.feedSnap}`} aria-label={feedLabel}>
+              {feedItems.map((item, index) => (
+                <RunwayCard
+                  key={item.id}
+                  item={item}
+                  rank={tab === 'top' ? index + 1 : undefined}
+                  layout="immersive"
+                  isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                  viewerId={viewerId}
+                  viewerUsername={viewerUsername}
+                  onItemChange={patchItem}
+                  onOpenDesigner={(designer) => setViewingDesigner(designer)}
+                  onVisibleImpression={
+                    tab === 'discover' && viewerId && item.user_id !== viewerId
+                      ? reportDiscoverImpression
+                      : undefined
                   }
                 />
-              ) : (
-                <ul className={styles.rankList} aria-label={`Top ${topLimit} worldwide`}>
-                  {state.top10.map((item, index) => (
-                    <RunwayCard
-                      key={item.id}
-                      item={item}
-                      rank={index + 1}
-                      layout="rank"
-                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                      viewerId={viewerId}
-                      viewerUsername={viewerUsername}
-                      onItemChange={patchItem}
-                      onOpenDesigner={(designer) => setViewingDesigner(designer)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        ) : tab === 'discover' ? (
-          <div className={styles.feedHub}>
-            <div className={styles.rankBoardHead}>
-              <h2 className={styles.sectionTitle}>
-                <Globe2 size={18} aria-hidden />
-                Discover
-              </h2>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setBrowseSheet('discover')}
-                data-testid="runway-open-discover"
-              >
-                Open full feed
-              </button>
-            </div>
-            <p className={styles.rankInfo}>
-              <Info size={13} aria-hidden />
-              Last 7 days · fresh looks get exposure · engagement vs views · mixed creators
-            </p>
-
-            {state.discover.length === 0 ? (
-              <EmptyState
-                title="Nothing to discover yet"
-                body="Publish a look from My Looks — new designs get a fair chance here for seven days."
-                actions={
-                  <div className={styles.feedHubHints}>
-                    <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
-                      Go to My Looks
-                    </button>
-                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
-                      Browse Top
-                    </button>
-                  </div>
-                }
-              />
-            ) : (
-              <>
-                <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Discover feed">
-                  {state.discover.map((item) => (
-                    <RunwayCard
-                      key={item.id}
-                      item={item}
-                      layout="stack"
-                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                      viewerId={viewerId}
-                      viewerUsername={viewerUsername}
-                      onItemChange={patchItem}
-                      onOpenDesigner={(designer) => setViewingDesigner(designer)}
-                      onVisibleImpression={
-                        viewerId && item.user_id !== viewerId
-                          ? reportDiscoverImpression
-                          : undefined
-                      }
-                    />
-                  ))}
-                </ul>
-                {discoverHasMore ? (
-                  <div className={styles.feedHubHints}>
-                    <button
-                      type="button"
-                      className={styles.ghostBtn}
-                      data-testid="runway-discover-load-more"
-                      disabled={discoverLoadingMore}
-                      onClick={() => void loadMoreDiscover()}
-                    >
-                      {discoverLoadingMore ? 'Loading…' : 'Load more'}
-                    </button>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-        ) : tab === 'following' ? (
-          <div className={styles.feedHub}>
-            <div className={styles.rankBoardHead}>
-              <h2 className={styles.sectionTitle}>
-                <UserPlus size={18} aria-hidden />
-                Following
-              </h2>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setBrowseSheet('following')}
-                data-testid="runway-open-following"
-              >
-                Open full feed
-              </button>
-            </div>
-
-            {state.following.length === 0 ? (
-              <EmptyState
-                title="No follows yet"
-                body="Follow designers from their FashionRise profiles to fill this feed."
-                actions={
-                  <div className={styles.feedHubHints}>
-                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
-                      Browse Top
-                    </button>
-                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('feed')}>
-                      Friends feed
-                    </button>
-                  </div>
-                }
-              />
-            ) : (
-              <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Following feed">
-                {state.following.map((item) => (
-                  <RunwayCard
-                    key={item.id}
-                    item={item}
-                    layout="stack"
-                    isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                    viewerId={viewerId}
-                    viewerUsername={viewerUsername}
-                    onItemChange={patchItem}
-                    onOpenDesigner={(designer) => setViewingDesigner(designer)}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <div className={styles.feedHub}>
-            <div className={styles.rankBoardHead}>
-              <h2 className={styles.sectionTitle}>
-                <Users size={18} aria-hidden />
-                Friends feed
-              </h2>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setBrowseSheet('circle')}
-                data-testid="runway-open-circle"
-              >
-                Open full feed
-              </button>
-            </div>
-
-            {state.circle.length === 0 ? (
-              <EmptyState
-                title="Your circle is quiet"
-                body="Publish a look or add friends to fill this feed."
-                actions={
-                  <div className={styles.feedHubHints}>
-                    <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
-                      Go to My Looks
-                    </button>
-                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('friends')}>
-                      Add friends
-                    </button>
-                  </div>
-                }
-              />
-            ) : (
-              <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Friends feed">
-                {state.circle.map((item) => (
-                  <RunwayCard
-                    key={item.id}
-                    item={item}
-                    layout="stack"
-                    isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                    viewerId={viewerId}
-                    viewerUsername={viewerUsername}
-                    onItemChange={patchItem}
-                    onOpenDesigner={(designer) => setViewingDesigner(designer)}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
+              ))}
+              {tab === 'discover' && discoverHasMore ? (
+                <li
+                  ref={discoverSentinelRef}
+                  className={styles.discoverSentinel}
+                  data-testid="runway-discover-load-more"
+                  aria-hidden={discoverLoadingMore ? undefined : true}
+                >
+                  {discoverLoadingMore ? (
+                    <span className={styles.status} role="status">
+                      Loading more looks…
+                    </span>
+                  ) : null}
+                </li>
+              ) : null}
+            </ul>
+          </>
         )}
       </div>
 
@@ -1294,7 +1278,7 @@ function RunwayCard({
   item: GalleryItem
   rank?: number
   compact?: boolean
-  layout?: 'stack' | 'rank'
+  layout?: 'stack' | 'rank' | 'immersive'
   isOwn?: boolean
   viewerId: string | null
   viewerUsername: string | null
@@ -1307,20 +1291,83 @@ function RunwayCard({
   const src = authImg.url || item.image_url
   const cardRef = useRef<HTMLLIElement | null>(null)
   const impressionSentRef = useRef(false)
-  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
+  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comments, setComments] = useState<GalleryComment[] | null>(null)
   const [commentsError, setCommentsError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [followingDesigner, setFollowingDesigner] = useState(false)
+  const [followKnown, setFollowKnown] = useState(false)
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
+  const immersive = layout === 'immersive'
   const chatTitleId = useId()
   const chatInputId = useId()
+  const designerLabel = item.username?.trim() || null
 
   useEffect(() => {
     impressionSentRef.current = false
   }, [item.id])
+
+  useEffect(() => {
+    if (!immersive || isOwn || !viewerId) {
+      setFollowKnown(false)
+      setFollowingDesigner(false)
+      return
+    }
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
+    const cached = followStatusCache.get(cacheKey)
+    if (cached !== undefined) {
+      setFollowingDesigner(cached)
+      setFollowKnown(true)
+      return
+    }
+    const node = cardRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      let cancelled = false
+      void getFollowStatus(item.user_id)
+        .then((row) => {
+          if (cancelled) return
+          const next = Boolean(row.following)
+          followStatusCache.set(cacheKey, next)
+          setFollowingDesigner(next)
+          setFollowKnown(true)
+        })
+        .catch(() => {
+          if (!cancelled) setFollowKnown(true)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+    let cancelled = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.4)) {
+          return
+        }
+        observer.disconnect()
+        void getFollowStatus(item.user_id)
+          .then((row) => {
+            if (cancelled) return
+            const next = Boolean(row.following)
+            followStatusCache.set(cacheKey, next)
+            setFollowingDesigner(next)
+            setFollowKnown(true)
+          })
+          .catch(() => {
+            if (!cancelled) setFollowKnown(true)
+          })
+      },
+      { threshold: [0.4] },
+    )
+    observer.observe(node)
+    return () => {
+      cancelled = true
+      observer.disconnect()
+    }
+  }, [immersive, isOwn, item.user_id, viewerId])
 
   useEffect(() => {
     if (!onVisibleImpression || isOwn) return
@@ -1409,6 +1456,27 @@ function RunwayCard({
     }
   }, [busy, canReact, item, liked, onItemChange, refreshItem])
 
+  const onToggleFollow = useCallback(async () => {
+    if (isOwn || !viewerId || busy) return
+    setBusy('follow')
+    setActionError(null)
+    const prev = followingDesigner
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
+    setFollowingDesigner(!prev)
+    followStatusCache.set(cacheKey, !prev)
+    try {
+      if (prev) await unfollowCreator(item.user_id)
+      else await followCreator(item.user_id)
+      setFollowKnown(true)
+    } catch (err) {
+      setFollowingDesigner(prev)
+      followStatusCache.set(cacheKey, prev)
+      setActionError(err instanceof ApiError ? err.message : 'Could not update follow.')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, followingDesigner, isOwn, item.user_id, viewerId])
+
   const onScore = useCallback(
     async (raw: string) => {
       const score = Number(raw)
@@ -1490,13 +1558,15 @@ function RunwayCard({
   )
 
   const ranked = layout === 'rank' && rank != null
-  const cardClass = compact
-    ? styles.topCard
-    : ranked
-      ? rank === 1
-        ? `${styles.rankCard} ${styles.rankCardLead}`
-        : styles.rankCard
-      : styles.card
+  const cardClass = immersive
+    ? styles.immersiveCard
+    : compact
+      ? styles.topCard
+      : ranked
+        ? rank === 1
+          ? `${styles.rankCard} ${styles.rankCardLead}`
+          : styles.rankCard
+        : styles.card
   const badgeClass =
     rank === 1
       ? styles.rankBadgeGold
@@ -1506,6 +1576,84 @@ function RunwayCard({
           ? styles.rankBadgeBronze
           : styles.rankBadge
 
+  const actionRail = (
+    <div className={immersive ? styles.immersiveActions : styles.cardActions}>
+      {canReact ? (
+        <button
+          type="button"
+          className={liked ? styles.likeBtnOn : styles.likeBtn}
+          aria-pressed={liked}
+          aria-label={liked ? 'Unlike look' : 'Like look'}
+          disabled={busy === 'like'}
+          onClick={() => void onToggleLike()}
+        >
+          <Heart size={immersive ? 22 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+          {formatCount(item.likes_count)}
+        </button>
+      ) : (
+        <span className={styles.statChip} title="Others can like your look">
+          <Heart size={12} aria-hidden />
+          {formatCount(item.likes_count)}
+        </span>
+      )}
+      {canReact ? (
+        <label className={immersive ? styles.immersiveScore : styles.scoreLabel}>
+          <span className={styles.scoreLabelText}>
+            <Star size={immersive ? 18 : 12} aria-hidden />
+            {item.rating_average != null ? item.rating_average.toFixed(1) : 'Rate'}
+          </span>
+          <select
+            className={styles.scoreSelect}
+            aria-label={`Score ${item.title || 'look'} from 1 to 10`}
+            value={item.my_score ?? ''}
+            disabled={busy === 'score'}
+            onChange={(event) => void onScore(event.target.value)}
+          >
+            <option value="" disabled>
+              {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
+            </option>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <span className={styles.statChip} title="Others can score your look">
+          <Star size={12} aria-hidden />
+          {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
+          {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+        </span>
+      )}
+      {!compact ? (
+        <button
+          type="button"
+          className={commentsOpen ? styles.commentBtnOn : styles.commentBtn}
+          aria-haspopup="dialog"
+          aria-expanded={commentsOpen}
+          onClick={openComments}
+        >
+          <MessageCircle size={immersive ? 20 : 12} aria-hidden />
+          {comments ? comments.length : immersive ? '0' : 'Chat'}
+        </button>
+      ) : null}
+      {immersive && !isOwn && viewerId ? (
+        <button
+          type="button"
+          className={followingDesigner ? styles.followBtnOn : styles.followBtn}
+          aria-pressed={followingDesigner}
+          disabled={busy === 'follow' || !followKnown}
+          data-testid={`runway-follow-${item.user_id}`}
+          onClick={() => void onToggleFollow()}
+        >
+          <UserPlus size={16} aria-hidden />
+          {followingDesigner ? 'Following' : 'Follow'}
+        </button>
+      ) : null}
+    </div>
+  )
+
   return (
     <li
       ref={cardRef}
@@ -1513,122 +1661,137 @@ function RunwayCard({
       data-gallery-item-id={item.id}
       data-testid={onVisibleImpression ? `runway-discover-card-${item.id}` : undefined}
     >
-      <div className={ranked ? styles.rankThumb : styles.thumb}>
-        {rank != null ? (
-          <span className={badgeClass}>
-            {rank <= 3 ? <Crown size={10} aria-hidden /> : null}#{rank}
-          </span>
-        ) : null}
-        {src ? (
-          <img src={src} alt="" className={styles.thumbImg} draggable={false} />
-        ) : (
-          <span className={styles.thumbEmpty} aria-hidden>
-            <Star size={22} />
-          </span>
-        )}
-      </div>
-      <div className={styles.cardBody}>
-        <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
-        {onOpenDesigner && !isOwn ? (
-          <button
-            type="button"
-            className={styles.designerLink}
-            data-testid={`runway-open-designer-${item.user_id}`}
-            onClick={() => onOpenDesigner({ user_id: item.user_id })}
-          >
-            View designer
-          </button>
-        ) : null}
-        {ranked ? (
-          <div className={styles.rankStats} aria-label="Look stats">
-            <span>
-              <Heart size={12} aria-hidden />
-              {formatCount(item.likes_count)}
-              <small>Likes</small>
-            </span>
-            <span>
-              <Star size={12} aria-hidden />
-              {item.rating_average != null ? item.rating_average.toFixed(2) : '—'}
-              <small>Avg. Score</small>
-            </span>
-            <span>
-              <Users size={12} aria-hidden />
-              {formatCount(item.rating_count)}
-              <small>Raters</small>
-            </span>
-          </div>
-        ) : null}
-        <div className={styles.cardActions}>
-          {canReact ? (
-            <button
-              type="button"
-              className={liked ? styles.likeBtnOn : styles.likeBtn}
-              aria-pressed={liked}
-              aria-label={liked ? 'Unlike look' : 'Like look'}
-              disabled={busy === 'like'}
-              onClick={() => void onToggleLike()}
-            >
-              <Heart size={13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
-              {item.likes_count}
-            </button>
-          ) : (
-            <span className={styles.statChip} title="Others can like your look">
-              <Heart size={12} aria-hidden />
-              {item.likes_count}
-            </span>
-          )}
-          {canReact ? (
-            <label className={styles.scoreLabel}>
-              <span className={styles.scoreLabelText}>
-                <Star size={12} aria-hidden />
-                {item.rating_average != null ? item.rating_average.toFixed(1) : 'Score'}
+      {immersive ? (
+        <>
+          <div className={styles.immersiveMedia}>
+            {rank != null ? (
+              <span className={badgeClass}>
+                {rank <= 3 ? <Crown size={10} aria-hidden /> : null}#{rank}
               </span>
-              <select
-                className={styles.scoreSelect}
-                aria-label={`Score ${item.title || 'look'} from 1 to 10`}
-                value={item.my_score ?? ''}
-                disabled={busy === 'score'}
-                onChange={(event) => void onScore(event.target.value)}
+            ) : null}
+            {src ? (
+              <img
+                src={src}
+                alt=""
+                className={styles.immersiveImg}
+                draggable={false}
+                decoding="async"
+              />
+            ) : (
+              <span className={styles.thumbEmpty} aria-hidden>
+                <Star size={36} />
+              </span>
+            )}
+            <div className={styles.immersiveShade} aria-hidden />
+          </div>
+          <div className={styles.immersiveOverlay}>
+            <div className={styles.immersiveMeta}>
+              {onOpenDesigner ? (
+                <button
+                  type="button"
+                  className={styles.designerChip}
+                  data-testid={`runway-open-designer-${item.user_id}`}
+                  onClick={() =>
+                    onOpenDesigner({
+                      user_id: item.user_id,
+                      username: item.username || undefined,
+                    })
+                  }
+                >
+                  <span className={styles.designerAvatar} aria-hidden>
+                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
+                  </span>
+                  <span className={styles.designerChipText}>
+                    <strong>
+                      {designerLabel ? `@${designerLabel}` : 'View designer'}
+                    </strong>
+                    <span>{item.title || 'Untitled look'}</span>
+                  </span>
+                </button>
+              ) : (
+                <div className={styles.designerChip}>
+                  <span className={styles.designerAvatar} aria-hidden>
+                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
+                  </span>
+                  <span className={styles.designerChipText}>
+                    <strong>
+                      {designerLabel ? `@${designerLabel}` : 'Designer'}
+                    </strong>
+                    <span>{item.title || 'Untitled look'}</span>
+                  </span>
+                </div>
+              )}
+              {isOwn ? (
+                <p className={styles.ownHint}>Your look — likes & scores come from others</p>
+              ) : null}
+              {actionError && !commentsOpen ? (
+                <p className={styles.cardError} role="alert">
+                  {actionError}
+                </p>
+              ) : null}
+            </div>
+            {actionRail}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className={ranked ? styles.rankThumb : styles.thumb}>
+            {rank != null ? (
+              <span className={badgeClass}>
+                {rank <= 3 ? <Crown size={10} aria-hidden /> : null}#{rank}
+              </span>
+            ) : null}
+            {src ? (
+              <img src={src} alt="" className={styles.thumbImg} draggable={false} />
+            ) : (
+              <span className={styles.thumbEmpty} aria-hidden>
+                <Star size={22} />
+              </span>
+            )}
+          </div>
+          <div className={styles.cardBody}>
+            <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
+            {onOpenDesigner && !isOwn ? (
+              <button
+                type="button"
+                className={styles.designerLink}
+                data-testid={`runway-open-designer-${item.user_id}`}
+                onClick={() => onOpenDesigner({ user_id: item.user_id })}
               >
-                <option value="" disabled>
-                  {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
-                </option>
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <span className={styles.statChip} title="Others can score your look">
-              <Star size={12} aria-hidden />
-              {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
-              {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
-            </span>
-          )}
-          {!compact ? (
-            <button
-              type="button"
-              className={commentsOpen ? styles.commentBtnOn : styles.commentBtn}
-              aria-haspopup="dialog"
-              aria-expanded={commentsOpen}
-              onClick={openComments}
-            >
-              <MessageCircle size={12} aria-hidden />
-              {comments ? comments.length : 'Chat'}
-            </button>
-          ) : null}
-        </div>
-        {isOwn ? (
-          <p className={styles.ownHint}>Your look — likes & scores come from others</p>
-        ) : null}
-        {actionError && !commentsOpen ? (
-          <p className={styles.cardError} role="alert">
-            {actionError}
-          </p>
-        ) : null}
-      </div>
+                View designer
+              </button>
+            ) : null}
+            {ranked ? (
+              <div className={styles.rankStats} aria-label="Look stats">
+                <span>
+                  <Heart size={12} aria-hidden />
+                  {formatCount(item.likes_count)}
+                  <small>Likes</small>
+                </span>
+                <span>
+                  <Star size={12} aria-hidden />
+                  {item.rating_average != null ? item.rating_average.toFixed(2) : '—'}
+                  <small>Avg. Score</small>
+                </span>
+                <span>
+                  <Users size={12} aria-hidden />
+                  {formatCount(item.rating_count)}
+                  <small>Raters</small>
+                </span>
+              </div>
+            ) : null}
+            {actionRail}
+            {isOwn ? (
+              <p className={styles.ownHint}>Your look — likes & scores come from others</p>
+            ) : null}
+            {actionError && !commentsOpen ? (
+              <p className={styles.cardError} role="alert">
+                {actionError}
+              </p>
+            ) : null}
+          </div>
+        </>
+      )}
       {!compact && commentsOpen
         ? createPortal(
             <div
