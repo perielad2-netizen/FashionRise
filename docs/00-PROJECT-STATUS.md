@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**FashionRise Social PR1–PR4 merged on `main`** · tip **`b6e70054`** · Alembic **033** · **not deployed** · durable public-image cleanup is the pre-activation blocker.)
+**Last updated:** 2026-11-16 (**Social PR1–PR4 + docs #355 on `main`** · safety PR open · Alembic **034** · **not deployed** · reward flags default **FALSE**.)
 
-**Phase:** FashionRise Social platform (PM-approved) in small PRs on top of native Android QA gate. Feature name is **FashionRise** (not “Runway 2.0”). Reuse existing gallery destination `runway`, friends, profiles, follow, and Stars ledger.
+**Phase:** FashionRise Social **production-safety hardening** (not a new product phase). Feature code #349–#354 is on `main`; activation still requires PM authorize after this safety PR.
 
 ## FashionRise Social — scope & progress
 
@@ -15,12 +15,14 @@
 | **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **Merged** — #352 → `main` @ `fad2ae3c` |
 | **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Merged** — #353 → `main` @ `02882f65` · Alembic **032** · **not deployed** |
 | **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent · erase removes public copy · My Profile entry | **Merged** — #354 → `main` @ **`b6e70054`** · tip `b9011701` · Alembic **033** · **not deployed** |
+| **Docs** | Social readiness plan after #354 | **Merged** — #355 → `main` @ **`82e93008`** |
+| **Safety** | Durable public My Models cleanup + explicit Stars reward gates (weekly + streak) | **PM review** — branch `cursor/web-fashionrise-prod-safety-77c6` · Alembic **034** · **do not merge/deploy until PM OK** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Land **durable public My Models image cleanup** (retry queue; no silent orphans) as a focused pre-deploy PR, then PM-authorize a single Social production activation covering #349–#354. Until then: **no prod deploy**, **no live weekly Stars awards**, Android QA continues unaffected.
+**Exact next step:** PM review **production-safety PR** (durable public cleanup + reward gates). Then **staging validation** (migrate 034, smoke Social surfaces, confirm flags stay FALSE). Then **separate PM production authorization**. Until then: **no prod deploy**, **no live Stars awards**, Android QA unaffected.
 
 ## Release roadmap (source of truth)
 
@@ -31,38 +33,50 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **PR1–PR4 merged on `main` · not deployed** | Merge tip **`b6e70054`** · Alembic **033** · durable public-image cleanup **blocks activation** |
+| **FashionRise Social** | **PR1–PR4 + docs merged · safety PR open · not deployed** | Feature tip **`b6e70054`** · safety adds Alembic **034** + reward flags default FALSE |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards yet**.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards yet** · **do not auto-merge safety PR**.
 
-## FashionRise Social — production readiness plan (PM review · do not deploy)
+## FashionRise Social — production safety PR (2026-11-16) — PM REVIEW · NOT MERGED
 
-Covers merged **#349 / #352 / #353 / #354** as one activation. **Separate PM authorization required before any production step.**
+| Status | Detail |
+|---|---|
+| Public cleanup | `public_media_cleanup_queue` (Alembic **034**) · enqueue owned `fashionrise-model-*.png` keys in same txn as gallery delete · immediate post-commit attempt · FS failure keeps pending (`attempts`/`last_error`) · background tick retries · already-absent = success · unsafe keys rejected · no private croquis / shared deletes · account deletion retains queue rows (no user FK) |
+| Weekly Stars | `FASHIONRISE_WEEKLY_REWARDS_ENABLED` default **false** · requires `FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START` (Sunday UTC) · mid-week config snaps to **next** Sunday · guards `settle_group_awards` + `credit_payout_idempotent` · tick may open/lock weeks without awarding |
+| Streak Stars | `FASHIONRISE_STREAK_REWARDS_ENABLED` default **false** · visits still record streak · never credits 10★ while off · FE strip does not advertise +★ while disabled |
+| QA | BE cleanup+gates + publish + competition hardening **24 passed** · FE `tsc` green · Runway/Auth **19 passed** |
+| Production | **Not deployed** · flags remain FALSE · no live Stars |
+| Next | PM review → staging migrate **034** + smoke → separate PM prod authorize |
+
+## FashionRise Social — production readiness plan (do not deploy)
+
+Covers merged **#349 / #352 / #353 / #354** (+ docs #355). **Separate PM authorization required before any production step.**
 
 ### Safety defaults (unchanged until explicit PM OK)
 - No production deploy · no live weekly Stars awards · no Stars purchasing · no push activation · no Codemagic/iOS builds or store submissions · Android QA builds remain on current gate
+- Reward flags default **FALSE** even after safety PR merges
 
-### Pre-activation blocker — durable public image cleanup (P0)
+### Pre-activation: durable public image cleanup (implemented in safety PR)
 | Item | Detail |
 |---|---|
-| Gap | Unpublish / permanent erase / account deletion unlink public My Model copies **post-commit, best-effort**, and **silently ignore** filesystem failures → orphans can stay publicly reachable |
-| Required | Durable retry (or equivalent) so a failed unlink cannot silently leave a public orphan |
-| Approach | Reuse `private_media_cleanup_queue` pattern: enqueue **public upload keys** (root = public uploads, not private croquis) in the same DB transaction that deletes the gallery row; extend retention sweeper with a safe public-key unlink path (fail → keep queued + `last_error` + attempts; success / already-absent → `processed_at`) |
-| Scope | Unpublish · permanent erase · account deletion only · never delete shared/unrelated gallery assets |
-| Gate | **Must merge + verify before Social prod activation** |
+| Was | Best-effort post-commit unlink that could silently orphan public files |
+| Now | Durable `public_media_cleanup_queue` + validated public-only unlink + automatic retry on competition tick loop |
+| Gate | Merge safety PR + staging verify before Social prod activation |
 
 ### Migrations
 1. Backup DB
-2. `alembic upgrade head` through **033** on production (031 impressions → 032 competitions/streaks → 033 croquis gallery publish + consent purpose)
-3. Confirm `alembic current` = **033** before cutting traffic to new API
+2. `alembic upgrade head` through **034** on production (031 → 032 → 033 → **034** public cleanup queue)
+3. Confirm `alembic current` = **034** before cutting traffic to new API
+4. Keep `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` and `FASHIONRISE_STREAK_REWARDS_ENABLED=false` until PM launch OK; set `FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START` to the first Sunday UTC week that may receive prizes
 
 ### Deploy order
-1. **DB migrate to 033** (backward-compatible additive: nullable `gallery_items.croquis_id`, widened consent purpose check)
-2. **Backend API** to `b6e70054+` (gallery discover/following/impressions, competitions/streaks, profiles, personal-croquis publish/erase)
-3. **Frontend tip** pointing at the same Social tip (Discover / Following / Top / My Profile / My Models publish UI)
-4. Smoke against production API + FE tip **before** enabling competition settlement Stars
+1. **DB migrate to 034** (additive queue table + prior Social migrations)
+2. **Backend API** including safety tip (cleanup + reward gates)
+3. **Frontend tip** (Discover / Following / Top / My Profile / My Models + non-misleading streak/prize UI)
+4. Smoke Social surfaces with reward flags **FALSE**
+5. Only later (separate PM OK): enable weekly/streak flags + launch week boundary
 
 ### Existing production data compatibility
 - Additive migrations only; existing gallery looks / friends / profiles continue
@@ -106,9 +120,9 @@ Covers merged **#349 / #352 / #353 / #354** as one activation. **Separate PM aut
 - GitHub Actions check runs: **none configured** on these branches
 
 ### Next engineering action
-1. Focused PR: **durable public upload cleanup** (enqueue + sweeper retry) for unpublish / erase / account deletion  
-2. Staging migrate 033 + smoke Social surfaces  
-3. PM authorization for production activation (still separate from this docs plan)
+1. PM review / merge **production-safety PR** (cleanup + reward gates → Alembic **034**)  
+2. Staging migrate **034** + smoke Social surfaces with reward flags FALSE  
+3. Separate PM authorization for production activation (still not this PR)
 
 ## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — MERGED / #354
 

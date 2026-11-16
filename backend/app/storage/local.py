@@ -17,6 +17,12 @@ _CROQUIS_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Only FashionRise-generated My Model public copies may be deleted via public cleanup.
+_FASHIONRISE_MODEL_PUBLIC_KEY_RE = re.compile(
+    r"^fashionrise-model-[0-9a-f]{32}\.png$",
+    re.IGNORECASE,
+)
+
 
 class LocalStorageBackend:
     def __init__(self) -> None:
@@ -376,6 +382,57 @@ class LocalStorageBackend:
             path = self._assert_under_croquis_root(lexical)
         except ValueError:
             return CroquisUnlinkOutcome.UNSAFE
+        if path.is_symlink():
+            return CroquisUnlinkOutcome.UNSAFE
+        if not path.exists():
+            return CroquisUnlinkOutcome.ALREADY_ABSENT
+        if not path.is_file():
+            return CroquisUnlinkOutcome.UNSAFE
+        try:
+            path.unlink()
+        except OSError:
+            return CroquisUnlinkOutcome.FAILED
+        if path.exists():
+            return CroquisUnlinkOutcome.FAILED
+        return CroquisUnlinkOutcome.REMOVED
+
+    @staticmethod
+    def validate_fashionrise_model_public_key(key: str) -> str:
+        """Reject traversal / private roots / non-model public keys."""
+        if not key or not isinstance(key, str):
+            raise ValueError("public FashionRise model key required")
+        if "\x00" in key or ".." in key or key.startswith("/") or "\\" in key:
+            raise ValueError("public FashionRise model key is invalid")
+        normalized = key.lstrip("/").strip()
+        if not _FASHIONRISE_MODEL_PUBLIC_KEY_RE.fullmatch(normalized):
+            raise ValueError("public FashionRise model key is not an owned model copy")
+        return normalized
+
+    def delete_public_fashionrise_model_file(self, *, key: str) -> CroquisUnlinkOutcome:
+        """Unlink a FashionRise My Model public copy under the uploads root only.
+
+        Never touches private croquis / fabric / techpack roots. Typed outcome
+        matches the private retention sweeper contract.
+        """
+        try:
+            safe = self.validate_fashionrise_model_public_key(key)
+            path = self._full_path(safe).resolve()
+            root = self.public_upload_root()
+            path.relative_to(root)
+        except ValueError:
+            return CroquisUnlinkOutcome.UNSAFE
+        # Refuse anything that resolves into a private sibling root.
+        for private_root in (
+            self.private_croquis_root(),
+            self.private_fabric_root(),
+            self.private_techpack_root(),
+        ):
+            try:
+                path.relative_to(private_root)
+            except ValueError:
+                pass
+            else:
+                return CroquisUnlinkOutcome.UNSAFE
         if path.is_symlink():
             return CroquisUnlinkOutcome.UNSAFE
         if not path.exists():

@@ -26,6 +26,7 @@ class StreakStatus:
     days_until_reward: int
     rewarded_this_checkin: bool
     stars_awarded: int
+    rewards_enabled: bool = False
 
 
 def utc_today(now: datetime | None = None) -> date:
@@ -68,6 +69,8 @@ def effective_streak(row: LoginStreak, today: date) -> int:
 
 
 def streak_status(db: Session, user: User, *, now: datetime | None = None) -> StreakStatus:
+    from app.services.fashionrise_reward_gates import streak_rewards_enabled
+
     today = utc_today(now)
     row = get_or_create_streak(db, user.id)
     current = effective_streak(row, today)
@@ -78,6 +81,7 @@ def streak_status(db: Session, user: User, *, now: datetime | None = None) -> St
         days_until_reward=_days_until_reward(current),
         rewarded_this_checkin=False,
         stars_awarded=0,
+        rewards_enabled=streak_rewards_enabled(),
     )
 
 
@@ -102,6 +106,7 @@ def record_daily_checkin(
             days_until_reward=status.days_until_reward,
             rewarded_this_checkin=False,
             stars_awarded=0,
+            rewards_enabled=status.rewards_enabled,
         )
 
     if last is not None and (today - last).days == 1:
@@ -117,7 +122,15 @@ def record_daily_checkin(
 
     rewarded = False
     stars = 0
-    if new_streak > 0 and new_streak % STREAK_REWARD_DAYS == 0:
+    from app.services.fashionrise_reward_gates import streak_rewards_enabled
+
+    # Visits still advance the streak while rewards are disabled; Stars credit
+    # only when the server gate is on (no retroactive dump of prior cycles).
+    if (
+        streak_rewards_enabled()
+        and new_streak > 0
+        and new_streak % STREAK_REWARD_DAYS == 0
+    ):
         period = new_streak // STREAK_REWARD_DAYS
         payout_key = f"streak:{user.id}:{today.isoformat()}:cycle{period}"
         rewarded = credit_payout_idempotent(
@@ -138,6 +151,7 @@ def record_daily_checkin(
         days_until_reward=_days_until_reward(new_streak),
         rewarded_this_checkin=rewarded,
         stars_awarded=stars,
+        rewards_enabled=streak_rewards_enabled(),
     )
 
 

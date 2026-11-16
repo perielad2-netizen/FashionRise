@@ -83,7 +83,9 @@ export function CompetitionStrip() {
         {streak && (
           <span className={styles.streak}>
             <Flame size={14} aria-hidden />
-            {streak.current_streak}/7 · {streak.days_until_reward} to +{streak.reward_stars}★
+            {streak.rewards_enabled
+              ? `${streak.current_streak}/7 · ${streak.days_until_reward} to +${streak.reward_stars}★`
+              : `Login streak ${streak.current_streak}/7`}
           </span>
         )}
       </button>
@@ -102,13 +104,17 @@ export function CompetitionStrip() {
                 : 'publish or engage to climb'}
             </p>
           )}
-          <div className={styles.cats}>
-            {status.award_categories.map((cat) => (
-              <span key={cat.id} className={styles.cat}>
-                {cat.label} · {cat.stars}★
-              </span>
-            ))}
-          </div>
+          {status.weekly_rewards_enabled ? (
+            <div className={styles.cats}>
+              {status.award_categories.map((cat) => (
+                <span key={cat.id} className={styles.cat}>
+                  {cat.label} · {cat.stars}★
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.note}>Weekly Star prizes are not active yet.</p>
+          )}
           {status.top_designs.length > 0 && (
             <div className={styles.list}>
               <h3>Group top designs</h3>
@@ -133,9 +139,9 @@ export function CompetitionStrip() {
               </ul>
             </div>
           )}
-          {streak?.rewarded_this_checkin && (
+          {streak?.rewards_enabled && streak.rewarded_this_checkin && streak.stars_awarded > 0 ? (
             <p className={styles.reward}>Streak complete — +{streak.stars_awarded} Stars</p>
-          )}
+          ) : null}
         </div>
       )}
     </section>

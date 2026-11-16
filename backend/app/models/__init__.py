@@ -19,6 +19,7 @@ from app.models.personal_croquis_ai_consent import PersonalCroquisAiConsentBindi
 from app.models.personal_croquis_spend import PersonalCroquisSpendReservation
 from app.models.private_media_asset import PrivateMediaAsset
 from app.models.private_media_cleanup import PrivateMediaCleanupQueue
+from app.models.public_media_cleanup import PublicMediaCleanupQueue
 from app.models.iap_apple_notification import IapAppleNotification
 from app.models.iap_purchase import IapPurchase
 from app.models.iap_stars_adjustment import IapStarsAdjustment
@@ -74,6 +75,7 @@ __all__ = [
     "PersonalCroquisSpendReservation",
     "PrivateMediaAsset",
     "PrivateMediaCleanupQueue",
+    "PublicMediaCleanupQueue",
     "IapAppleNotification",
     "IapPurchase",
     "IapStarsAdjustment",

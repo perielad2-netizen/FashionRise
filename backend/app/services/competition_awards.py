@@ -174,7 +174,21 @@ def credit_payout_idempotent(
     payout_key: str,
     reason: str,
 ) -> bool:
-    """Credit Stars once per payout_key. Returns True when newly credited."""
+    """Credit Stars once per payout_key. Returns True when newly credited.
+
+    Server-authoritative Social reward gates fail closed here — not only in the
+    scheduler — so retries/restarts cannot credit when disabled.
+    """
+    from app.services.fashionrise_reward_gates import (
+        streak_rewards_enabled,
+        weekly_rewards_enabled,
+    )
+
+    if reason.startswith("competition_") and not weekly_rewards_enabled():
+        return False
+    if reason == "login_streak" and not streak_rewards_enabled():
+        return False
+
     existing = db.scalar(select(StarPayout).where(StarPayout.payout_key == payout_key))
     if existing is not None:
         return False
@@ -203,6 +217,11 @@ def settle_group_awards(
     week_start: datetime,
     group: CompetitionGroup,
 ) -> list[CompetitionAward]:
+    from app.services.fashionrise_reward_gates import week_eligible_for_weekly_rewards
+
+    if not week_eligible_for_weekly_rewards(week_start):
+        return []
+
     week_end = competition_week_end(week_start)
     picks = select_group_winners(
         db, week_start=week_start, week_end=week_end, group_id=group.id
