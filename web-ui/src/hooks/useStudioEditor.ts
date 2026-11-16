@@ -3521,6 +3521,8 @@ export function useStudioEditor() {
         const expectedFp = draftContentFingerprint(documentForCloud(rebased))
         const ackFp = draftContentFingerprint(documentForCloud(result.document))
         if (result.fingerprint !== expectedFp && ackFp !== expectedFp) {
+          // Do not auto-resume a pending Open into another conflict loop.
+          pendingOpenAfterConflictRef.current = null
           conflictOpenRef.current = true
           setDraftConflict({
             local: rebased,
@@ -3545,6 +3547,7 @@ export function useStudioEditor() {
       conflictOpenRef.current = true
       if (result.conflict) {
         // Genuine concurrent cloud advance — renew choice; never blind-overwrite.
+        pendingOpenAfterConflictRef.current = null
         setDraftConflict(result.conflict)
         setSaveError(result.error)
         setSaveStatus('error')
@@ -3918,20 +3921,63 @@ export function useStudioEditor() {
               finishOpen(record, server, result.conflict.designId, server.clientRevision)
               return
             }
-            // Stash the open request — after Keep/Use-cloud we resume automatically.
-            pendingOpenAfterConflictRef.current = record
-            conflictOpenRef.current = true
-            setDraftConflict({
-              local: current,
-              server,
-              designId: result.conflict.designId,
+            // Replace-and-open already confirmed — rebase the opened design above the
+            // divergent cloud draft. Never open the Keep/Use-cloud loop here (that left
+            // the old sketch and could resume forever on sticky OCC races).
+            pendingOpenAfterConflictRef.current = null
+            const openedAboveServer = workingDocumentFromSnapshot({
+              current: server,
+              serverRevision: server.clientRevision,
+              snapshot: record.snapshot,
             })
-            setSaveStatus('local-only')
-            setOpenDesign(null)
-            publishStudioNotice(
-              `Your working draft changed on another device. Choose which draft to keep — FashionRise will then open “${record.title}” automatically.`,
-            )
-            navigate('/studio')
+            const forced = await commitKeepDeviceChoice({
+              userId,
+              designId: result.conflict.designId,
+              local: openedAboveServer,
+              server,
+              serverRevision: server.clientRevision,
+            })
+            if (forced.ok) {
+              const rebased = prepareKeepDeviceDocument(
+                openedAboveServer,
+                server,
+                server.clientRevision,
+              )
+              const useDoc =
+                draftContentFingerprint(documentForCloud(forced.document)) ===
+                draftContentFingerprint(documentForCloud(rebased))
+                  ? forced.document
+                  : rebased
+              const local = await persistLocalRecovery({
+                userId,
+                designId: forced.designId,
+                document: useDoc,
+                syncedRevision: forced.syncedRevision,
+              })
+              if (!local.ok) {
+                setOpenDesign({
+                  phase: 'error',
+                  designId: record.id,
+                  record,
+                  canRetry: true,
+                  message: local.error,
+                })
+                return
+              }
+              conflictOpenRef.current = false
+              setDraftConflict(null)
+              finishOpen(record, useDoc, forced.designId, forced.syncedRevision)
+              return
+            }
+            setOpenDesign({
+              phase: 'error',
+              designId: record.id,
+              record,
+              canRetry: true,
+              message:
+                forced.error ||
+                'Could not open this design over your working draft. Resolve any draft conflict in Studio, then try again.',
+            })
             return
           }
           // Network / 5xx: the server write may have committed before the response was lost.
