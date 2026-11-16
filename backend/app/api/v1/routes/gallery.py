@@ -13,6 +13,8 @@ from app.schemas.gallery import (
     GalleryCommentCreate,
     GalleryCommentRead,
     GalleryCreate,
+    GalleryImpressionsCreate,
+    GalleryImpressionsResult,
     GalleryRead,
     GallerySort,
 )
@@ -45,6 +47,8 @@ def list_gallery(
         if user is None:
             raise UnauthorizedError("Sign in to view your friends circle feed")
         rows = gallery_service.list_circle_feed(db, viewer=user, limit=limit, offset=offset)
+    elif sort == "discover":
+        rows = gallery_service.list_discover_feed(db, limit=limit, offset=offset)
     elif sort == "top10":
         # Worldwide board supports Top 10 / 20 / 50 selectors in the Runway UI.
         rows = gallery_service.list_top_worldwide(db, limit=min(limit, 50))
@@ -53,6 +57,16 @@ def list_gallery(
         # but the web Runway home uses circle + top10 only.
         rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
     return gallery_service.to_gallery_reads_for_viewer(db, rows, user)
+
+
+@router.post("/impressions", response_model=GalleryImpressionsResult)
+def record_impressions(
+    data: GalleryImpressionsCreate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> GalleryImpressionsResult:
+    recorded = gallery_service.record_gallery_impressions(db, user, data.gallery_item_ids)
+    return GalleryImpressionsResult(recorded=recorded)
 
 
 @router.get("/user/{user_id}", response_model=list[GalleryRead])

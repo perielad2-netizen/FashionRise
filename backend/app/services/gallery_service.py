@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import Select, func, or_, select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.gallery_comment import GalleryComment
 from app.models.gallery_comment_like import GalleryCommentLike
+from app.models.gallery_impression import GalleryImpression
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
@@ -22,6 +24,13 @@ from app.schemas.gallery import (
     GallerySort,
 )
 from app.services import ai_service
+from app.services.gallery_discover import (
+    CANDIDATE_POOL_CAP,
+    DISCOVER_WINDOW,
+    DiscoverCandidate,
+    diversify_select,
+    rank_discover_candidates,
+)
 
 
 def to_gallery_read(
@@ -272,6 +281,97 @@ def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
         .limit(cap)
     )
     return list(db.scalars(q).all())
+
+
+def list_discover_feed(
+    db: Session,
+    *,
+    limit: int = 48,
+    offset: int = 0,
+    now: datetime | None = None,
+) -> list[GalleryItem]:
+    """Fair Discovery: 7-day eligible looks, cold-start + engagement/impressions, creator diversity."""
+    now_utc = now or datetime.now(timezone.utc)
+    cutoff = now_utc - DISCOVER_WINDOW
+    rows = list(
+        db.scalars(
+            _public_gallery_base()
+            .where(GalleryItem.created_at >= cutoff)
+            .order_by(GalleryItem.created_at.desc())
+            .limit(CANDIDATE_POOL_CAP)
+        ).all()
+    )
+    by_id = {row.id: row for row in rows}
+    candidates = [
+        DiscoverCandidate(
+            id=row.id,
+            user_id=row.user_id,
+            likes_count=int(row.likes_count or 0),
+            rating_count=int(row.rating_count or 0),
+            unique_impressions_count=int(getattr(row, "unique_impressions_count", 0) or 0),
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    scored = rank_discover_candidates(candidates, now=now_utc)
+    # Diversify the full ranked list, then page — avoids one creator filling every offset page.
+    diversified = diversify_select(scored, limit=len(scored))
+    page_ids = [c.id for c in diversified[offset : offset + limit]]
+    return [by_id[item_id] for item_id in page_ids if item_id in by_id]
+
+
+def record_gallery_impressions(
+    db: Session,
+    viewer: User,
+    gallery_item_ids: list[uuid.UUID],
+) -> int:
+    """Record unique Discover impressions. Skips self-views and duplicates. Returns newly recorded count."""
+    if not gallery_item_ids:
+        return 0
+    # Preserve order, de-dupe request payload.
+    seen: set[uuid.UUID] = set()
+    ordered: list[uuid.UUID] = []
+    for item_id in gallery_item_ids[:100]:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        ordered.append(item_id)
+
+    items = list(
+        db.scalars(
+            select(GalleryItem).where(
+                GalleryItem.id.in_(ordered),
+                GalleryItem.visibility == "public",
+                GalleryItem.moderation_status == "ok",
+            )
+        ).all()
+    )
+    by_id = {item.id: item for item in items}
+    recorded = 0
+    for item_id in ordered:
+        item = by_id.get(item_id)
+        if item is None or item.user_id == viewer.id:
+            continue
+        existing = db.scalar(
+            select(GalleryImpression).where(
+                GalleryImpression.gallery_item_id == item.id,
+                GalleryImpression.viewer_user_id == viewer.id,
+            )
+        )
+        if existing is not None:
+            continue
+        db.add(
+            GalleryImpression(
+                gallery_item_id=item.id,
+                viewer_user_id=viewer.id,
+            )
+        )
+        item.impressions_count = int(item.impressions_count or 0) + 1
+        item.unique_impressions_count = int(item.unique_impressions_count or 0) + 1
+        recorded += 1
+    if recorded:
+        db.commit()
+    return recorded
 
 
 def get_gallery_item(db: Session, item_id: uuid.UUID) -> GalleryItem:

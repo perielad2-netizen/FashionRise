@@ -10,6 +10,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.gallery_comment import GalleryComment
+    from app.models.gallery_impression import GalleryImpression
     from app.models.gallery_like import GalleryLike
     from app.models.garment_design import GarmentDesign
     from app.models.rating import Rating
@@ -35,6 +36,10 @@ class GalleryItem(Base):
     rating_average: Mapped[float | None] = mapped_column(Numeric(4, 2), nullable=True)
     rating_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     likes_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    impressions_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    unique_impressions_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     moderation_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'ok'"))
     moderation_labels: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -49,5 +54,8 @@ class GalleryItem(Base):
         back_populates="gallery_item", cascade="all, delete-orphan"
     )
     comments: Mapped[list["GalleryComment"]] = relationship(
+        back_populates="gallery_item", cascade="all, delete-orphan"
+    )
+    impressions: Mapped[list["GalleryImpression"]] = relationship(
         back_populates="gallery_item", cascade="all, delete-orphan"
     )

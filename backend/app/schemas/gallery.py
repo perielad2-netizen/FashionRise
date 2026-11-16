@@ -4,7 +4,25 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-GallerySort = Literal["newest", "top_rated", "trending", "following", "circle", "top10"]
+GallerySort = Literal[
+    "newest",
+    "top_rated",
+    "trending",
+    "following",
+    "circle",
+    "top10",
+    "discover",
+]
+
+
+class GalleryImpressionsCreate(BaseModel):
+    """Batch unique Discover impressions for the signed-in viewer."""
+
+    gallery_item_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+
+
+class GalleryImpressionsResult(BaseModel):
+    recorded: int
 
 
 class GalleryCreate(BaseModel):

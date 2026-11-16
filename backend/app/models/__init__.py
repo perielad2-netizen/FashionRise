@@ -6,6 +6,7 @@ from app.models.design_revision import DesignRevision
 from app.models.fabric_asset import FabricAsset
 from app.models.gallery_comment import GalleryComment
 from app.models.gallery_comment_like import GalleryCommentLike
+from app.models.gallery_impression import GalleryImpression
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
@@ -47,6 +48,7 @@ __all__ = [
     "FabricAsset",
     "GalleryComment",
     "GalleryCommentLike",
+    "GalleryImpression",
     "GalleryItem",
     "GalleryLike",
     "GarmentDesign",

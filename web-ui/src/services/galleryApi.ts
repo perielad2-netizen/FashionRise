@@ -1,7 +1,14 @@
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 
-export type GallerySort = 'newest' | 'top_rated' | 'trending' | 'following' | 'circle' | 'top10'
+export type GallerySort =
+  | 'newest'
+  | 'top_rated'
+  | 'trending'
+  | 'following'
+  | 'circle'
+  | 'top10'
+  | 'discover'
 
 export type GalleryItem = {
   id: string
@@ -48,6 +55,18 @@ export async function listGallery(opts?: {
   return apiRequest<GalleryItem[]>(`/gallery?${q.toString()}`, {
     method: 'GET',
     signal: opts?.signal,
+  })
+}
+
+/** Record unique Discover impressions for visible cards (server skips self + duplicates). */
+export async function recordGalleryImpressions(
+  galleryItemIds: string[],
+): Promise<{ recorded: number }> {
+  const ids = [...new Set(galleryItemIds.filter(Boolean))].slice(0, 100)
+  if (ids.length === 0) return { recorded: 0 }
+  return apiRequest<{ recorded: number }>('/gallery/impressions', {
+    method: 'POST',
+    body: { gallery_item_ids: ids },
   })
 }
 
