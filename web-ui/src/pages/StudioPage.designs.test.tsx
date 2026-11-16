@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   restoreStudioDraft: vi.fn(),
   persistStudioDraft: vi.fn(),
   persistLocalRecovery: vi.fn(),
+  commitKeepDeviceChoice: vi.fn(),
   saveDesignSnapshot: vi.fn(),
   listSavedDesigns: vi.fn(),
   fetchSavedDesign: vi.fn(),
@@ -65,6 +66,9 @@ vi.mock('@/lib/draftPersistence', async (importOriginal) => {
     restoreStudioDraft: mocks.restoreStudioDraft,
     persistStudioDraft: mocks.persistStudioDraft,
     persistLocalRecovery: mocks.persistLocalRecovery,
+    // ESM keeps the real commitKeepDeviceChoice bound to the unmocked persist —
+    // route Keep-device through the mock so open force-rebase tests observe it.
+    commitKeepDeviceChoice: mocks.commitKeepDeviceChoice,
   }
 })
 
@@ -209,6 +213,22 @@ beforeEach(() => {
   cleanRestore()
   mocks.persistStudioDraft.mockImplementation(okPersist)
   mocks.persistLocalRecovery.mockResolvedValue({ ok: true })
+  mocks.commitKeepDeviceChoice.mockImplementation(
+    async (args: {
+      designId: string
+      local: StudioDraftDocument
+      server: StudioDraftDocument
+      serverRevision: number
+    }) => {
+      const { prepareKeepDeviceDocument } = await import('@/lib/draftDocument')
+      const rebased = prepareKeepDeviceDocument(args.local, args.server, args.serverRevision)
+      // Count Keep-device as a persist so open force-rebase assertions stay stable.
+      return mocks.persistStudioDraft({
+        document: rebased,
+        designId: args.designId,
+      })
+    },
+  )
   mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD], damaged: [] })
   mocks.fetchSavedDesign.mockResolvedValue({ ok: true, record: RECORD })
   mocks.listMyDesigns.mockResolvedValue([])
@@ -552,7 +572,7 @@ describe('Reopen a saved design', () => {
     )
   })
 
-  it('refuses when another device creates a draft during an empty open', async () => {
+  it('force-rebases when another device created a draft during an empty open', async () => {
     mocks.restoreStudioDraft.mockResolvedValue({
       designId: null,
       document: workingDoc({ strokes: [], clientRevision: 1 }),
@@ -565,25 +585,25 @@ describe('Reopen a saved design', () => {
       strokes: [{ ...STROKE, id: 'other-device' }],
       model: 'blank',
     })
-    mocks.persistStudioDraft.mockResolvedValueOnce({
-      ok: false,
-      conflict: { local: workingDoc({ strokes: [] }), server: foreign, designId: 'foreign-draft' },
-      localPersisted: true,
-      error: 'Your working draft was created on another device.',
-    })
+    mocks.persistStudioDraft
+      .mockResolvedValueOnce({
+        ok: false,
+        conflict: { local: workingDoc({ strokes: [] }), server: foreign, designId: 'foreign-draft' },
+        localPersisted: true,
+        error: 'Your working draft was created on another device.',
+      })
+      .mockImplementation((args: { document: StudioDraftDocument; designId: string | null }) =>
+        Promise.resolve(okPersist(args)),
+      )
     renderAt('/studio/designs')
     await screen.findByRole('heading', { name: 'My Designs' })
     await act(async () => {
       await openFromLibrary()
     })
-    expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
-    expect(strokeIds()).toBe('')
+    await screen.findByRole('heading', { name: 'New Design' })
+    expect(strokeIds()).toBe('snap-1,snap-2')
     expect(mocks.persistStudioDraft.mock.calls[0]![0].createOnly).toBe(true)
-    expect(
-      screen.getByRole('status', {
-        name: /changed on another device\. Choose which draft to keep — FashionRise will then open/i,
-      }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Draft recovery conflict' })).toBeNull()
   })
 
   it('retries createOnly open after a committed create whose response and reconcile list were lost', async () => {
@@ -706,31 +726,7 @@ describe('Reopen a saved design', () => {
     expect(strokeIds()).toBe('snap-1,snap-2')
   })
 
-  it('aborts on another device’s change and shows the existing conflict choice', async () => {
-    const other = workingDoc({ clientRevision: 5, strokes: [{ ...STROKE, id: 'other-device' }] })
-    mocks.persistStudioDraft.mockResolvedValueOnce({
-      ok: false,
-      conflict: { local: workingDoc(), server: other, designId: 'draft-1' },
-      localPersisted: true,
-      error: 'Draft was updated elsewhere.',
-    })
-    renderAt('/studio/designs')
-    await ready()
-    await openFromLibrary()
-    const dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
-    await act(async () => {
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Replace and open' }))
-    })
-    expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
-    expect(strokeIds()).toBe('restored-1')
-    expect(
-      screen.getByRole('status', {
-        name: /changed on another device\. Choose which draft to keep — FashionRise will then open/i,
-      }),
-    ).toBeInTheDocument()
-  })
-
-  it('resumes Replace and open after Use cloud draft resolves the conflict', async () => {
+  it('force-rebases Replace and open over another device’s draft without a conflict loop', async () => {
     const other = workingDoc({ clientRevision: 5, strokes: [{ ...STROKE, id: 'other-device' }] })
     mocks.persistStudioDraft
       .mockResolvedValueOnce({
@@ -745,22 +741,19 @@ describe('Reopen a saved design', () => {
     renderAt('/studio/designs')
     await ready()
     await openFromLibrary()
-    const confirm = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
+    const dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
     await act(async () => {
-      fireEvent.click(within(confirm).getByRole('button', { name: 'Replace and open' }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Replace and open' }))
     })
-    const conflict = await screen.findByRole('dialog', { name: 'Draft recovery conflict' })
-    expect(strokeIds()).toBe('restored-1')
-    await act(async () => {
-      fireEvent.click(within(conflict).getByRole('button', { name: 'Use cloud draft' }))
-    })
-    await waitFor(() => expect(mocks.persistStudioDraft).toHaveBeenCalledTimes(2))
     await screen.findByRole('heading', { name: 'New Design' })
     await waitFor(() => expect(strokeIds()).toBe('snap-1,snap-2'))
     expect(screen.queryByRole('dialog', { name: 'Draft recovery conflict' })).toBeNull()
     expect(
       screen.getByRole('status', { name: /Opened “Evening gown” in Studio/i }),
     ).toBeInTheDocument()
+    // First OCC write + Keep-device rebase write — never a Keep/Use-cloud dialog.
+    expect(mocks.persistStudioDraft.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(mocks.commitKeepDeviceChoice).toHaveBeenCalledTimes(1)
   })
 
   it('treats a 409 carrying our own content as a recovered lost response', async () => {
