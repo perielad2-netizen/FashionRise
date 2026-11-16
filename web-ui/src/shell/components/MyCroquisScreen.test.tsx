@@ -126,8 +126,11 @@ describe('MyCroquisScreen', () => {
       />,
     )
     expect(await screen.findByRole('heading', { name: 'My Models' })).toBeInTheDocument()
-    expect(await screen.findByText('Croquis A')).toBeInTheDocument()
-    expect(screen.getByText('Croquis B')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Use Croquis A in Studio' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use Croquis B in Studio' })).toBeInTheDocument()
+    expect(screen.queryByText('Croquis A')).not.toBeInTheDocument()
+    expect(screen.queryByText('Croquis B')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('croquis-publish')).not.toBeInTheDocument()
     expect(screen.getByText('In Studio')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Use Croquis B in Studio' }))
     expect(onUse).toHaveBeenCalledWith('croquis-b', 2)
@@ -160,7 +163,7 @@ describe('MyCroquisScreen', () => {
         },
       ])
     render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={onUse} />)
-    await screen.findByText('Croquis A')
+    await screen.findByRole('button', { name: 'Use Croquis A in Studio' })
     fireEvent.click(screen.getByRole('button', { name: 'Create Model' }))
     expect(screen.getByRole('dialog', { name: /Create Model/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept new' }))
@@ -168,7 +171,8 @@ describe('MyCroquisScreen', () => {
     expect(
       await screen.findByText(/creating does not select it in Studio/i),
     ).toBeInTheDocument()
-    expect(await screen.findByText('New croquis')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Use New croquis in Studio' })).toBeInTheDocument()
+    expect(screen.queryByText('New croquis')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'My Models' })).toBeInTheDocument()
   })
 
@@ -184,7 +188,7 @@ describe('MyCroquisScreen', () => {
         activeStudioPinId={null}
       />,
     )
-    await screen.findByText('Croquis A')
+    await screen.findByRole('button', { name: 'Use Croquis A in Studio' })
     fireEvent.click(screen.getByRole('button', { name: 'Delete Croquis A' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
     expect(await screen.findByRole('heading', { name: 'Could not delete model' })).toBeInTheDocument()
@@ -203,7 +207,7 @@ describe('MyCroquisScreen', () => {
         activeStudioPinId="croquis-a"
       />,
     )
-    await screen.findByText('Croquis A')
+    await screen.findByRole('button', { name: 'Use Croquis A in Studio' })
     fireEvent.click(screen.getByRole('button', { name: 'Delete Croquis A' }))
     expect(screen.getByRole('heading', { name: 'Delete personal model?' })).toBeInTheDocument()
     expect(

@@ -266,8 +266,8 @@
 .immersiveImg {
   width: 100%;
   height: 100%;
-  /* Reels/TikTok full-bleed — chrome sits on the look, not in letterbox gutters. */
-  object-fit: cover;
+  /* Full croquis must stay visible — cover cropped heads/feet on tablet/web. */
+  object-fit: contain;
   object-position: center center;
   display: block;
   background: #0a0d14;

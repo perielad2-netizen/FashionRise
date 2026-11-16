@@ -125,3 +125,26 @@ describe('WEB-V3A My Designs layout contract', () => {
     expect(rule(headerCss, '.header')).not.toContain('z-index')
   })
 })
+
+describe('My Models Mobbin + croquis contain contracts', () => {
+  it('uses image-first My Models tiles with contain previews', async () => {
+    const { default: modelsCss } = await import('@/shell/components/MyCroquisScreen.module.css?raw')
+    expect(rule(modelsCss, '.screen')).toContain('min-height: 0')
+    const scroll = rule(modelsCss, '.scroll')
+    expect(scroll).toContain('min-height: 0')
+    expect(scroll).toContain('overflow-y: auto')
+    expect(rule(modelsCss, '.grid')).toContain('repeat(2, minmax(0, 1fr))')
+    expect(rule(modelsCss, '.previewWrap')).toContain('aspect-ratio: 3 / 4')
+    expect(rule(modelsCss, '.previewImg')).toContain('object-fit: contain')
+    expect(rule(modelsCss, '.tileFooter')).toContain('position: absolute')
+  })
+
+  it('keeps Profile Looks and FashionRise immersive croquis fully visible', async () => {
+    const { default: profileCss } = await import('@/shell/components/FriendProfilePanel.module.css?raw')
+    const { default: runwayCss } = await import('@/shell/components/RunwayScreen.module.css?raw')
+    expect(profileCss).toMatch(/\.lookImage,\s*\n\.lookPlaceholder \{[^}]*object-fit: contain/s)
+    expect(profileCss).toMatch(/\.lookDialogImage,\s*\n\.lookDialogPlaceholder \{[^}]*object-fit: contain/s)
+    expect(rule(runwayCss, '.immersiveImg')).toContain('object-fit: contain')
+    expect(rule(runwayCss, '.immersiveImg')).not.toContain('object-fit: cover')
+  })
+})
