@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Social safety #356 MERGED** @ **`bd315691`** · Alembic head **034** on `main` · **staging blocked (no isolated env)** · **production NOT deployed** · reward flags default **FALSE**.)
+**Last updated:** 2026-11-16 (**#356** @ **`bd315691`** · docs **#357** @ **`29e426eb`** · disposable Social validation **PASS** · **#358** Alembic **035** amended (non-destructive downgrade) · **HOLD MERGE for PM re-approval** · **production NOT deployed** · reward flags **FALSE**.)
 
-**Phase:** FashionRise Social **merged to `main`, staging-blocked / production-hold**. Feature + safety code (#349–#356) is on `main`; live activation still requires isolated staging validation then separate PM production authorization.
+**Phase:** FashionRise Social **merged + disposable validation PASS; 035 croquis-check PR amended; production hold**. Awaiting PM re-approval of #358. Production still NO-GO.
 
 ## FashionRise Social — scope & progress
 
@@ -17,12 +17,14 @@
 | **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent · erase removes public copy · My Profile entry | **Merged** — #354 → `main` @ **`b6e70054`** · tip `b9011701` · Alembic **033** · **not deployed** |
 | **Docs** | Social readiness plan after #354 | **Merged** — #355 → `main` @ **`82e93008`** |
 | **Safety** | Durable public My Models cleanup + explicit Stars reward gates (weekly + streak) · symlink/quarantine/streak-boundary amend | **Merged** — #356 → `main` @ **`bd315691`** · tip `ab891ce0` · Alembic **034** · **not deployed** |
+| **Docs status** | #356 merge + VPS staging-isolation STOP | **Merged** — #357 → `main` @ **`29e426eb`** |
+| **035 fix** | Gallery check allows croquis-only My Models rows · **non-destructive downgrade** (refuse if croquis-only rows exist) | **#358 PM re-review** — HOLD MERGE · revision stays **035** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Provide or authorize an **isolated FashionRise staging** environment (DB / storage / secrets / runtime separate from production). Until then staging validation is **STOPPED**. Do **not** migrate or deploy Social to production. Android QA unaffected.
+**Exact next step:** PM **re-approve** amended **#358** (non-destructive 035 downgrade). Then merge → separate PM production authorization (backup → migrate through **035** → BE/FE with reward flags FALSE). **No VPS/prod changes until then.**
 
 ## Release roadmap (source of truth)
 
@@ -33,11 +35,31 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **PR1–PR4 + safety #356 merged · staging blocked · not deployed** | Merge **`bd315691`** · tip `ab891ce0` · Alembic **034** · reward flags default FALSE |
+| **FashionRise Social** | **#356 merged · disposable local validation PASS · 035 open · not deployed** | Main **`bd315691`** (+ docs **`29e426eb`**) · pending tip includes Alembic **035** |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards** · **no staging migrate/deploy until an isolated staging env exists**.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards** · **no VPS changes**.
+
+## FashionRise Social — disposable isolated validation (2026-11-16) — PASS / PROD NO-GO
+
+| Item | Result |
+|---|---|
+| #357 merge SHA | **`29e426eb`** |
+| Source main SHA (validation base) | **`29e426eb`** (includes #356 @ `bd315691`) |
+| Architecture | Local PostgreSQL 16 on agent host · DBs `fashionrise_disp_social_qa` + `fashionrise_disp_mig030_qa` · storage `/tmp/fr-disp-social/storage` · API `127.0.0.1:18010` · FE Vite `127.0.0.1:5177` · synthetic users/assets only |
+| Isolation evidence | Never `fashionrise_beta` · never VPS `45.63.98.209` / `:8010` / `fashionrise.app` · AI/FASHN/IAP/push keys empty · `AI_WORKER_ENABLED=false` · reward flags FALSE + empty boundaries · no prod `.env` copy |
+| Alembic empty→034 | **PASS** then upgraded to **035** after croquis-check finding |
+| Alembic 030→034 (synthetic legacy) | **PASS** (legacy user/gallery survived) then **035** |
+| Finding | Migrated DBs kept `ck_gallery_items_design_or_look` (design\|look only) after #033 added `croquis_id` — My Models publish failed on real Alembic DBs (create_all tests missed it) |
+| Fix | Alembic **035** replaces check with design\|look\|**croquis** · model CheckConstraint aligned · **#358** |
+| 035 downgrade (amended) | **Non-destructive:** if any gallery row is croquis-only, raise `RuntimeError` and stay on **035** — never auto-DELETE gallery/likes/comments/ratings/impressions/public images. Empty incompatible set → restore original check safely. Upgrade 034→035 unchanged. |
+| Alembic-path regression | Disposable PG `fashionrise_disp_035_qa`: 034→035 insert croquis-only + look-only · 035→034 refuses with croquis-only present (content preserved) · downgrade succeeds after authorized test cleanup — **PASS** |
+| BE/FE smoke | Register/login · profile edit · publish looks · Discover · Following · Friends circle · Top · competition group · My Models publish/erase · unpublish · account delete · FE home load — **PASS** |
+| Cleanup / quarantine | Simulated unlink FAIL then retry SUCCESS · quarantine stays `quarantined` (not done) · private croquis retained · valid model key removed |
+| Competition / streak | Explicit `tick_competitions` ×2 + streak check-in · **0** `star_payouts` · streak `rewards_enabled=false` · `stars_awarded=0` |
+| Disposable cleanup | Prior social DBs dropped · 035 path test DB may remain local-only · **no VPS touch** |
+| Verdict | Disposable Social stack **validated**. **Production remains NO-GO** pending PM re-approval/merge of amended **#358** + separate prod authorize. |
 
 ## FashionRise Social — #356 MERGED + staging isolation STOP (2026-11-16)
 
@@ -54,29 +76,29 @@
 | Blocker | Need an isolated FashionRise staging (separate DB + storage + `.env` + API/FE or confirmed disposable clone) before STEP 2 can complete |
 | Next | PM provides staging isolate **or** explicitly authorizes a disposable local/container staging plan · then migrate **034** + smoke with flags FALSE · then separate PM prod authorize |
 
-## FashionRise Social — PM go / no-go report (post-#356 merge)
+## FashionRise Social — PM go / no-go report (post-disposable validation)
 
 | Item | Result |
 |---|---|
-| Main merge SHA | **`bd315691`** (#356) |
-| Staging build SHA | **N/A** — staging deploy not run (isolation missing) |
-| Staging migration | **Not run** (hard stop) |
-| API/FE staging smoke | **Not run** (hard stop) |
-| Cleanup retry / quarantine on staging | **Not run** (hard stop) · covered by local unit tests only |
-| Weekly / streak rewards | Code defaults **FALSE** / empty boundaries · **must stay FALSE** on any future staging/prod enable path |
-| Production backup / rollback | Documented in deploy plan below · **not executed** |
-| Remaining issues | **No isolated FashionRise staging environment** · prod still at Alembic **030** (Social 031–034 never applied) |
-| Verdict | **NO-GO for production.** Merge OK. Staging incomplete. Await isolated staging or explicit PM alternative. |
+| Main merge SHA | **`bd315691`** (#356) · docs **`29e426eb`** (#357) |
+| Disposable validation SHA | **`29e426eb`** + local **035** fix branch (pending PM) |
+| Staging migration | Disposable local empty→034/035 + 030→034/035 **PASS** · VPS untouched |
+| API/FE smoke | Disposable local **PASS** (see section above) |
+| Cleanup retry / quarantine | Disposable local **PASS** |
+| Weekly / streak rewards | Confirmed **FALSE** / empty · **0** payouts |
+| Production backup / rollback | Documented · **not executed** |
+| Remaining issues | Amended **#358** (035) must PM re-approve + merge before prod migrate · prod still Alembic **030** |
+| Verdict | **NO-GO for production.** Disposable validation PASS. Re-approve/merge **#358**, then separate PM prod authorize. |
 
-### Exact proposed production rollout order (only after staging PASS + separate PM OK)
+### Exact proposed production rollout order (only after 035 merge + separate PM OK)
 1. Production DB backup (`deploy/backup_postgres.sh` / `pg_dump` of `fashionrise_beta`)
-2. `alembic upgrade head` through **034** (031→032→033→034); confirm `alembic current=034`
-3. Deploy BE at merge tip (or subsequent approved tip) with reward flags **FALSE** and launch boundaries **empty**
+2. `alembic upgrade head` through **035** (031→…→034→**035**); confirm `alembic current=035`
+3. Deploy BE at approved tip with reward flags **FALSE** and launch boundaries **empty**
 4. Deploy FE tip with Social surfaces; keep Stars award messaging gated off
 5. Smoke Discover / Following / worldwide Top / profiles / My Models publish-unpublish / erase / account-deletion cleanup with flags FALSE
 6. Confirm competition tick + catch-up produce **zero** Stars; streak check-ins produce **zero** Stars
 7. Confirm cleanup queue drains valid keys; quarantined rows remain unresolved
-8. Only later (third PM OK): set launch Sunday + enable weekly/streak flags
+8. Only later (further PM OK): set launch Sunday + enable weekly/streak flags
 
 ### Production rollback (if a future authorized deploy fails)
 | Layer | Action |
@@ -159,8 +181,10 @@ Covers merged **#349 / #352 / #353 / #354** (+ docs #355). **Separate PM authori
 
 ### Next engineering action
 1. ~~PM merge production-safety PR~~ **DONE** — #356 @ **`bd315691`**
-2. **Provide isolated FashionRise staging** (DB/storage/secrets/runtime ≠ production), then migrate **034** + smoke with reward flags FALSE  
-3. Separate PM authorization for production activation (migrations 031–034 + BE/FE); keep live Stars OFF until a further OK
+2. ~~Docs #357~~ **DONE** @ **`29e426eb`**
+3. ~~Disposable isolated Social validation~~ **DONE** (local) — found/fixed croquis gallery check as **035**
+4. **PM re-approve + merge amended #358** (Alembic **035** non-destructive downgrade; do not auto-merge)
+5. Separate PM authorization for production activation (migrations through **035** + BE/FE); keep live Stars OFF until a further OK
 
 ## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — MERGED / #354
 

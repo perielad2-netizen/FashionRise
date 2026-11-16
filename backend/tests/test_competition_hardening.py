@@ -96,6 +96,7 @@ def test_winner_without_competition_screen(client, db_session):
     b = _user(db_session, "win_b@example.com")
 
     item = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=a.id,
         title="winning look",
         image_url="https://example.com/w.png",
@@ -159,6 +160,7 @@ def test_comment_spam_does_not_dominate_top_commenter(client, db_session):
         enroll_on_activity(db_session, u.id, now=week + timedelta(hours=1))
 
     target = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=c.id,
         title="target",
         image_url="https://example.com/t.png",
@@ -167,6 +169,7 @@ def test_comment_spam_does_not_dominate_top_commenter(client, db_session):
         created_at=week + timedelta(days=1),
     )
     other = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=c.id,
         title="other-c",
         image_url="https://example.com/o.png",
@@ -175,6 +178,7 @@ def test_comment_spam_does_not_dominate_top_commenter(client, db_session):
         created_at=week + timedelta(days=1),
     )
     third = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=a.id,
         title="author-look",
         image_url="https://example.com/a.png",
@@ -266,6 +270,7 @@ def test_repetitive_comments_do_not_inflate_design_awards(client, db_session):
         enroll_on_activity(db_session, u.id, now=week + timedelta(hours=1))
 
     spam_target = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=a.id,
         title="spam farm",
         image_url="https://example.com/spam.png",
@@ -274,6 +279,7 @@ def test_repetitive_comments_do_not_inflate_design_awards(client, db_session):
         created_at=week + timedelta(days=1),
     )
     genuine = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=b.id,
         title="genuine look",
         image_url="https://example.com/gen.png",
@@ -389,6 +395,7 @@ def test_concurrent_settle_workers_single_payout(engine):
         enroll_on_activity(bootstrap, a.id, now=week + timedelta(hours=2))
         enroll_on_activity(bootstrap, b.id, now=week + timedelta(hours=2))
         item = GalleryItem(
+            look_id=uuid.uuid4(),
             user_id=a.id,
             title="race settle",
             image_url="https://example.com/r.png",
