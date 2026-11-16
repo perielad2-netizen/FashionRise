@@ -796,6 +796,7 @@ export function MyLooksScreen({
     <section className={styles.screen} aria-label="My Looks">
       <div className={styles.head}>
         <div className={styles.titleBlock}>
+          <p className={styles.eyebrow}>FashionRise</p>
           <h1 className={styles.title}>My Looks</h1>
           <p className={styles.subtitle}>
             Your finished Magic illustrations — private, persistent, and ready to revisit.
@@ -868,9 +869,12 @@ export function MyLooksScreen({
         ) : null}
 
         {state.status === 'ready' && state.items.length === 0 ? (
-          <div className={styles.stateMsg}>
+          <div className={styles.emptyCard}>
             <p className={styles.emptyTitle}>No looks here yet</p>
-            <p>{emptyCopy}</p>
+            <p className={styles.stateMsg}>{emptyCopy}</p>
+            <button type="button" className={styles.primaryBtn} onClick={onBackToStudio}>
+              Back to Studio
+            </button>
           </div>
         ) : null}
 
@@ -879,13 +883,43 @@ export function MyLooksScreen({
             <ul className={styles.grid} aria-label="My Looks gallery">
               {state.items.map((look) => (
                 <li key={look.id} className={styles.card}>
-                  <LazyLookThumb look={look} />
-                  <div className={styles.cardBody}>
-                    <h3 className={styles.cardTitle} title={look.title}>
-                      {look.title}
-                    </h3>
-                    <p className={styles.cardMeta}>{formatDate(look.created_at)}</p>
-                    <div className={styles.cardActions}>
+                  <div className={styles.tile}>
+                    <div
+                      className={styles.previewHit}
+                      role="presentation"
+                      onClick={() => {
+                        if (!deleteBusy) setSelected(look)
+                      }}
+                    >
+                      <LazyLookThumb look={look} />
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.deleteIcon}
+                      onClick={() => askDelete(look)}
+                      disabled={deleteBusy}
+                      aria-label={`Delete ${look.title}`}
+                    >
+                      <Trash2 size={15} aria-hidden />
+                      <span className={styles.srOnly}>Delete</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={look.is_favorite ? styles.favIconActive : styles.favIcon}
+                      aria-label={look.is_favorite ? `Unfavorite ${look.title}` : `Favorite ${look.title}`}
+                      aria-pressed={look.is_favorite}
+                      disabled={deleteBusy}
+                      onClick={() => void toggleFavorite(look)}
+                    >
+                      <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} />
+                    </button>
+                    <div className={styles.tileFooter}>
+                      <div className={styles.tileCopy}>
+                        <h3 className={styles.cardTitle} title={look.title}>
+                          {look.title}
+                        </h3>
+                        <p className={styles.cardMeta}>{formatDate(look.created_at)}</p>
+                      </div>
                       <button
                         type="button"
                         className={styles.cardOpen}
@@ -894,26 +928,6 @@ export function MyLooksScreen({
                         aria-label={`View details for ${look.title}`}
                       >
                         View details
-                      </button>
-                      <button
-                        type="button"
-                        className={look.is_favorite ? styles.iconBtnActive : styles.iconBtn}
-                        aria-label={look.is_favorite ? `Unfavorite ${look.title}` : `Favorite ${look.title}`}
-                        aria-pressed={look.is_favorite}
-                        disabled={deleteBusy}
-                        onClick={() => void toggleFavorite(look)}
-                      >
-                        <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.deleteBtn}
-                        onClick={() => askDelete(look)}
-                        disabled={deleteBusy}
-                        aria-label={`Delete ${look.title}`}
-                      >
-                        <Trash2 size={14} aria-hidden />
-                        Delete
                       </button>
                     </div>
                   </div>
