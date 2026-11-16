@@ -47,6 +47,17 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no live weekly/streak Stars awards** · no further VPS mutations without PM authorize.
 
+## FashionRise reel chrome #365 — FE LIVE (2026-11-16)
+
+| Item | Result |
+|---|---|
+| Tip | **`b7b96234`** · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) (open; FE tip deployed for QA) |
+| Frontend | `/var/www/fashionrise/releases/b7b96234-reel-chrome-365` · nginx symlink + reload · public `/version.json` sha `b7b96234` |
+| Backend | Unchanged · still **`1cac14f0`** · Alembic **035** · rewards OFF |
+| UX | Mode pills only in ⋯ · no duplicate bell · Reels-scale actions · own-look hint removed |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1cac14f0-immersive-363 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| QA note | Hard-refresh / clear site data if SW serves prior tip |
+
 ## FashionRise immersive UX #363 — PRODUCTION LIVE (2026-11-16)
 
 Conditional PM approval correction applied, merged, and deployed BE+FE together (no Alembic change).
