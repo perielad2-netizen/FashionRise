@@ -23,9 +23,12 @@ if (!isNativeBuild() && !isNativeShell()) {
 
 void bootstrapNativeShell()
 
+/** Supports Vite `base` previews (e.g. `/preview-mobbin/`) without affecting prod `/`. */
+const routerBasename = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename || undefined}>
       <App />
     </BrowserRouter>
   </StrictMode>,
