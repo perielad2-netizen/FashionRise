@@ -26,30 +26,15 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  /* Dark matte + faint checker so pale/white brush sizes stay readable. */
-  background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
-    #121826;
-  background-size: 12px 12px;
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  /* White well + black border — dark and light brush colors both read clearly. */
+  border: 1.5px solid #111827;
+  background: #ffffff;
 }
 
 .rootLight .tipWell,
 .rootLight .strokeWell {
-  /* Same dark preview well on the light Brush sheet — size must read for cream/gold/white. */
-  border-color: rgba(0, 0, 0, 0.18);
-  background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
-    #1a2233;
-  background-size: 12px 12px;
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  border-color: #111827;
+  background: #ffffff;
 }
 
 .tip,
@@ -80,11 +65,11 @@
   filter: contrast(1.05);
 }
 
-/* Pale / near-white pigments need an edge so tip diameter stays obvious. */
+/* Pale / near-white pigments need a dark edge on the white well. */
 .tipContrast {
   box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.55),
-    0 0 0 2px rgba(248, 250, 252, 0.85);
+    0 0 0 1px rgba(17, 24, 39, 0.75),
+    0 0 0 2px rgba(255, 255, 255, 0.95);
 }
 
 .stroke,
@@ -92,13 +77,13 @@
   width: 78%;
   border-radius: 999px;
   background: #f8fafc;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.18);
 }
 
 .strokeContrast {
   box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.45),
-    0 1px 2px rgba(0, 0, 0, 0.35);
+    0 0 0 1px rgba(17, 24, 39, 0.7),
+    0 1px 2px rgba(17, 24, 39, 0.2);
 }
 
 .strokeErase {
