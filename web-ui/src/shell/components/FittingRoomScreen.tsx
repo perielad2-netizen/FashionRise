@@ -506,12 +506,20 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   return (
     <section className={styles.screen} aria-labelledby="fitting-room-brand" data-testid="fitting-room-screen">
       <header className={styles.header}>
-        <p className={styles.brand} id="fitting-room-brand">
-          Fashion<span>Rise</span> Fitting Room
-        </p>
-        <p className={styles.lead}>
-          Upload your photo and clothing pieces for a private AI try-on preview.
-        </p>
+        <div className={styles.titleBlock}>
+          <p className={styles.eyebrow}>FashionRise</p>
+          <h1 className={styles.brand} id="fitting-room-brand">
+            Fitting Room
+          </h1>
+          <p className={styles.lead}>
+            Upload your photo and clothing pieces for a private AI try-on preview.
+          </p>
+        </div>
+        <div className={styles.headActions}>
+          <button type="button" className={styles.btnGhost} onClick={onBackToStudio}>
+            Back to Studio
+          </button>
+        </div>
       </header>
 
       {serverOff ? (
