@@ -12,7 +12,7 @@
 | PR | Scope | Status |
 |---|---|---|
 | **PR1** | FashionRise naming + Home featured entry above Create · side menu after Create · Following feed tab · designer profile (follow, reputation, published looks) · keep publish/`destination:'runway'` | **Merged** — #349 → `main` @ `fac4940d` |
-| **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **PM review** — #TBD `cursor/web-fashionrise-fair-discovery-77c6` |
+| **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **PM review** — [#352](https://github.com/perielad2-netizen/FashionRise/pull/352) `cursor/web-fashionrise-fair-discovery-77c6` |
 | **PR3** | Weekly automated awards (50/20 Stars) + daily login streak (7→10 Stars) | After PR2 — **not in PR2** |
 
 **Tracked (later, not PR2):** users create/edit designer profiles · eligible My Models publish with explicit consent.
