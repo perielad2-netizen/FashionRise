@@ -49,10 +49,9 @@ const DESTINATIONS: Array<{
   },
 ]
 
-export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
+export function HomeScreen({ username: _username, onNavigate, homeExamples }: Props) {
   const croquisEnabled = isMyCroquisUiEnabled()
   const fittingRoomEnabled = isFittingRoomUiEnabled()
-  const firstName = username.trim().split(/\s+/)[0] || 'Creator'
   const destinations = DESTINATIONS.filter((item) => {
     if (item.requiresMyCroquis) return croquisEnabled
     if (item.requiresFittingRoom) return fittingRoomEnabled
@@ -63,7 +62,6 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
     <section className={styles.screen} aria-labelledby="home-headline">
       <header className={styles.hero}>
         <div className={styles.copy}>
-          <p className={styles.greeting}>Welcome back, {firstName}</p>
           <p className={styles.brandMark}>
             Fashion<span>Rise</span>
           </p>
@@ -78,10 +76,7 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
         <h1 id="home-headline" className={styles.tagline}>
           Sketch it. See it come to life.
         </h1>
-        <p className={styles.lead}>
-          Turn your fashion ideas into stunning AI creations — or jump back into saved designs,
-          looks, and models.
-        </p>
+        <p className={styles.lead}>Turn your fashion ideas into stunning AI creations.</p>
         <div className={styles.heroCtas}>
           <button
             type="button"

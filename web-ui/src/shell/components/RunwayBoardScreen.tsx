@@ -219,7 +219,6 @@ export function RunwayBoardScreen() {
     <section className={styles.screen} aria-labelledby="runway-board-title">
       <header className={styles.header}>
         <div className={styles.headerTop}>
-          <p className={styles.eyebrow}>Competitions & rankings</p>
           {daysLeft != null ? (
             <p className={styles.weekChip} data-testid="runway-week-chip">
               <Trophy size={14} aria-hidden />
@@ -234,9 +233,7 @@ export function RunwayBoardScreen() {
         <h1 id="runway-board-title" className={styles.title}>
           Runway
         </h1>
-        <p className={styles.lead}>
-          Weekly awards and Top rankings. FashionRise is the Instagram-style feed.
-        </p>
+        <p className={styles.lead}>Weekly awards and Top rankings.</p>
       </header>
 
       <section className={styles.weekly} aria-labelledby="runway-weekly-title">

@@ -804,9 +804,7 @@ export function MyLooksScreen({
         <div className={styles.titleBlock}>
           <p className={styles.eyebrow}>FashionRise</p>
           <h1 className={styles.title}>My Looks</h1>
-          <p className={styles.subtitle}>
-            Your finished Magic illustrations — private, persistent, and ready to revisit.
-          </p>
+          <p className={styles.subtitle}>Your finished Magic illustrations.</p>
         </div>
         <div className={styles.headActions}>
           <button type="button" className={styles.ghostBtn} onClick={refresh}>
