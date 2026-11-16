@@ -27,7 +27,11 @@ from app.services.competition_clock import (
     seconds_remaining,
     week_key,
 )
-from app.services.competition_groups import get_membership, list_group_rows
+from app.services.competition_groups import (
+    enroll_users_active_this_week,
+    get_membership,
+    list_group_rows,
+)
 from app.services.competition_scoring import (
     ScoredDesign,
     ScoredUser,
@@ -249,6 +253,8 @@ def build_category_board(
     week_start = competition_week_start(now_utc)
     week_end = competition_week_end(week_start)
     stars = next(s for cid, s in AWARD_DEFS if cid == cat)
+    # Catch up engagers/designers who missed sticky enroll so live boards aren't empty.
+    enroll_users_active_this_week(db, week_start=week_start, week_end=week_end)
     group = _resolve_board_group(db, user, week_start=week_start)
 
     base = {
