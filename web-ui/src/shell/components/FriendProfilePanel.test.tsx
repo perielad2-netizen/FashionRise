@@ -97,8 +97,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
   })
 
   it('loads public profile + published looks and ignores private design counts', async () => {
-    const onBack = vi.fn()
-    render(<FriendProfilePanel friend={friend} onBack={onBack} />)
+    render(<FriendProfilePanel friend={friend} />)
 
     expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Yaniv')
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
@@ -114,14 +113,12 @@ describe('FriendProfilePanel (premium designer card)', () => {
     expect(listUserGallery).toHaveBeenCalledWith('friend-1', expect.any(AbortSignal))
     expect(await screen.findByTestId('designer-follow-btn')).toHaveTextContent(/Follow/i)
     expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('friend-profile-back'))
-    expect(onBack).toHaveBeenCalled()
+    expect(screen.queryByTestId('friend-profile-back')).not.toBeInTheDocument()
   })
 
   it('follows a designer from the profile', async () => {
     followCreator.mockResolvedValue(undefined)
-    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    render(<FriendProfilePanel friend={friend} />)
     const btn = await screen.findByTestId('designer-follow-btn')
     fireEvent.click(btn)
     await waitFor(() => expect(followCreator).toHaveBeenCalledWith('friend-1'))
@@ -130,7 +127,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
 
   it('shows an empty state when the friend has no published looks', async () => {
     listUserGallery.mockResolvedValue([])
-    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    render(<FriendProfilePanel friend={friend} />)
     expect(await screen.findByTestId('friend-looks-empty')).toHaveTextContent(
       /No published FashionRise looks/i,
     )
@@ -139,7 +136,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
 
   it('still shows identity when public profile fetch fails', async () => {
     getPublicProfile.mockRejectedValue(new Error('offline'))
-    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    render(<FriendProfilePanel friend={friend} />)
     expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Yaniv')
     await waitFor(() => expect(screen.getByTestId('friend-look-g1')).toBeInTheDocument())
   })
@@ -165,7 +162,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
       updated_at: '2026-01-01T00:00:00Z',
     })
     listUserGallery.mockResolvedValue([])
-    render(<FriendProfilePanel friend={own} onBack={vi.fn()} />)
+    render(<FriendProfilePanel friend={own} />)
 
     expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Studio Nova')
     expect(screen.queryByTestId('designer-follow-btn')).not.toBeInTheDocument()
@@ -215,12 +212,45 @@ describe('FriendProfilePanel (premium designer card)', () => {
   })
 
   it('opens a published look preview from the collection', async () => {
-    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    render(<FriendProfilePanel friend={friend} />)
     fireEvent.click(await screen.findByTestId('friend-look-g1'))
     const preview = await screen.findByTestId('designer-look-preview')
     expect(within(preview).getByRole('heading', { name: 'Public look' })).toBeInTheDocument()
     fireEvent.click(within(preview).getByRole('button', { name: 'Close look' }))
     expect(screen.queryByTestId('designer-look-preview')).not.toBeInTheDocument()
+  })
+
+  it('opens the profile photo lightbox when the avatar is clicked', async () => {
+    getPublicProfile.mockResolvedValue({
+      id: 'p1',
+      user_id: 'friend-1',
+      display_name: 'Yaniv',
+      bio: 'Public runway creator',
+      avatar_url: '/api/v1/profiles/friend-1/avatar',
+      cover_url: null,
+      style_tags: [],
+      designs_count: 1,
+      published_count: 1,
+      followers_count: 3,
+      likes_received_count: 10,
+      rating_average: 8,
+      rating_count: 2,
+      reputation_score: 40,
+      reputation_tier: 'rising',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    render(
+      <FriendProfilePanel
+        friend={{ ...friend, avatar_url: '/api/v1/profiles/friend-1/avatar' }}
+      />,
+    )
+    fireEvent.click(await screen.findByTestId('designer-avatar-open'))
+    const preview = await screen.findByTestId('designer-avatar-preview-lightbox')
+    expect(within(preview).getByRole('heading', { name: 'Yaniv' })).toBeInTheDocument()
+    expect(within(preview).getByAltText("Yaniv's profile photo")).toBeInTheDocument()
+    fireEvent.click(within(preview).getByRole('button', { name: 'Close profile photo' }))
+    expect(screen.queryByTestId('designer-avatar-preview-lightbox')).not.toBeInTheDocument()
   })
 
   it('honors startInEditMode for explicit edit entry', async () => {
@@ -244,7 +274,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
       updated_at: '2026-01-01T00:00:00Z',
     })
     listUserGallery.mockResolvedValue([])
-    render(<FriendProfilePanel friend={own} onBack={vi.fn()} startInEditMode />)
+    render(<FriendProfilePanel friend={own} startInEditMode />)
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
   })
 })

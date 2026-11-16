@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronLeft, UserMinus, UserPlus, X } from 'lucide-react'
+import { Camera, UserMinus, UserPlus, X } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
@@ -28,7 +28,6 @@ export type DesignerRef = {
 
 type Props = {
   friend: FriendUser | DesignerRef
-  onBack: () => void
   /** When true and viewing self, open the Edit Designer Card sheet once ready. */
   startInEditMode?: boolean
 }
@@ -57,7 +56,7 @@ function tierLabel(tier: string | null | undefined): string | null {
  * FashionRise designer profile — premium brand cover, follow, published collection.
  * Never loads private designs or unpublished looks.
  */
-export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: Props) {
+export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -70,6 +69,7 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
   const [cropFile, setCropFile] = useState<File | null>(null)
   const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(null)
   const [previewLook, setPreviewLook] = useState<GalleryItem | null>(null)
+  const [previewAvatar, setPreviewAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const openedEditRef = useRef(false)
   const editTitleId = useId()
@@ -85,6 +85,7 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
     setState({ status: 'loading' })
     setEditing(false)
     setPreviewLook(null)
+    setPreviewAvatar(false)
     openedEditRef.current = false
     void Promise.all([
       getPublicProfile(friend.user_id, controller.signal).catch(() => null),
@@ -242,22 +243,24 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
     </span>
   )
 
+  const heroAvatar = avatarSrc ? (
+    <button
+      type="button"
+      className={styles.avatarBtn}
+      data-testid="designer-avatar-open"
+      aria-label={`View ${displayName}'s profile photo`}
+      onClick={() => setPreviewAvatar(true)}
+    >
+      {avatarNode}
+    </button>
+  ) : (
+    avatarNode
+  )
+
   const heroTone = useMemo(() => heroToneClass(friend.user_id), [friend.user_id])
 
   return (
     <div className={styles.panel} data-testid="friend-profile-panel">
-      <div className={styles.navRow}>
-        <button
-          type="button"
-          className={styles.backBtn}
-          onClick={onBack}
-          data-testid="friend-profile-back"
-        >
-          <ChevronLeft size={18} aria-hidden />
-          Back
-        </button>
-      </div>
-
       <section className={`${styles.hero} ${heroTone}`} aria-label="Designer card">
         {coverUrl ? (
           <div
@@ -269,7 +272,7 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
         <div className={styles.heroVeil} aria-hidden />
         <div className={styles.heroBody}>
           <div className={styles.heroTop}>
-            {avatarNode}
+            {heroAvatar}
             <div className={styles.identity}>
               <h1 className={styles.displayName} data-testid="friend-profile-name">
                 {displayName}
@@ -528,6 +531,14 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
       {previewLook ? (
         <PublishedLookLightbox item={previewLook} onClose={() => setPreviewLook(null)} />
       ) : null}
+
+      {previewAvatar && avatarSrc ? (
+        <AvatarPhotoLightbox
+          src={avatarSrc}
+          name={displayName}
+          onClose={() => setPreviewAvatar(false)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -602,6 +613,49 @@ function PublishedLookLightbox({
         ) : (
           <div className={styles.lookDialogPlaceholder} aria-hidden />
         )}
+      </div>
+    </div>
+  )
+}
+
+function AvatarPhotoLightbox({
+  src,
+  name,
+  onClose,
+}: {
+  src: string
+  name: string
+  onClose: () => void
+}) {
+  const titleId = useId()
+  return (
+    <div
+      className={styles.lookBackdrop}
+      role="presentation"
+      data-testid="designer-avatar-preview-lightbox"
+      onClick={onClose}
+    >
+      <div
+        className={styles.avatarDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.lookDialogHead}>
+          <h2 id={titleId} className={styles.lookDialogTitle}>
+            {name}
+          </h2>
+          <button
+            type="button"
+            className={styles.closeIcon}
+            aria-label="Close profile photo"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <img src={src} alt={`${name}'s profile photo`} className={styles.avatarDialogImage} />
       </div>
     </div>
   )

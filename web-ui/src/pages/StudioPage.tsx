@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
@@ -92,6 +92,12 @@ export function StudioPage() {
   )
   const focusLookId = searchParams.get('look')
   const openOwnProfile = searchParams.get('profile') === 'me'
+  /** false while designer profile / Friends manage (or left runway) — keeps GlobalHeader visible. */
+  const [runwayImmersiveFeed, setRunwayImmersiveFeed] = useState(true)
+  const [runwayFeedFocusToken, setRunwayFeedFocusToken] = useState(0)
+  useEffect(() => {
+    if (view !== 'runway') setRunwayImmersiveFeed(true)
+  }, [view])
   const clearFocusLook = useCallback(() => {
     if (!searchParams.has('look')) return
     const next = new URLSearchParams(searchParams)
@@ -107,6 +113,11 @@ export function StudioPage() {
   const openMyProfile = useCallback(() => {
     navigate(RUNWAY_MY_PROFILE_PATH)
   }, [navigate])
+  const focusRunwayFeed = useCallback(() => {
+    setRunwayImmersiveFeed(true)
+    setRunwayFeedFocusToken((n) => n + 1)
+    navigate(RUNWAY_PATH)
+  }, [navigate])
 
   const currentNav: NavDestination = useMemo(() => {
     if (view === 'home') return 'home'
@@ -118,8 +129,23 @@ export function StudioPage() {
     return 'create'
   }, [view])
 
+  const onShellNavigate = useCallback(
+    (destination: NavDestination) => {
+      if (destination === 'runway') {
+        focusRunwayFeed()
+        return
+      }
+      onNavigate(destination)
+    },
+    [focusRunwayFeed, onNavigate],
+  )
+
   if (view === null) return <Navigate to={HOME_PATH} replace />
   if (path === FASHION_STARS_PATH) return <Navigate to={RUNWAY_PATH} replace />
+
+  // Full-bleed immersive chrome is the endless feed only. Profile, Friends,
+  // and every other studio page keep the shared GlobalHeader + nav drawer.
+  const immersive = view === 'runway' && runwayImmersiveFeed
 
   return (
     <div className={`${styles.page} studioShellRoot studio-chrome`}>
@@ -128,21 +154,23 @@ export function StudioPage() {
         onLogout={editor.onLogout}
         onComingSoon={editor.showComingSoon}
         currentNav={currentNav}
-        onNavigate={onNavigate}
+        onNavigate={onShellNavigate}
         onOpenProfile={openMyProfile}
-        immersive={view === 'runway'}
+        immersive={immersive}
       >
         {view === 'home' ? (
           <HomeScreen
             username={editor.user?.username ?? 'Creator'}
-            onNavigate={onNavigate}
+            onNavigate={onShellNavigate}
           />
         ) : view === 'runway' ? (
           <RunwayScreen
-            onOpenCreate={() => onNavigate('create')}
-            onOpenLooks={() => onNavigate('looks')}
+            onOpenCreate={() => onShellNavigate('create')}
+            onOpenLooks={() => onShellNavigate('looks')}
             openOwnProfile={openOwnProfile}
             onOwnProfileConsumed={clearOwnProfileParam}
+            onImmersiveFeedChange={setRunwayImmersiveFeed}
+            feedFocusToken={runwayFeedFocusToken}
           />
         ) : view === 'library' && editor.user?.id ? (
           <MyDesignsScreen
