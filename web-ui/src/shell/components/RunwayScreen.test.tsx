@@ -186,7 +186,9 @@ describe('RunwayScreen', () => {
     getPublicProfile.mockReset()
     getFollowStatus.mockReset()
     followCreator.mockReset()
+    followCreator.mockResolvedValue(undefined)
     unfollowCreator.mockReset()
+    unfollowCreator.mockResolvedValue(undefined)
     updateMyProfile.mockReset()
     removeFriend.mockReset()
     enableRunwayPush.mockReset()
@@ -233,6 +235,85 @@ describe('RunwayScreen', () => {
       following_count: 0,
       reputation_score: 0,
     }))
+  })
+
+  it('keeps Follow in sync across looks from the same designer', async () => {
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          this.cb(
+            [
+              {
+                isIntersecting: true,
+                intersectionRatio: 1,
+                target: el,
+              } as IntersectionObserverEntry,
+            ],
+            this as unknown as IntersectionObserver,
+          )
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
+
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'look-a1',
+            title: 'Look A1',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+          {
+            ...circleItem,
+            id: 'look-a2',
+            title: 'Look A2',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+        ]
+      }
+      return []
+    })
+    getFollowStatus.mockResolvedValue({ user_id: 'creator-a', following: false })
+
+    try {
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      const buttons = await screen.findAllByTestId('runway-follow-creator-a')
+      expect(buttons).toHaveLength(2)
+      await waitFor(() => expect(buttons[0]).not.toBeDisabled())
+      expect(buttons[0]).toHaveTextContent('Follow')
+      expect(buttons[1]).toHaveTextContent('Follow')
+
+      fireEvent.click(buttons[0])
+      await waitFor(() => expect(followCreator).toHaveBeenCalledWith('creator-a'))
+      await waitFor(() => {
+        const synced = screen.getAllByTestId('runway-follow-creator-a')
+        expect(synced[0]).toHaveTextContent('Following')
+        expect(synced[1]).toHaveTextContent('Following')
+        expect(synced[0]).toHaveAttribute('aria-pressed', 'true')
+        expect(synced[1]).toHaveAttribute('aria-pressed', 'true')
+      })
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
   })
 
   it('scopes Follow cache by viewer+designer so account switches do not leak state', async () => {

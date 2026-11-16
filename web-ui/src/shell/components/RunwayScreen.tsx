@@ -98,18 +98,51 @@ const DISCOVER_PAGE_SIZE = 24
 
 /** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
 const followStatusCache = new Map<string, boolean>()
+const followStatusListeners = new Map<string, Set<(following: boolean) => void>>()
 
 export function followStatusCacheKey(viewerId: string, designerId: string): string {
   return `${viewerId}:${designerId}`
+}
+
+function publishFollowStatus(cacheKey: string, following: boolean) {
+  followStatusCache.set(cacheKey, following)
+  const listeners = followStatusListeners.get(cacheKey)
+  if (!listeners) return
+  for (const listener of listeners) listener(following)
+}
+
+function subscribeFollowStatus(
+  cacheKey: string,
+  listener: (following: boolean) => void,
+): () => void {
+  let bucket = followStatusListeners.get(cacheKey)
+  if (!bucket) {
+    bucket = new Set()
+    followStatusListeners.set(cacheKey, bucket)
+  }
+  bucket.add(listener)
+  return () => {
+    bucket?.delete(listener)
+    if (bucket && bucket.size === 0) followStatusListeners.delete(cacheKey)
+  }
+}
+
+/** Apply a server Follow status only when the session cache is still empty. */
+function applyFetchedFollowStatus(cacheKey: string, following: boolean): boolean {
+  const existing = followStatusCache.get(cacheKey)
+  if (existing !== undefined) return existing
+  publishFollowStatus(cacheKey, following)
+  return following
 }
 
 /** Test-only helpers for account-switch Follow cache coverage. */
 export const __followStatusCacheTestUtils = {
   clear() {
     followStatusCache.clear()
+    followStatusListeners.clear()
   },
   set(viewerId: string, designerId: string, following: boolean) {
-    followStatusCache.set(followStatusCacheKey(viewerId, designerId), following)
+    publishFollowStatus(followStatusCacheKey(viewerId, designerId), following)
   },
   get(viewerId: string, designerId: string): boolean | undefined {
     return followStatusCache.get(followStatusCacheKey(viewerId, designerId))
@@ -1320,24 +1353,38 @@ function RunwayCard({
     if (cached !== undefined) {
       setFollowingDesigner(cached)
       setFollowKnown(true)
-      return
     }
+
+    // Keep every card for this designer in sync after Follow/Unfollow on another look.
+    const unsubscribe = subscribeFollowStatus(cacheKey, (following) => {
+      setFollowingDesigner(following)
+      setFollowKnown(true)
+    })
+
+    if (cached !== undefined) {
+      return unsubscribe
+    }
+
+    const applyRow = (row: { following?: boolean }) => {
+      const next = applyFetchedFollowStatus(cacheKey, Boolean(row.following))
+      setFollowingDesigner(next)
+      setFollowKnown(true)
+    }
+
     const node = cardRef.current
     if (!node || typeof IntersectionObserver === 'undefined') {
       let cancelled = false
       void getFollowStatus(item.user_id)
         .then((row) => {
           if (cancelled) return
-          const next = Boolean(row.following)
-          followStatusCache.set(cacheKey, next)
-          setFollowingDesigner(next)
-          setFollowKnown(true)
+          applyRow(row)
         })
         .catch(() => {
           if (!cancelled) setFollowKnown(true)
         })
       return () => {
         cancelled = true
+        unsubscribe()
       }
     }
     let cancelled = false
@@ -1347,13 +1394,17 @@ function RunwayCard({
           return
         }
         observer.disconnect()
+        // Prefer session cache if another card already followed while we waited.
+        const latest = followStatusCache.get(cacheKey)
+        if (latest !== undefined) {
+          setFollowingDesigner(latest)
+          setFollowKnown(true)
+          return
+        }
         void getFollowStatus(item.user_id)
           .then((row) => {
             if (cancelled) return
-            const next = Boolean(row.following)
-            followStatusCache.set(cacheKey, next)
-            setFollowingDesigner(next)
-            setFollowKnown(true)
+            applyRow(row)
           })
           .catch(() => {
             if (!cancelled) setFollowKnown(true)
@@ -1365,6 +1416,7 @@ function RunwayCard({
     return () => {
       cancelled = true
       observer.disconnect()
+      unsubscribe()
     }
   }, [immersive, isOwn, item.user_id, viewerId])
 
@@ -1461,15 +1513,13 @@ function RunwayCard({
     setActionError(null)
     const prev = followingDesigner
     const cacheKey = followStatusCacheKey(viewerId, item.user_id)
-    setFollowingDesigner(!prev)
-    followStatusCache.set(cacheKey, !prev)
+    publishFollowStatus(cacheKey, !prev)
     try {
       if (prev) await unfollowCreator(item.user_id)
       else await followCreator(item.user_id)
       setFollowKnown(true)
     } catch (err) {
-      setFollowingDesigner(prev)
-      followStatusCache.set(cacheKey, prev)
+      publishFollowStatus(cacheKey, prev)
       setActionError(err instanceof ApiError ? err.message : 'Could not update follow.')
     } finally {
       setBusy(null)
