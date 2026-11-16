@@ -3,15 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Preview — My Models Mobbin + croquis crop fixes (2026-11-16 22:35 Asia/Jerusalem)
+## Preview — Fitting Room Mobbin polish (2026-11-16 22:55 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-my-models-mobbin-polish-77c6` |
-| Preview | https://fashionrise.app/preview-models/ |
-| Change | Image-first My Models tiles; Profile Looks + FashionRise immersive `object-fit: contain` (no head/feet cut) |
-| Prod | Unchanged — tip remains Looks LIVE until approve |
-| Series | Next after approve: Fitting → Create |
+| Branch | `cursor/web-fitting-room-mobbin-polish-77c6` |
+| Preview | https://fashionrise.app/preview-fitting/ |
+| Change | Brand-first Fitting Room header, pink CTAs, image-first outfit/saved tiles |
+| Prod | Unchanged — tip remains Models LIVE until approve |
+| Series | Next after approve: Create |
+
+## Deployed — My Models Mobbin + croquis crop fixes LIVE (2026-11-16 22:50 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#388** merged → `main` @ **`bace650e`** |
+| Tip | FE **`bace650e`** · `/var/www/fashionrise/releases/bace650e-my-models-mobbin-polish` |
+| Change | My Models image-first tiles (no name/Publish); Profile Looks + FashionRise immersive `object-fit: contain` |
+| Preview | `/preview-models/` removed after promote |
+| Series | Continuing: Fitting → Create |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/38e52ab3-my-looks-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — My Looks Mobbin redesign LIVE (2026-11-16 22:28 Asia/Jerusalem)
 
