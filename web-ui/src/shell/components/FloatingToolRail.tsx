@@ -1,13 +1,11 @@
-import {
-  Eraser,
-  PaintBucket,
-  Pencil,
-  Pipette,
-  Redo2,
-  Trash2,
-  Undo2,
-} from 'lucide-react'
+import { Redo2, Trash2, Undo2 } from 'lucide-react'
 import type { ToolKind } from '@/lib/strokes'
+import {
+  EraserToolIcon,
+  EyedropperToolIcon,
+  FillToolIcon,
+  PenToolIcon,
+} from '@/shell/components/StudioToolIcons'
 import styles from './FloatingToolRail.module.css'
 
 type Props = {
@@ -55,7 +53,7 @@ export function FloatingToolRail({
         title="Pencil"
         onClick={() => onTool('draw')}
       >
-        <Pencil size={18} strokeWidth={1.75} />
+        <PenToolIcon size={20} />
       </button>
       <button
         type="button"
@@ -65,7 +63,7 @@ export function FloatingToolRail({
         title="Eraser"
         onClick={() => onTool('erase')}
       >
-        <Eraser size={18} strokeWidth={1.75} />
+        <EraserToolIcon size={20} />
       </button>
       <button
         type="button"
@@ -75,7 +73,7 @@ export function FloatingToolRail({
         title="Fill a closed outline"
         onClick={() => onTool('fill')}
       >
-        <PaintBucket size={18} strokeWidth={1.75} />
+        <FillToolIcon size={20} />
       </button>
       {showCloseSmallGaps && onCloseSmallGaps ? (
         <button
@@ -98,7 +96,7 @@ export function FloatingToolRail({
         title="Sample a color from your sketch"
         onClick={() => onTool('eyedropper')}
       >
-        <Pipette size={18} strokeWidth={1.75} />
+        <EyedropperToolIcon size={20} />
       </button>
       <div className={styles.sep} aria-hidden />
       <button

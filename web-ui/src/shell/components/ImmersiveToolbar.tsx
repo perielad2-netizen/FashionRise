@@ -2,13 +2,9 @@ import { useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   ChevronUp,
-  Eraser,
   Hand,
   Maximize2,
   Minimize2,
-  PaintBucket,
-  Pencil,
-  Pipette,
   Redo2,
   Trash2,
   Undo2,
@@ -22,6 +18,12 @@ import {
   BrushKindStrip,
   brushKindShortLabel,
 } from '@/shell/components/BrushKindStrip'
+import {
+  EraserToolIcon,
+  EyedropperToolIcon,
+  FillToolIcon,
+  PenToolIcon,
+} from '@/shell/components/StudioToolIcons'
 import styles from './ImmersiveToolbar.module.css'
 
 export type ImmersiveTool = ToolKind | 'pan'
@@ -107,13 +109,13 @@ export function ImmersiveToolbar({
         <div className={`${styles.row} ${styles.rowPrimary}`}>
           <div className={styles.cluster} role="group" aria-label="Drawing tools">
             <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-              <Pencil size={18} strokeWidth={1.75} />
+              <PenToolIcon size={20} />
             </ToolBtn>
             <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-              <Eraser size={18} strokeWidth={1.75} />
+              <EraserToolIcon size={20} />
             </ToolBtn>
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-              <PaintBucket size={18} strokeWidth={1.75} />
+              <FillToolIcon size={20} />
             </ToolBtn>
             <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
               <Hand size={18} strokeWidth={1.75} />
@@ -176,16 +178,16 @@ export function ImmersiveToolbar({
       <div className={`${styles.row} ${styles.rowPrimary}`}>
         <div className={styles.cluster} role="group" aria-label="Drawing tools">
           <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-            <Pencil size={18} strokeWidth={1.75} />
+            <PenToolIcon size={20} />
           </ToolBtn>
           <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-            <Eraser size={18} strokeWidth={1.75} />
+            <EraserToolIcon size={20} />
           </ToolBtn>
           <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-            <PaintBucket size={18} strokeWidth={1.75} />
+            <FillToolIcon size={20} />
           </ToolBtn>
           <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
-            <Pipette size={18} strokeWidth={1.75} />
+            <EyedropperToolIcon size={20} />
           </ToolBtn>
           <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
             <Hand size={18} strokeWidth={1.75} />
