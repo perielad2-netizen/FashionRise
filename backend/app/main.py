@@ -98,6 +98,27 @@ async def _ai_worker_loop(stop: asyncio.Event, poll_interval: float, batch_size:
             db.close()
 
 
+async def _competition_tick_loop(stop: asyncio.Event, interval_seconds: float) -> None:
+    """Settle previous weekly competitions without weekly app releases or manual ops."""
+    from app.db.session import SessionLocal
+    from app.services.competition_awards import tick_competitions
+
+    while not stop.is_set():
+        db = SessionLocal()
+        try:
+            tick_competitions(db)
+            db.commit()
+        except Exception:
+            _log.exception("competition tick failed")
+            db.rollback()
+        finally:
+            db.close()
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
+        except asyncio.TimeoutError:
+            continue
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     run_seed_if_configured()
@@ -105,18 +126,27 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     stop = asyncio.Event()
     worker_task: asyncio.Task[None] | None = None
+    competition_task: asyncio.Task[None] | None = None
     if settings.ai_worker_enabled:
         interval = max(0.5, float(settings.ai_worker_poll_interval_seconds))
         worker_task = asyncio.create_task(
             _ai_worker_loop(stop, interval, max(1, int(settings.ai_worker_batch_size))),
             name="fashionrise_ai_worker",
         )
+    # Quiet background settle — every 15 minutes is enough for Sunday rollover.
+    # Skip under TESTING so TestClient lifespan never opens SessionLocal against app DB.
+    if not settings.testing:
+        competition_task = asyncio.create_task(
+            _competition_tick_loop(stop, 900.0),
+            name="fashionrise_competition_tick",
+        )
     yield
     stop.set()
-    if worker_task is not None:
-        worker_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await worker_task
+    for task in (worker_task, competition_task):
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 def _install_cloudflare_access_middleware(app: FastAPI, settings) -> None:

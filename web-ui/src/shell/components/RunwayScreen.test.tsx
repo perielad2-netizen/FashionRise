@@ -45,6 +45,45 @@ vi.mock('@/services/profilesApi', () => ({
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
 }))
 
+vi.mock('@/services/competitionsApi', () => ({
+  fetchCompetitionStatus: vi.fn(async () => ({
+    week_start: '2026-11-15T00:00:00+00:00',
+    week_end: '2026-11-22T00:00:00+00:00',
+    week_key: '2026-11-15',
+    status: 'open',
+    days_remaining: 3,
+    seconds_remaining: 259200,
+    group_count: 1,
+    standing: null,
+    top_designs: [],
+    top_designers: [],
+    award_categories: [{ id: 'top_design', label: 'Top Design', stars: 50 }],
+    runway_note: 'Worldwide Runway stays global',
+    publish_note: 'Publish anytime',
+  })),
+  fetchCompetitionAwards: vi.fn(async () => []),
+  fetchStreakStatus: vi.fn(async () => ({
+    current_streak: 1,
+    last_checkin_date: '2026-11-16',
+    lifetime_checkins: 1,
+    days_until_reward: 6,
+    rewarded_this_checkin: false,
+    stars_awarded: 0,
+    reward_every_days: 7,
+    reward_stars: 10,
+  })),
+  postStreakCheckIn: vi.fn(async () => ({
+    current_streak: 1,
+    last_checkin_date: '2026-11-16',
+    lifetime_checkins: 1,
+    days_until_reward: 6,
+    rewarded_this_checkin: false,
+    stars_awarded: 0,
+    reward_every_days: 7,
+    reward_stars: 10,
+  })),
+}))
+
 vi.mock('@/services/friendsApi', () => ({
   listFriends: (...args: unknown[]) => listFriends(...args),
   listFriendRequests: (...args: unknown[]) => listFriendRequests(...args),

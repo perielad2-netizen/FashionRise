@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.routes import (
     ai_routes,
     auth,
+    competitions,
     designs,
     exports,
     fabrics,
@@ -32,6 +33,9 @@ api_router.include_router(templates.router, prefix="/templates", tags=["template
 api_router.include_router(palettes.router, prefix="/palettes", tags=["palettes"])
 api_router.include_router(gallery.router, prefix="/gallery", tags=["gallery"])
 api_router.include_router(ratings.router, prefix="/ratings", tags=["ratings"])
+api_router.include_router(
+    competitions.router, prefix="/competitions", tags=["competitions"]
+)
 api_router.include_router(push.router, prefix="/push", tags=["push"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
