@@ -12,6 +12,14 @@
 | Change | Image-first Look Details sheet, circular action icons, pink-glass Create Real Design CTA |
 | Prod | Unchanged until approve |
 
+## Deployed — Profile followers nginx allowlist LIVE (2026-11-17 00:20 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Nginx allowlist `GET /api/v1/profiles/{id}/followers` + `/following` (was 403 → generic sketch error in Followers sheet) |
+| Config | `/etc/nginx/sites-available/fashionrise.app` · docs `PROPOSED-NGINX-PROFILE-FOLLOWERS-ALLOWLIST.md` |
+| Verify | Public `https://fashionrise.app/api/v1/profiles/…/followers` → **200** |
+
 ## Deployed — Social feed sync + Runway boards LIVE (2026-11-17 00:13 Asia/Jerusalem)
 
 | Field | Value |
