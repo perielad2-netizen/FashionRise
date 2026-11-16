@@ -72,6 +72,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Fitting Room / Create Model: HTML file input capture="environment" → system camera. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Android 13+ notification permission (requested at runtime after auth). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

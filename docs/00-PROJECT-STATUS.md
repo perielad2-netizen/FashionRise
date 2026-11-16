@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Brush size preview contrast** — FE tip `e75ad0c3` live.)
+**Last updated:** 2026-11-16 (**Fitting Room camera + gallery** — FE tip pending this turn.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,15 +12,15 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (`e75ad0c3+`); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (Fitting Room camera tip+); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
-| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm on `main` · FE tip **`e75ad0c3`** · BE `FITTING_ROOM_*` **ON** on VPS. |
+| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** for person/clothing · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh Brush sheet · drag Size with a light/gold color · confirm tip+stripe read clearly · Android build from `main`.
+**Exact next step:** Hard-refresh Fitting Room · confirm Take photo / Take clothing photo open camera · rebuild Android from `main` for CAMERA permission.
 
 ## Studio polish — brush size preview contrast (2026-11-16) — tip LIVE / #344
 
@@ -125,7 +125,7 @@
 | Stars | Flat **20** per successful try-on · Magic-style **`AiSpendConfirmDialog`** before enqueue · pink **Try on** / **Retry** labels have **no −20 text** · no charge on failure · no “−20 on success” generating copy |
 | FE flags | `isFittingRoomUiEnabled()` defaults **ON** when unset · `.env.native` + `.env.production.example` set `VITE_FITTING_ROOM_UI_ENABLED=true` |
 | BE flags (repo) | `FITTING_ROOM_*` remain fail-closed **OFF** in code defaults; **ON** only via VPS `.env` |
-| Key UX locks | Choose photo (gallery/files — **no** forced camera) · no Left/Right compare slots · Saved: Download / Share / Delete · no Back to Studio · no header concept/Stars cost note |
+| Key UX locks | Person + clothing: **gallery or camera** (not camera-only) · no Left/Right compare slots · Saved: Download / Share / Delete · no Back to Studio · no header concept/Stars cost note |
 | Quality path | OpenAI try-on first · moderation / blocked → silent **FASHN Try-On Max** (quality·2k, preserve skin, ignore props) especially swimwear/lingerie · v1.6 fallback |
 | Core code | BE `backend/app/services/fitting_room.py` + routes/schemas/worker · FE `FittingRoomScreen.tsx` · `fittingRoomStore` · `fittingRoomApi` · `fittingRoomUi.ts` |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/adf65fde-fitting-room-stars-confirm /var/www/fashionrise/current && nginx -t && systemctl reload nginx` (or earlier `b69ffb25-looks-magic-top-clip-331` if Fitting Room must be absent) |

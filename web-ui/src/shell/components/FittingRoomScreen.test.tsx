@@ -106,6 +106,17 @@ describe('FittingRoomScreen', () => {
     expect(tryBtn).toBeDisabled()
   })
 
+  it('offers gallery and camera pickers for person photo and clothing', async () => {
+    render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
+    await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
+    expect(screen.getByTestId('fitting-room-person-gallery')).toHaveTextContent(/Choose photo/i)
+    expect(screen.getByTestId('fitting-room-person-take')).toHaveTextContent(/Take photo/i)
+    expect(screen.getByTestId('fitting-room-garment-gallery')).toHaveTextContent(/Add clothing/i)
+    expect(screen.getByTestId('fitting-room-garment-take')).toHaveTextContent(/Take clothing photo/i)
+    expect(screen.getByTestId('fitting-room-person-camera')).toHaveAttribute('capture', 'environment')
+    expect(screen.getByTestId('fitting-room-garment-camera')).toHaveAttribute('capture', 'environment')
+  })
+
   it('opens Stars confirm dialog before enqueueing try-on', async () => {
     mocks.readFittingRoomAsset.mockResolvedValue({
       key: 'u1:person',
