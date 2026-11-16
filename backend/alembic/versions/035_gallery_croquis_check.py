@@ -11,12 +11,17 @@ publish, but left ``ck_gallery_items_design_or_look`` requiring ``design_id`` or
 
 Replace the check so a gallery item must have at least one of
 ``design_id``, ``look_id``, or ``croquis_id``.
+
+Downgrade is **non-destructive**: if any gallery row depends exclusively on
+``croquis_id`` (no ``design_id`` / ``look_id``), refuse with ``RuntimeError``
+rather than deleting published My Models or related engagement.
 """
 
 from __future__ import annotations
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "035"
@@ -35,8 +40,29 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Rows that only have croquis_id cannot satisfy the pre-035 check.
-    op.execute("DELETE FROM gallery_items WHERE design_id IS NULL AND look_id IS NULL")
+    """Restore the pre-035 check only when no croquis-only gallery rows exist."""
+    bind = op.get_bind()
+    croquis_only = bind.execute(
+        sa.text(
+            """
+            SELECT COUNT(*) FROM gallery_items
+            WHERE croquis_id IS NOT NULL
+              AND design_id IS NULL
+              AND look_id IS NULL
+            """
+        )
+    ).scalar()
+    croquis_only = int(croquis_only or 0)
+    if croquis_only > 0:
+        raise RuntimeError(
+            "Refusing Alembic downgrade 035 → 034: "
+            f"{croquis_only} gallery_items row(s) depend exclusively on croquis_id "
+            "(published My Models). Automatic DELETE is forbidden — it would destroy "
+            "valid gallery rows and associated likes/comments/ratings/impressions/"
+            "public images. Downgrade requires an explicit, separately authorized "
+            "data migration before restoring ck_gallery_items_design_or_look."
+        )
+
     op.drop_constraint(
         "ck_gallery_items_design_look_or_croquis", "gallery_items", type_="check"
     )

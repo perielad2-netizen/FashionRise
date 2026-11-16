@@ -1,17 +1,15 @@
-"""035 — croquis-only gallery rows must satisfy the DB check on Alembic heads."""
+"""Model-level check for croquis-only gallery rows (create_all harness).
+
+The authoritative Alembic upgrade/downgrade regression lives in
+``test_alembic_035_gallery_croquis_check.py``.
+"""
 
 from __future__ import annotations
-
-import uuid
 
 from sqlalchemy import text
 
 
-def test_alembic_head_allows_croquis_only_gallery_row(db_session):
-    """create_all now mirrors 035; insert croquis-only row without design/look."""
-    # Minimal FK-free path: use a fake croquis UUID only if FK is deferred — skip if
-    # personal_croquis FK blocks. Prefer an accepted croquis from the publish suite
-    # pattern when available; here we assert the CHECK text on the live table.
+def test_create_all_model_check_allows_croquis(db_session):
     row = db_session.execute(
         text(
             """
@@ -21,7 +19,6 @@ def test_alembic_head_allows_croquis_only_gallery_row(db_session):
             """
         )
     ).scalar()
-    # On create_all test DBs the model CheckConstraint is present.
     assert row is not None
     assert "croquis_id" in row
     assert "design_id" in row

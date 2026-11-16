@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**#356** @ **`bd315691`** · docs **#357** @ **`29e426eb`** · disposable local Social validation **PASS** · Alembic fix **035** open for PM · **production NOT deployed** · reward flags **FALSE**.)
+**Last updated:** 2026-11-16 (**#356** @ **`bd315691`** · docs **#357** @ **`29e426eb`** · disposable Social validation **PASS** · **#358** Alembic **035** amended (non-destructive downgrade) · **HOLD MERGE for PM re-approval** · **production NOT deployed** · reward flags **FALSE**.)
 
-**Phase:** FashionRise Social **merged + disposable-isolated validation complete; production hold**. Feature/safety on `main`; My Models croquis-check fix (**035**) awaiting PM merge. Production still NO-GO.
+**Phase:** FashionRise Social **merged + disposable validation PASS; 035 croquis-check PR amended; production hold**. Awaiting PM re-approval of #358. Production still NO-GO.
 
 ## FashionRise Social — scope & progress
 
@@ -18,13 +18,13 @@
 | **Docs** | Social readiness plan after #354 | **Merged** — #355 → `main` @ **`82e93008`** |
 | **Safety** | Durable public My Models cleanup + explicit Stars reward gates (weekly + streak) · symlink/quarantine/streak-boundary amend | **Merged** — #356 → `main` @ **`bd315691`** · tip `ab891ce0` · Alembic **034** · **not deployed** |
 | **Docs status** | #356 merge + VPS staging-isolation STOP | **Merged** — #357 → `main` @ **`29e426eb`** |
-| **035 fix** | Gallery check allows croquis-only My Models rows (Alembic-migrated DBs) | **Open for PM** — do **not** auto-merge · head becomes **035** |
+| **035 fix** | Gallery check allows croquis-only My Models rows · **non-destructive downgrade** (refuse if croquis-only rows exist) | **#358 PM re-review** — HOLD MERGE · revision stays **035** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** PM review/merge Alembic **035** (My Models check). Then separate PM production authorization (backup → migrate through **035** → BE/FE with reward flags FALSE). **No VPS/prod changes until then.**
+**Exact next step:** PM **re-approve** amended **#358** (non-destructive 035 downgrade). Then merge → separate PM production authorization (backup → migrate through **035** → BE/FE with reward flags FALSE). **No VPS/prod changes until then.**
 
 ## Release roadmap (source of truth)
 
@@ -52,12 +52,14 @@
 | Alembic empty→034 | **PASS** then upgraded to **035** after croquis-check finding |
 | Alembic 030→034 (synthetic legacy) | **PASS** (legacy user/gallery survived) then **035** |
 | Finding | Migrated DBs kept `ck_gallery_items_design_or_look` (design\|look only) after #033 added `croquis_id` — My Models publish failed on real Alembic DBs (create_all tests missed it) |
-| Fix | Alembic **035** replaces check with design\|look\|**croquis** · model CheckConstraint aligned · focused tests updated · **open PR for PM (not auto-merged)** |
+| Fix | Alembic **035** replaces check with design\|look\|**croquis** · model CheckConstraint aligned · **#358** |
+| 035 downgrade (amended) | **Non-destructive:** if any gallery row is croquis-only, raise `RuntimeError` and stay on **035** — never auto-DELETE gallery/likes/comments/ratings/impressions/public images. Empty incompatible set → restore original check safely. Upgrade 034→035 unchanged. |
+| Alembic-path regression | Disposable PG `fashionrise_disp_035_qa`: 034→035 insert croquis-only + look-only · 035→034 refuses with croquis-only present (content preserved) · downgrade succeeds after authorized test cleanup — **PASS** |
 | BE/FE smoke | Register/login · profile edit · publish looks · Discover · Following · Friends circle · Top · competition group · My Models publish/erase · unpublish · account delete · FE home load — **PASS** |
 | Cleanup / quarantine | Simulated unlink FAIL then retry SUCCESS · quarantine stays `quarantined` (not done) · private croquis retained · valid model key removed |
 | Competition / streak | Explicit `tick_competitions` ×2 + streak check-in · **0** `star_payouts` · streak `rewards_enabled=false` · `stars_awarded=0` |
-| Disposable cleanup | DBs dropped · storage/secrets removed · ports freed · **no VPS touch** |
-| Verdict | Disposable Social stack **validated**. **Production remains NO-GO** pending PM merge of **035** + separate prod authorize. |
+| Disposable cleanup | Prior social DBs dropped · 035 path test DB may remain local-only · **no VPS touch** |
+| Verdict | Disposable Social stack **validated**. **Production remains NO-GO** pending PM re-approval/merge of amended **#358** + separate prod authorize. |
 
 ## FashionRise Social — #356 MERGED + staging isolation STOP (2026-11-16)
 
@@ -85,8 +87,8 @@
 | Cleanup retry / quarantine | Disposable local **PASS** |
 | Weekly / streak rewards | Confirmed **FALSE** / empty · **0** payouts |
 | Production backup / rollback | Documented · **not executed** |
-| Remaining issues | Alembic **035** must land before prod migrate · prod still Alembic **030** |
-| Verdict | **NO-GO for production.** Disposable validation PASS. Merge **035**, then separate PM prod authorize. |
+| Remaining issues | Amended **#358** (035) must PM re-approve + merge before prod migrate · prod still Alembic **030** |
+| Verdict | **NO-GO for production.** Disposable validation PASS. Re-approve/merge **#358**, then separate PM prod authorize. |
 
 ### Exact proposed production rollout order (only after 035 merge + separate PM OK)
 1. Production DB backup (`deploy/backup_postgres.sh` / `pg_dump` of `fashionrise_beta`)
@@ -181,7 +183,7 @@ Covers merged **#349 / #352 / #353 / #354** (+ docs #355). **Separate PM authori
 1. ~~PM merge production-safety PR~~ **DONE** — #356 @ **`bd315691`**
 2. ~~Docs #357~~ **DONE** @ **`29e426eb`**
 3. ~~Disposable isolated Social validation~~ **DONE** (local) — found/fixed croquis gallery check as **035**
-4. **PM merge Alembic 035** (focused PR; do not auto-merge)
+4. **PM re-approve + merge amended #358** (Alembic **035** non-destructive downgrade; do not auto-merge)
 5. Separate PM authorization for production activation (migrations through **035** + BE/FE); keep live Stars OFF until a further OK
 
 ## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — MERGED / #354
