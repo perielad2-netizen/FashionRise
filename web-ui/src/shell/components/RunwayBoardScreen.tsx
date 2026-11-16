@@ -148,7 +148,8 @@ export function RunwayBoardScreen() {
       try {
         const status = await fetchCompetitionStatus()
         if (ac.signal.aborted) return
-        setDaysLeft(typeof status.days_remaining === 'number' ? status.days_remaining : null)
+        const raw = status.days_remaining
+        setDaysLeft(typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.ceil(raw)) : null)
       } catch {
         if (!ac.signal.aborted) setDaysLeft(null)
       }
@@ -209,8 +210,12 @@ export function RunwayBoardScreen() {
           <p className={styles.eyebrow}>Competitions & rankings</p>
           {daysLeft != null ? (
             <p className={styles.weekChip} data-testid="runway-week-chip">
-              <Trophy size={12} aria-hidden />
-              {daysLeft === 0 ? 'Ends today' : `${daysLeft}d left this week`}
+              <Trophy size={14} aria-hidden />
+              {daysLeft === 0
+                ? 'Ends today'
+                : daysLeft === 1
+                  ? '1 day left this week'
+                  : `${daysLeft} days left this week`}
             </p>
           ) : null}
         </div>
