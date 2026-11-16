@@ -840,7 +840,9 @@ export function RunwayScreen({
               <div className={styles.friendsTitleBlock}>
                 <p className={styles.friendsEyebrow}>FashionRise</p>
                 <h1 className={styles.friendsTitle}>Friends</h1>
-                <p className={styles.friendsLead}>Add people by username and keep your circle close.</p>
+                <p className={styles.friendsLead}>
+                  Find designers by username, accept requests, and keep your circle close.
+                </p>
               </div>
             </header>
             <FriendsPanel
@@ -1279,19 +1281,20 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.requests.map((row) => {
                   const label = row.friend.display_name || row.friend.username
-                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
-                    <li key={row.id} className={styles.friendCard}>
-                      <span className={styles.friendAvatar} aria-hidden>
-                        {initial}
-                      </span>
+                    <li key={row.id} className={`${styles.friendCard} ${styles.friendCardRequest}`}>
+                      <DesignerAvatar
+                        userId={row.friend.user_id}
+                        label={label}
+                        avatarUrl={row.friend.avatar_url}
+                      />
                       <div className={styles.friendText}>
                         <strong>{label}</strong>
                         <span>@{row.friend.username}</span>
                       </div>
                       <button
                         type="button"
-                        className={styles.addFriendSubmit}
+                        className={styles.friendAccept}
                         disabled={busy}
                         onClick={() => onAccept(row.id)}
                       >
@@ -1318,7 +1321,6 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.friends.map((row) => {
                   const label = row.friend.display_name || row.friend.username
-                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
                     <li key={row.id} className={styles.friendCard}>
                       <button
@@ -1334,9 +1336,11 @@ function FriendsPanel({
                           })
                         }
                       >
-                        <span className={styles.friendAvatar} aria-hidden>
-                          {initial}
-                        </span>
+                        <DesignerAvatar
+                          userId={row.friend.user_id}
+                          label={label}
+                          avatarUrl={row.friend.avatar_url}
+                        />
                         <span className={styles.friendText}>
                           <strong>{label}</strong>
                           <span>@{row.friend.username}</span>
