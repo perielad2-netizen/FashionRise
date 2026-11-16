@@ -40,23 +40,9 @@
 .chromeTop {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   min-height: 36px;
-}
-
-.modeLabel {
-  /* Reels-style brand mark on the immersive feed (not a filter tab). */
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-family: var(--fr-font-display, Georgia, 'Times New Roman', serif);
-  font-size: 1.28rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: #fff;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
 }
 
 .chromeActions {

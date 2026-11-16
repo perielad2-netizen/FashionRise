@@ -671,7 +671,6 @@ export function RunwayScreen({
           FashionRise
         </h1>
         <div className={styles.chromeTop}>
-          <p className={styles.modeLabel}>FashionRise</p>
           <div className={styles.chromeActions}>
             <button
               type="button"
