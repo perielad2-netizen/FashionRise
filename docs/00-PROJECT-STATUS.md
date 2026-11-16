@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Runway category profile boards (2026-11-16 20:46 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Tip | BE+FE **`ff2ed43e`** · FE `/var/www/fashionrise/releases/ff2ed43e-runway-category-boards` |
+| Change | Weekly category chips open live **profile leaderboards** (`GET /competitions/categories/{id}/board`) · Runway visual polish |
+| Nginx | Category board path allowlisted |
+| Empty state | Board shows “No scores yet…” until week engagement accumulates |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/5d076e1c-runway-cats-crop /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 5d076e1c && systemctl restart fashionrise-api` |
+
 ## Deployed — Runway weekly categories + thumb crop (2026-11-16 20:38 Asia/Jerusalem)
 
 | Field | Value |
@@ -58,7 +69,7 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**Runway categories + thumb crop LIVE** · FE **`5d076e1c`** · competitions nginx allowlisted · rewards **OFF**.)
+**Last updated:** 2026-11-16 (**Runway category boards LIVE** · tip **`ff2ed43e`** · rewards **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
 
