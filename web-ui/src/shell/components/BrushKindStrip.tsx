@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import type { BrushKind } from '@/lib/professionalBrushes'
 import {
   AirbrushKindIcon,
@@ -9,7 +10,7 @@ import styles from './BrushKindStrip.module.css'
 const OPTIONS: Array<{
   id: BrushKind
   label: string
-  Icon: (props: { size?: number }) => JSX.Element
+  Icon: (props: { size?: number }) => ReactElement
 }> = [
   { id: 'tapered', label: 'Ink', Icon: InkKindIcon },
   { id: 'charcoal', label: 'Charcoal', Icon: CharcoalKindIcon },
