@@ -3,6 +3,14 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Preview — Open design resumes after draft conflict (2026-11-16 23:42 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-open-design-conflict-resume-77c6` |
+| Change | Replace-and-open stashes the design; after Keep device / Use cloud, open resumes automatically |
+| Prod | Hotfix candidate — My Designs Open left the old sketch after conflict |
+
 ## Deployed — Studio Create glow icons + themed sheets LIVE (2026-11-16 23:35 Asia/Jerusalem)
 
 | Field | Value |

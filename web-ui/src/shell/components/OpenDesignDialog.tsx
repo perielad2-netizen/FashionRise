@@ -74,7 +74,7 @@ export function OpenDesignDialog({ state, onConfirm, onRetry, onCancel, onGoToSt
         >
           <p>
             Your working draft has a recovery conflict between this device and your account. Choose
-            which draft to keep in Studio, then open “{title}” again.
+            which draft to keep in Studio — FashionRise will then open “{title}” automatically.
           </p>
         </ConfirmDialog>
       )

@@ -580,7 +580,9 @@ describe('Reopen a saved design', () => {
     expect(strokeIds()).toBe('')
     expect(mocks.persistStudioDraft.mock.calls[0]![0].createOnly).toBe(true)
     expect(
-      screen.getByRole('status', { name: /changed on another device, so the design was not opened/ }),
+      screen.getByRole('status', {
+        name: /changed on another device\. Choose which draft to keep — FashionRise will then open/i,
+      }),
     ).toBeInTheDocument()
   })
 
@@ -721,7 +723,44 @@ describe('Reopen a saved design', () => {
     })
     expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
     expect(strokeIds()).toBe('restored-1')
-    expect(screen.getByRole('status', { name: /changed on another device, so the design was not opened/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('status', {
+        name: /changed on another device\. Choose which draft to keep — FashionRise will then open/i,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('resumes Replace and open after Use cloud draft resolves the conflict', async () => {
+    const other = workingDoc({ clientRevision: 5, strokes: [{ ...STROKE, id: 'other-device' }] })
+    mocks.persistStudioDraft
+      .mockResolvedValueOnce({
+        ok: false,
+        conflict: { local: workingDoc(), server: other, designId: 'draft-1' },
+        localPersisted: true,
+        error: 'Draft was updated elsewhere.',
+      })
+      .mockImplementation((args: { document: StudioDraftDocument; designId: string | null }) =>
+        Promise.resolve(okPersist(args)),
+      )
+    renderAt('/studio/designs')
+    await ready()
+    await openFromLibrary()
+    const confirm = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Replace and open' }))
+    })
+    const conflict = await screen.findByRole('dialog', { name: 'Draft recovery conflict' })
+    expect(strokeIds()).toBe('restored-1')
+    await act(async () => {
+      fireEvent.click(within(conflict).getByRole('button', { name: 'Use cloud draft' }))
+    })
+    await waitFor(() => expect(mocks.persistStudioDraft).toHaveBeenCalledTimes(2))
+    await screen.findByRole('heading', { name: 'New Design' })
+    await waitFor(() => expect(strokeIds()).toBe('snap-1,snap-2'))
+    expect(screen.queryByRole('dialog', { name: 'Draft recovery conflict' })).toBeNull()
+    expect(
+      screen.getByRole('status', { name: /Opened “Evening gown” in Studio/i }),
+    ).toBeInTheDocument()
   })
 
   it('treats a 409 carrying our own content as a recovered lost response', async () => {

@@ -240,7 +240,7 @@ export function StudioPage() {
           onRetry={() => void editor.retryOpenDesign()}
           onCancel={editor.cancelOpenDesign}
           onGoToStudio={() => {
-            editor.cancelOpenDesign()
+            editor.continueOpenAfterConflictInStudio()
             backToStudio()
           }}
         />
