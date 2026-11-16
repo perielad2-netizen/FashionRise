@@ -108,5 +108,6 @@ describe('RunwayBoardScreen', () => {
     expect(screen.getByText('Peri Shilat')).toBeInTheDocument()
     expect(screen.getByText('Group 1')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Top Designer' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Top Designer top three')).toBeInTheDocument()
   })
 })

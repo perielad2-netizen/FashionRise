@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Crown, Globe2, Trophy, Users, UserPlus } from 'lucide-react'
+import {
+  Crown,
+  Globe2,
+  HeartHandshake,
+  MessageCircle,
+  Palette,
+  Sparkles,
+  Star,
+  ThumbsUp,
+  Trophy,
+  Users,
+  UserPlus,
+  type LucideIcon,
+} from 'lucide-react'
 import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import {
   fetchCategoryBoard,
+  fetchCompetitionStatus,
   type CategoryBoard,
   type CategoryBoardEntry,
 } from '@/services/competitionsApi'
@@ -33,18 +47,26 @@ const WEEKLY_CATEGORIES: ReadonlyArray<{
   label: string
   stars: number
   blurb: string
+  Icon: LucideIcon
 }> = [
-  { id: 'top_design', label: 'Top Design', stars: 50, blurb: 'Best engaged look this week' },
-  { id: 'top_designer', label: 'Top Designer', stars: 50, blurb: 'Strongest published week' },
+  { id: 'top_design', label: 'Top Design', stars: 50, blurb: 'Best engaged look', Icon: Sparkles },
+  { id: 'top_designer', label: 'Top Designer', stars: 50, blurb: 'Strongest week', Icon: Palette },
   {
     id: 'community_champion',
     label: 'Community Champion',
     stars: 50,
-    blurb: 'Publish quality + giving back',
+    blurb: 'Publish + give back',
+    Icon: HeartHandshake,
   },
-  { id: 'top_supporter', label: 'Top Supporter', stars: 20, blurb: 'Likes across designers' },
-  { id: 'top_commenter', label: 'Top Commenter', stars: 20, blurb: 'Meaningful comments' },
-  { id: 'top_rater', label: 'Top Rater', stars: 20, blurb: 'Thoughtful ratings' },
+  { id: 'top_supporter', label: 'Top Supporter', stars: 20, blurb: 'Likes across designers', Icon: ThumbsUp },
+  {
+    id: 'top_commenter',
+    label: 'Top Commenter',
+    stars: 20,
+    blurb: 'Meaningful comments',
+    Icon: MessageCircle,
+  },
+  { id: 'top_rater', label: 'Top Rater', stars: 20, blurb: 'Thoughtful ratings', Icon: Star },
 ]
 
 function formatCount(n: number): string {
@@ -59,9 +81,17 @@ function initialFrom(name: string): string {
   return ch ? ch.toUpperCase() : '·'
 }
 
+function podiumClass(rank: number): string {
+  if (rank === 1) return styles.metalGold
+  if (rank === 2) return styles.metalSilver
+  if (rank === 3) return styles.metalBronze
+  return ''
+}
+
 /**
  * Runway — rankings + weekly competition category boards (profile lists).
  * Separate from FashionRise immersive feed.
+ * Visual polish inspired by Mobbin leaderboard / awards patterns (branch only).
  */
 export function RunwayBoardScreen() {
   const [mode, setMode] = useState<Mode>('rankings')
@@ -70,6 +100,7 @@ export function RunwayBoardScreen() {
   const [topLimit, setTopLimit] = useState<TopLimit>(10)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [categoryLoad, setCategoryLoad] = useState<CategoryLoad>({ status: 'idle' })
+  const [daysLeft, setDaysLeft] = useState<number | null>(null)
 
   const loadRankings = useCallback(
     async (signal?: AbortSignal) => {
@@ -109,6 +140,20 @@ export function RunwayBoardScreen() {
             : 'Could not load category board'
       setCategoryLoad({ status: 'error', message })
     }
+  }, [])
+
+  useEffect(() => {
+    const ac = new AbortController()
+    void (async () => {
+      try {
+        const status = await fetchCompetitionStatus()
+        if (ac.signal.aborted) return
+        setDaysLeft(typeof status.days_remaining === 'number' ? status.days_remaining : null)
+      } catch {
+        if (!ac.signal.aborted) setDaysLeft(null)
+      }
+    })()
+    return () => ac.abort()
   }, [])
 
   useEffect(() => {
@@ -160,53 +205,65 @@ export function RunwayBoardScreen() {
   return (
     <section className={styles.screen} aria-labelledby="runway-board-title">
       <header className={styles.header}>
-        <p className={styles.eyebrow}>Competitions & rankings</p>
+        <div className={styles.headerTop}>
+          <p className={styles.eyebrow}>Competitions & rankings</p>
+          {daysLeft != null ? (
+            <p className={styles.weekChip} data-testid="runway-week-chip">
+              <Trophy size={12} aria-hidden />
+              {daysLeft === 0 ? 'Ends today' : `${daysLeft}d left this week`}
+            </p>
+          ) : null}
+        </div>
         <h1 id="runway-board-title" className={styles.title}>
           Runway
         </h1>
         <p className={styles.lead}>
-          Tap a weekly category for the live profile board — or browse worldwide, friends, and
-          following tops. FashionRise is the Instagram-style feed.
+          Weekly awards and Top rankings. FashionRise is the Instagram-style feed.
         </p>
       </header>
 
       <section className={styles.weekly} aria-labelledby="runway-weekly-title">
         <div className={styles.weeklyHead}>
           <h2 id="runway-weekly-title" className={styles.weeklyTitle}>
-            <Trophy size={18} aria-hidden /> Weekly categories
+            Weekly awards
           </h2>
-          <p className={styles.weeklyHint}>
-            One prize per designer each week. Open a category to see who’s climbing.
-          </p>
+          <p className={styles.weeklyHint}>One prize per designer. Tap a category for the live board.</p>
         </div>
-        <div className={styles.weeklyGrid} role="tablist" aria-label="Award categories">
+        <div className={styles.awardRail} role="tablist" aria-label="Award categories">
           {WEEKLY_CATEGORIES.map((cat) => {
             const active = mode === 'category' && activeCategory === cat.id
+            const Icon = cat.Icon
             return (
               <button
                 key={cat.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                className={active ? styles.weeklyCatActive : styles.weeklyCat}
+                className={active ? styles.awardChipActive : styles.awardChip}
                 data-testid={`runway-cat-${cat.id}`}
                 onClick={() => selectCategory(cat.id)}
               >
-                <span className={styles.weeklyCatLabel}>{cat.label}</span>
-                <span className={styles.weeklyStars}>{cat.stars}★</span>
-                <span className={styles.weeklyCatBlurb}>{cat.blurb}</span>
+                <span className={styles.awardMark} aria-hidden>
+                  <Icon size={18} strokeWidth={2.1} />
+                </span>
+                <span className={styles.awardCopy}>
+                  <span className={styles.weeklyCatLabel}>{cat.label}</span>
+                  <span className={styles.weeklyStars}>{cat.stars}★</span>
+                </span>
               </button>
             )
           })}
         </div>
       </section>
 
-      <div className={styles.scopes} role="tablist" aria-label="Runway gallery scope">
+      <div className={styles.segment} role="tablist" aria-label="Runway gallery scope">
         <button
           type="button"
           role="tab"
           aria-selected={mode === 'rankings' && scope === 'worldwide'}
-          className={mode === 'rankings' && scope === 'worldwide' ? styles.scopeActive : styles.scopeBtn}
+          className={
+            mode === 'rankings' && scope === 'worldwide' ? styles.segmentActive : styles.segmentBtn
+          }
           data-testid="runway-scope-worldwide"
           onClick={() => selectRankingsScope('worldwide')}
         >
@@ -216,7 +273,7 @@ export function RunwayBoardScreen() {
           type="button"
           role="tab"
           aria-selected={mode === 'rankings' && scope === 'friends'}
-          className={mode === 'rankings' && scope === 'friends' ? styles.scopeActive : styles.scopeBtn}
+          className={mode === 'rankings' && scope === 'friends' ? styles.segmentActive : styles.segmentBtn}
           data-testid="runway-scope-friends"
           onClick={() => selectRankingsScope('friends')}
         >
@@ -227,7 +284,7 @@ export function RunwayBoardScreen() {
           role="tab"
           aria-selected={mode === 'rankings' && scope === 'following'}
           className={
-            mode === 'rankings' && scope === 'following' ? styles.scopeActive : styles.scopeBtn
+            mode === 'rankings' && scope === 'following' ? styles.segmentActive : styles.segmentBtn
           }
           data-testid="runway-scope-following"
           onClick={() => selectRankingsScope('following')}
@@ -254,13 +311,15 @@ export function RunwayBoardScreen() {
         </div>
       ) : null}
 
-      <div className={styles.board}>
+      <div className={styles.boardPanel}>
         <div className={styles.boardHead}>
           <div>
             <h2 className={styles.boardTitle}>{boardTitle}</h2>
             <p className={styles.boardHint}>{boardHint}</p>
           </div>
-          {mode === 'category' && categoryLoad.status === 'ready' && categoryLoad.board.group_index != null ? (
+          {mode === 'category' &&
+          categoryLoad.status === 'ready' &&
+          categoryLoad.board.group_index != null ? (
             <p className={styles.groupChip}>Group {categoryLoad.board.group_index + 1}</p>
           ) : null}
         </div>
@@ -271,7 +330,12 @@ export function RunwayBoardScreen() {
             onRetry={() => activeCategory && void loadCategory(activeCategory)}
           />
         ) : (
-          <RankingsPanel state={state} boardTitle={boardTitle} scope={scope} onRetry={() => void loadRankings()} />
+          <RankingsPanel
+            state={state}
+            boardTitle={boardTitle}
+            scope={scope}
+            onRetry={() => void loadRankings()}
+          />
         )}
       </div>
     </section>
@@ -344,12 +408,63 @@ function CategoryBoardPanel({
   if (board.entries.length === 0) {
     return <p className={styles.empty}>{board.empty_reason || 'No standings yet this week.'}</p>
   }
+
+  const podium = board.entries.slice(0, 3)
+  const rest = board.entries.slice(3)
+
   return (
-    <ol className={styles.profileList} aria-label={`${board.label} leaderboard`}>
-      {board.entries.map((entry) => (
-        <ProfileRow key={`${entry.user_id}-${entry.gallery_item_id ?? 'user'}`} entry={entry} />
-      ))}
-    </ol>
+    <div className={styles.categoryBoard}>
+      <ol className={styles.podium} aria-label={`${board.label} top three`}>
+        {/* Visual order: 2 · 1 · 3 */}
+        {[podium[1], podium[0], podium[2]].filter(Boolean).map((entry) => (
+          <PodiumCard key={`podium-${entry.user_id}-${entry.gallery_item_id ?? 'u'}`} entry={entry} />
+        ))}
+      </ol>
+      {rest.length > 0 ? (
+        <ol className={styles.profileList} aria-label={`${board.label} leaderboard`}>
+          {rest.map((entry) => (
+            <ProfileRow
+              key={`${entry.user_id}-${entry.gallery_item_id ?? 'user'}`}
+              entry={entry}
+            />
+          ))}
+        </ol>
+      ) : null}
+      {/* Keep full list accessible for screen readers when only podium shows */}
+      {rest.length === 0 ? (
+        <ol className={styles.srOnlyList} aria-label={`${board.label} full board`}>
+          {board.entries.map((entry) => (
+            <li key={`sr-${entry.user_id}-${entry.rank}`}>
+              #{entry.rank} {entry.display_name || entry.username || 'Designer'} {entry.score} pts
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  )
+}
+
+function PodiumCard({ entry }: { entry: CategoryBoardEntry }) {
+  const handle = entry.username?.trim() ? `@${entry.username.trim()}` : null
+  const name = entry.display_name?.trim() || handle || 'Designer'
+  const avatar = profileAvatarSrc(entry.user_id, entry.avatar_url)
+  const tall = entry.rank === 1
+
+  return (
+    <li className={tall ? `${styles.podiumCard} ${styles.podiumCardLead}` : styles.podiumCard}>
+      <div className={`${styles.podiumAvatar} ${podiumClass(entry.rank)}`} aria-hidden>
+        {avatar ? <img src={avatar} alt="" /> : <span>{initialFrom(name)}</span>}
+        <span className={`${styles.podiumMedal} ${podiumClass(entry.rank)}`}>
+          {entry.rank === 1 ? <Crown size={10} aria-hidden /> : null}
+          {entry.rank}
+        </span>
+      </div>
+      <p className={styles.podiumName}>{name}</p>
+      {handle && name !== handle ? <p className={styles.podiumHandle}>{handle}</p> : null}
+      <p className={styles.podiumScore}>
+        <strong>{formatCount(entry.score)}</strong> pts
+      </p>
+    </li>
   )
 }
 
@@ -357,15 +472,12 @@ function ProfileRow({ entry }: { entry: CategoryBoardEntry }) {
   const handle = entry.username?.trim() ? `@${entry.username.trim()}` : null
   const name = entry.display_name?.trim() || handle || 'Designer'
   const avatar = profileAvatarSrc(entry.user_id, entry.avatar_url)
-  const lead = entry.rank === 1
+  const metal = podiumClass(entry.rank)
 
   return (
-    <li className={lead ? `${styles.profileCard} ${styles.profileCardLead}` : styles.profileCard}>
-      <span className={lead ? `${styles.profileRank} ${styles.profileRankLead}` : styles.profileRank}>
-        {lead ? <Crown size={12} aria-hidden /> : null}
-        #{entry.rank}
-      </span>
-      <div className={styles.avatar} aria-hidden>
+    <li className={styles.profileRow}>
+      <span className={styles.profileRankNum}>#{entry.rank}</span>
+      <div className={`${styles.avatar} ${metal}`} aria-hidden>
         {avatar ? (
           <img src={avatar} alt="" />
         ) : (
@@ -399,13 +511,14 @@ function RankRow({
   const lead = showRank && rank === 1
   const title = item.title?.trim() || 'Untitled look'
   const designer = item.username?.trim() ? `@${item.username.trim()}` : 'Designer'
+  const metal = showRank ? podiumClass(rank) : ''
 
   return (
     <li className={lead ? `${styles.rankCard} ${styles.rankCardLead}` : styles.rankCard}>
       <div className={styles.rankThumb}>
         {showRank ? (
-          <span className={lead ? `${styles.rankBadge} ${styles.rankBadgeLead}` : styles.rankBadge}>
-            {lead ? <Crown size={12} aria-hidden /> : null}#{rank}
+          <span className={`${styles.rankBadge} ${metal || styles.rankBadgeMuted}`}>
+            {rank === 1 ? <Crown size={12} aria-hidden /> : null}#{rank}
           </span>
         ) : null}
         {src ? <img src={src} alt="" /> : null}
