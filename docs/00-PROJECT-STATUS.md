@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**PR #363 UX amend in review** · immersive full-viewport Discover · gallery `username` enrichment · auto Discover page · Social LIVE prod BE/FE **`82e58571`** · Alembic **035** · weekly/streak rewards **FALSE** · **do not deploy yet**.)
+**Last updated:** 2026-11-16 (**#363 immersive UX LIVE** · prod BE/FE **`1cac14f0`** · tip `6c293475` · FE release `1cac14f0-immersive-363` · Alembic **035** · weekly/streak rewards **FALSE** · mobile Playwright smoke **21/21**.)
 
-**Phase:** FashionRise Social **LIVE in production**. Immersive UX hotfix **#363** (amended): full-viewport feed (hide global header on FashionRise route), real designer usernames on gallery cards, automatic Discover pagination. Stars weekly/streak rewards remain **OFF**. No purchasing/push/Codemagic.
+**Phase:** FashionRise Social **LIVE** with immersive Discover feed UX (#363). Stars weekly/streak rewards remain **OFF**. No purchasing/push/Codemagic.
 
 ## FashionRise Social — scope & progress
 
@@ -23,13 +23,13 @@
 | **Prod preflight** | Read-only VPS release preflight (no mutations) | **COMPLETE 2026-11-16** · [#360](https://github.com/perielad2-netizen/FashionRise/pull/360) → `main` @ **`fc75fe46`** |
 | **Prod DB backup** | One authorized `pg_dump -Fc` of `fashionrise_beta` | **COMPLETE** · `…/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump` |
 | **Prod Social deploy** | Migrate **030→035** + BE/FE **`82e58571`** · rewards FALSE | **LIVE 2026-11-16** · smoke PASS · **0** Social star payouts |
-| **UX hotfix #363** | Immersive full-viewport Discover (hide global app header on runway · snap swipe · overlay actions · compact pills · overflow Profile/Looks) · gallery `username` enrichment (batch, no N+1) · auto Discover pagination (no Load more) | **In review / HOLD MERGE until PM OK** · rewards stay OFF · **no deploy yet** |
+| **UX hotfix #363** | Immersive full-viewport Discover · gallery `username` · auto Discover page · Follow cache keyed by viewer+designer | **MERGED + DEPLOYED** → `main` @ **`1cac14f0`** · tip `6c293475` · FE `1cac14f0-immersive-363` · Alembic **035** unchanged |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** PM review amended **#363** SHA → merge → then FE(+BE gallery username) deploy only with rewards still **OFF**. Continue Android QA. No Codemagic/store/push/purchasing activation.
+**Exact next step:** Monitor immersive FashionRise quietly on Android QA devices. Keep weekly/streak rewards **OFF**. No Codemagic/store/push/purchasing activation.
 
 ## Release roadmap (source of truth)
 
@@ -40,11 +40,29 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **LIVE** · #349–#361 merged · Alembic **035** · rewards OFF | Prod BE/FE **`82e58571`** · FE release `82e58571-social-035` |
+| **FashionRise Social** | **LIVE** · #349–#363 merged · Alembic **035** · rewards OFF · immersive feed | Prod BE/FE **`1cac14f0`** · FE release `1cac14f0-immersive-363` · rollback FE `82e58571-social-035` |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no live weekly/streak Stars awards** · no further VPS mutations without PM authorize.
+
+## FashionRise immersive UX #363 — PRODUCTION LIVE (2026-11-16)
+
+Conditional PM approval correction applied, merged, and deployed BE+FE together (no Alembic change).
+
+| Item | Result |
+|---|---|
+| Merge | [#363](https://github.com/perielad2-netizen/FashionRise/pull/363) → `main` @ **`1cac14f0`** · tip **`6c293475`** (viewer-scoped Follow cache) |
+| Preserve | `/var/backups/fashionrise/pm-immersive-363-preserve-20261116T134350Z` · prior BE `82e58571` · FE `82e58571-social-035` · `.env` copy |
+| Alembic | Remains **035** · no migration |
+| Backend | Detached **`1cac14f0`** @ `/opt/fashionrise/src` · `fashionrise-api` **active** · `/health` **200** · OpenAPI `GalleryRead.username` present |
+| Frontend | `/var/www/fashionrise/releases/1cac14f0-immersive-363` · nginx symlink + reload · loopback `:8099` **200** · public `version.json` sha `1cac14f0` |
+| Reward flags (unchanged) | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · launch week `""` · `FASHIONRISE_STREAK_REWARDS_ENABLED=false` · start date `""` · `NATIVE_PUSH_*=false` · Fitting Room **ON** |
+| API smoke | Discover rows include real usernames · competition `weekly_rewards_enabled=false` · Fitting Room preflight **200** · designs/my **200** · `star_payouts=0` |
+| Mobile Playwright (~360px) | **21/21 PASS** — first look fills viewport · no Social fashion / Fair Discover copy · swipe · overlay Like/Rate/Comment/Follow · `@NoaPeri` · menu Profile/Looks/Create · nav exit · Studio + Fitting Room load |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/82e58571-social-035 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 82e58571 && systemctl restart fashionrise-api` |
+| Verdict | **Immersive FashionRise UX is LIVE.** Rewards stay **OFF**. |
 
 ## FashionRise Social — disposable isolated validation (2026-11-16) — PASS / PROD NO-GO
 
