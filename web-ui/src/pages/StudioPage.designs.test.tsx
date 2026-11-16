@@ -223,10 +223,11 @@ beforeEach(() => {
       const { prepareKeepDeviceDocument } = await import('@/lib/draftDocument')
       const rebased = prepareKeepDeviceDocument(args.local, args.server, args.serverRevision)
       // Count Keep-device as a persist so open force-rebase assertions stay stable.
-      return mocks.persistStudioDraft({
+      const persisted = await mocks.persistStudioDraft({
         document: rebased,
         designId: args.designId,
       })
+      return persisted.ok ? { ...persisted, keptLocal: rebased } : persisted
     },
   )
   mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD], damaged: [] })

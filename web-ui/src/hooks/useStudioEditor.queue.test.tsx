@@ -94,6 +94,7 @@ vi.mock('@/lib/draftPersistence', async (importOriginal) => {
         fingerprint: draftContentFingerprint(documentForCloud(rebased)),
         syncedRevision: rebased.clientRevision,
         localPersisted: true,
+        keptLocal: rebased,
       }
     },
   }

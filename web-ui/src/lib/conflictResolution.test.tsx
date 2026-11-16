@@ -317,6 +317,59 @@ describe('WEB-V2.1C conflict resolution', () => {
     expect(api.designs.get('d1')!.design_data.strokes[0]?.id).toBe('stroke-female')
   })
 
+  it('Keep this device ignores a second tap while the first save is in flight', async () => {
+    seedConflict(strokeDoc('male', 2), strokeDoc('blank', 5))
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const designsApi = await import('@/services/designsApi')
+    const spy = vi.spyOn(designsApi, 'updateStudioDraft').mockImplementation(async (id, document) => {
+      await gate
+      const cloud = designsApi.documentForCloud(document)
+      api.designs.set(id, {
+        id,
+        design_data: cloud,
+        metadata: { draftKind: 'studio_working_draft', clientRevision: cloud.clientRevision },
+        visibility: 'private',
+        updated_at: new Date().toISOString(),
+      })
+      api.updateCalls += 1
+      return designRow(id, cloud)
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <StudioPage />
+      </MemoryRouter>,
+    )
+    const keep = await screen.findByRole('button', { name: 'Keep this device' })
+    await user.click(keep)
+    await user.click(keep)
+    release()
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(api.updateCalls).toBe(1)
+    spy.mockRestore()
+  })
+
+  it('Keep this device stays Saved after an OCC rebase (no false Save failed from re-prepare)', async () => {
+    // Android Create stuck loop: Keep PUT succeeds after one OCC race, but a second
+    // prepareKeepDeviceDocument against the pre-retry server snapshot diverges.
+    seedConflict(strokeDoc('female', 2), strokeDoc('blank', 4))
+    api.raceOnExpected = 4
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <StudioPage />
+      </MemoryRouter>,
+    )
+    await user.click(await screen.findByRole('button', { name: 'Keep this device' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(screen.queryByText('Save failed')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /draft recovery conflict/i })).not.toBeInTheDocument()
+  })
+
   it('renews the conflict when Keep this device loses two consecutive OCC races', async () => {
     seedConflict(strokeDoc('female', 2), strokeDoc('blank', 4))
     api.alwaysRace = true
