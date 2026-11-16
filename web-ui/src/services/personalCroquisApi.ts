@@ -274,7 +274,7 @@ export async function publishPersonalCroquisToFashionRise(
 ): Promise<GalleryPublishResult> {
   return apiRequest<GalleryPublishResult>(`${BASE}/${croquisId}/publish`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: payload,
     signal,
   })
 }

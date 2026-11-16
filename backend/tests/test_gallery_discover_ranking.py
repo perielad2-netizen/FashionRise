@@ -52,6 +52,57 @@ def test_new_designs_outrank_ignored_high_like_monopoly():
     assert discover_score(newbie, now=NOW) > discover_score(monopolist, now=NOW)
 
 
+def test_brand_new_publish_beats_day_old_cold_start():
+    brand_new = _cand(likes=0, unique=0, age_hours=0.5)
+    day_old = _cand(likes=0, unique=0, age_hours=20)
+    assert discover_score(brand_new, now=NOW) > discover_score(day_old, now=NOW)
+
+
+def test_seen_by_viewer_demotes_already_impressed_looks():
+    fresh = _cand(likes=2, unique=5, age_hours=3)
+    unseen = discover_score(fresh, now=NOW, seen_by_viewer=False)
+    seen = discover_score(fresh, now=NOW, seen_by_viewer=True)
+    assert seen < unseen
+    assert seen > 0
+
+
+def test_viewer_and_time_bucket_reorder_near_ties():
+    from app.services.gallery_discover import explore_jitter, explore_time_bucket
+
+    a = uuid4()
+    b = uuid4()
+    viewer_a = uuid4()
+    viewer_b = uuid4()
+    # Different viewers get different jitter on the same item.
+    assert explore_jitter(a, viewer_id=viewer_a, now=NOW) != explore_jitter(
+        a, viewer_id=viewer_b, now=NOW
+    )
+    # Same viewer + bucket is stable.
+    assert explore_jitter(a, viewer_id=viewer_a, now=NOW) == explore_jitter(
+        a, viewer_id=viewer_a, now=NOW
+    )
+    # Later bucket reshuffles.
+    later = NOW + timedelta(hours=4)
+    assert explore_time_bucket(NOW) != explore_time_bucket(later)
+    assert explore_jitter(b, viewer_id=viewer_a, now=NOW) != explore_jitter(
+        b, viewer_id=viewer_a, now=later
+    )
+
+
+def test_rank_demotes_seen_ids_for_viewer():
+    viewer = uuid4()
+    seen_look = _cand(likes=4, unique=8, age_hours=4)
+    unseen_look = _cand(likes=4, unique=8, age_hours=4)
+    ranked = rank_discover_candidates(
+        [seen_look, unseen_look],
+        now=NOW,
+        viewer_id=viewer,
+        seen_ids={seen_look.id},
+    )
+    assert ranked[0][0].id == unseen_look.id
+    assert ranked[1][0].id == seen_look.id
+
+
 def test_strong_engagement_rate_beats_weak_rate_at_similar_exposure():
     hot = _cand(likes=12, ratings=4, unique=40, age_hours=10)
     cold = _cand(likes=1, ratings=0, unique=40, age_hours=10)
