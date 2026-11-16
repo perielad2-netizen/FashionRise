@@ -12,6 +12,15 @@
 | Change | Image-first Look Details sheet, circular action icons, pink-glass Create Real Design CTA |
 | Prod | Unchanged until approve |
 
+## Deployed — Open OCC force-rebase + Look Details LIVE (2026-11-16 23:57 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PRs | **#397** (open force-rebase) + **#396** (Look Details Mobbin) → `main` @ **`46db3f72`** |
+| Tip | FE **`46db3f72`** · `/var/www/fashionrise/releases/46db3f72-open-conflict-force` |
+| Change | Replace-and-open force-rebases over OCC (no Keep/Use loop for sticky drafts like Sketch Nov 13); Look Details image-first sheet |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/aead4db5-open-conflict-resume /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Open design resumes after draft conflict LIVE (2026-11-16 23:42 Asia/Jerusalem)
 
 | Field | Value |
@@ -20,6 +29,7 @@
 | Tip | FE **`aead4db5`** · `/var/www/fashionrise/releases/aead4db5-open-conflict-resume` |
 | Change | Replace-and-open stashes the design; after Keep device / Use cloud, open resumes automatically |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/256706e9-studio-create-wow /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Superseded | By **`46db3f72`** open force-rebase (conflict resume caused endless Keep/Use loop) |
 
 ## Deployed — Studio Create glow icons + themed sheets LIVE (2026-11-16 23:35 Asia/Jerusalem)
 
