@@ -42,6 +42,7 @@ const getFollowStatus = vi.fn()
 const followCreator = vi.fn()
 const unfollowCreator = vi.fn()
 const updateMyProfile = vi.fn()
+const uploadMyAvatar = vi.fn()
 
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
@@ -49,6 +50,9 @@ vi.mock('@/services/profilesApi', () => ({
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
   updateMyProfile: (...args: unknown[]) => updateMyProfile(...args),
+  uploadMyAvatar: (...args: unknown[]) => uploadMyAvatar(...args),
+  profileAvatarSrc: (userId: string, avatarUrl: string | null | undefined) =>
+    avatarUrl ? `/api/v1/profiles/${userId}/avatar` : null,
 }))
 
 vi.mock('@/services/competitionsApi', () => ({

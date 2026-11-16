@@ -42,6 +42,9 @@ class LocalStorageBackend:
         self._private_croquis_subdir = str(
             getattr(settings, "private_croquis_subdir", "private_croquis")
         )
+        self._private_avatar_subdir = str(
+            getattr(settings, "private_avatar_subdir", "private_avatars")
+        )
         self._public_base = settings.public_upload_base_url.rstrip("/")
         self._root.mkdir(parents=True, exist_ok=True)
 
@@ -70,6 +73,54 @@ class LocalStorageBackend:
         except OSError:
             pass
         return root
+
+    def private_avatar_root(self) -> Path:
+        """Owner-private profile avatars; never mounted as static files."""
+        root = (self._root / self._private_avatar_subdir).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(root, 0o700)
+        except OSError:
+            pass
+        return root
+
+    @staticmethod
+    def avatar_storage_key(user_id: uuid.UUID) -> str:
+        """Canonical relative key under private_avatars/."""
+        return f"{user_id}/avatar.jpg"
+
+    def save_private_avatar_file(self, *, user_id: uuid.UUID, data: BinaryIO) -> Path:
+        """Overwrite the owner's avatar JPEG under private_avatars/ (never public)."""
+        key = self.avatar_storage_key(user_id)
+        safe = key.lstrip("/").replace("..", "")
+        path = (self.private_avatar_root() / safe).resolve()
+        root = self.private_avatar_root()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("avatar storage path escapes private avatar root") from exc
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(path.parent, 0o700)
+        except OSError:
+            pass
+        with path.open("wb") as out:
+            while chunk := data.read(1024 * 1024):
+                out.write(chunk)
+        return path
+
+    def resolve_private_avatar_file(self, *, user_id: uuid.UUID) -> Path | None:
+        key = self.avatar_storage_key(user_id)
+        safe = key.lstrip("/").replace("..", "")
+        path = (self.private_avatar_root() / safe).resolve()
+        root = self.private_avatar_root()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            return None
+        if path.is_file():
+            return path
+        return None
 
     def _full_path(self, key: str) -> Path:
         safe = key.lstrip("/").replace("..", "")
@@ -447,6 +498,7 @@ class LocalStorageBackend:
             self.private_croquis_root(),
             self.private_fabric_root(),
             self.private_techpack_root(),
+            self.private_avatar_root(),
         ):
             try:
                 path.relative_to(private_root)

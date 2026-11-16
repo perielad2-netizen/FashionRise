@@ -9,11 +9,13 @@ import {
   followCreator,
   getFollowStatus,
   getPublicProfile,
+  profileAvatarSrc,
   updateMyProfile,
   unfollowCreator,
+  uploadMyAvatar,
   type PublicProfile,
 } from '@/services/profilesApi'
-import { uploadReferenceImage } from '@/services/uploadsApi'
+import { AvatarCropDialog } from './AvatarCropDialog'
 import styles from './RunwayScreen.module.css'
 
 /** Minimal designer identity — friends circle or gallery creator. */
@@ -50,6 +52,8 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
   const [editBio, setEditBio] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [cropFile, setCropFile] = useState<File | null>(null)
+  const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const openedEditRef = useRef(false)
   const label =
@@ -144,22 +148,43 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
     }
   }
 
-  const onAvatarSelected = async (file: File | null) => {
+  const onAvatarPicked = (file: File | null) => {
     if (!file || editBusy || state.status !== 'ready') return
+    setEditError(null)
+    setCropFile(file)
+  }
+
+  const onAvatarCropConfirm = async (cropped: File) => {
+    if (editBusy || state.status !== 'ready') return
     setEditBusy(true)
     setEditError(null)
+    const preview = URL.createObjectURL(cropped)
+    setLocalAvatarPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return preview
+    })
     try {
-      const uploaded = await uploadReferenceImage(file)
-      const next = await updateMyProfile({ avatar_url: uploaded.url })
+      const next = await uploadMyAvatar(cropped)
       setState((prev) =>
         prev.status === 'ready' ? { ...prev, profile: { ...prev.profile!, ...next } } : prev,
       )
+      setCropFile(null)
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Could not update photo')
+      setLocalAvatarPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
     } finally {
       setEditBusy(false)
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (localAvatarPreview) URL.revokeObjectURL(localAvatarPreview)
+    }
+  }, [localAvatarPreview])
 
   return (
     <div className={styles.friendProfile} data-testid="friend-profile-panel">
@@ -178,13 +203,18 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
 
       <div className={styles.friendProfileIdentity}>
         {(() => {
-          const avatarSrc =
-            (state.status === 'ready' ? state.profile?.avatar_url : null) ||
-            friend.avatar_url ||
-            null
-          const avatarNode = avatarSrc ? (
+          const remoteAvatar =
+            localAvatarPreview ||
+            profileAvatarSrc(
+              friend.user_id,
+              (state.status === 'ready' ? state.profile?.avatar_url : null) ||
+                friend.avatar_url ||
+                null,
+              state.status === 'ready' ? state.profile?.updated_at : null,
+            )
+          const avatarNode = remoteAvatar ? (
             <img
-              src={avatarSrc}
+              src={remoteAvatar}
               alt=""
               className={styles.friendAvatar}
               width={56}
@@ -276,10 +306,22 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null
               e.target.value = ''
-              void onAvatarSelected(file)
+              onAvatarPicked(file)
             }}
           />
         </div>
+      ) : null}
+
+      {cropFile ? (
+        <AvatarCropDialog
+          file={cropFile}
+          busy={editBusy}
+          onCancel={() => {
+            if (editBusy) return
+            setCropFile(null)
+          }}
+          onConfirm={(cropped) => void onAvatarCropConfirm(cropped)}
+        />
       ) : null}
 
       {isSelf && editing ? (

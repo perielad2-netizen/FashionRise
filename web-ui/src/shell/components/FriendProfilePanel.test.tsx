@@ -13,6 +13,10 @@ vi.mock('@/services/profilesApi', () => ({
   getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
+  updateMyProfile: vi.fn(),
+  uploadMyAvatar: vi.fn(),
+  profileAvatarSrc: (userId: string, avatarUrl: string | null | undefined) =>
+    avatarUrl ? `/api/v1/profiles/${userId}/avatar` : null,
 }))
 
 vi.mock('@/services/galleryApi', () => ({

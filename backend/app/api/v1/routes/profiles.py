@@ -1,13 +1,17 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser, get_optional_user
+from app.core.config import get_settings
+from app.core.errors import NotFoundError
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.profile import FollowStatusRead, ProfileRead, ProfileUpdate
-from app.services import follow_service, profile_service
+from app.services import follow_service, profile_avatar_service, profile_service
 
 router = APIRouter()
 
@@ -23,6 +27,54 @@ def update_my_profile(
 ) -> ProfileRead:
     profile_service.update_own_profile(db, user, data)
     return profile_service.build_profile_read(db, user.id, include_private_inventory=True)
+
+
+@router.post("/me/avatar", response_model=ProfileRead, status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
+def upload_my_avatar(
+    request: Request,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> ProfileRead:
+    """Upload a profile photo into private storage (not /static/uploads)."""
+    _ = request.url
+    settings = get_settings()
+    raw = profile_avatar_service.read_avatar_upload_bytes(
+        file.file, settings.max_avatar_upload_bytes
+    )
+    profile_avatar_service.upload_own_avatar(
+        db,
+        user,
+        raw=raw,
+        declared_content_type=file.content_type,
+    )
+    return profile_service.build_profile_read(db, user.id, include_private_inventory=True)
+
+
+@router.get("/{user_id}/avatar")
+@limiter.limit("240/minute")
+def get_profile_avatar(
+    request: Request,
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """Serve a designer's profile photo for same-origin <img> tags.
+
+    Public enough to render on profiles/looks; bytes stay off /static/uploads.
+    """
+    _ = request.url
+    resolved = profile_avatar_service.resolve_avatar_file(db, user_id)
+    if resolved is None:
+        raise NotFoundError("Avatar not found")
+    media_type, path = resolved
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=f"fashionrise-avatar-{user_id.hex[:12]}.jpg",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/me/following-ids", response_model=list[uuid.UUID])
