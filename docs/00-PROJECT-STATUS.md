@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Studio fabrics tip LIVE** — `5bf9f879`.)
+**Last updated:** 2026-11-16 (**Studio fabrics leather + scale-on-select tip LIVE** — `e9bbc42c`.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -15,15 +15,26 @@
 | **Android test app** | **Current gate** | Build from `main` (`5bf9f879+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
-| **Studio fabrics** | **LIVE** | Tip **`5bf9f879`** · 12 starters · scale on all · pink Create/Upload |
+| **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh Studio → Fabrics · confirm 12 starters + pink Create/Upload + pattern scale.
+**Exact next step:** Hard-refresh Studio → Fabrics · confirm black/brown leather · no blue velvet · scale appears on tap (preview + slider).
 
-## Studio fabrics — 12 starters + universal pattern scale (2026-11-16) — tip LIVE / #350
+## Studio fabrics — leather + scale-on-select (2026-11-16) — tip LIVE / #351
+
+| Status | Detail |
+|---|---|
+| Change | Add **black leather** + **brown leather** · remove **blue velvet** (and charcoal wool) · keep 12 · scale panel on select under Create/Upload · preview + slider only (no Fine/Medium/Coarse) |
+| Staples | Blue denim · White silk · Black cotton · Brown corduroy · Black leather · Brown leather · Blush chiffon |
+| Kept AI | Gold glitter · White lace · Offwhite satin · Stockings · Stitch jeans |
+| PR | [#351](https://github.com/perielad2-netizen/FashionRise/pull/351) `cursor/web-fabric-leather-scale-ux-77c6` @ **`e9bbc42c`** (awaiting merge) |
+| Production FE tip | **`e9bbc42c`** → `/var/www/fashionrise/releases/e9bbc42c-leather-scale-ux` · prior `5bf9f879-fabric-scale-12` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/5bf9f879-fabric-scale-12 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
+## Studio fabrics — 12 starters + universal pattern scale (2026-11-16) — tip prior / #350
 
 | Status | Detail |
 |---|---|
@@ -31,7 +42,7 @@
 | Staples | Blue denim · White silk · Black cotton · Brown corduroy · Blush chiffon · Charcoal wool |
 | Kept AI | Gold glitter · Blue velvet · White lace · Offwhite satin · Stockings · Stitch jeans |
 | Merge | **#350** → `main` @ **`5bf9f879`** |
-| Production FE tip | **`5bf9f879`** → `/var/www/fashionrise/releases/5bf9f879-fabric-scale-12` · prior `79d9876c-brush-preview-white` |
+| Production FE tip (superseded) | **`5bf9f879`** → `/var/www/fashionrise/releases/5bf9f879-fabric-scale-12` · prior `79d9876c-brush-preview-white` |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/79d9876c-brush-preview-white /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Fitting Room — camera + gallery (2026-11-16) — tip LIVE / #346
