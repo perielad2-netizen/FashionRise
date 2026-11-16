@@ -14,13 +14,13 @@
 | **PR1** | FashionRise naming + Home featured entry above Create · side menu after Create · Following feed tab · designer profile (follow, reputation, published looks) · keep publish/`destination:'runway'` | **Merged** — #349 → `main` @ `fac4940d` |
 | **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **Merged** — #352 → `main` @ `fad2ae3c` |
 | **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Merged** — #353 → `main` @ `02882f65` · Alembic **032** · **not deployed** |
-| **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent | **PM review** — branch `cursor/web-fashionrise-profile-models-77c6` · Alembic **033** |
+| **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent | **PM review** — **#354** @ `10b8d54b` · Alembic **033** · **not deployed** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** PM review Social **PR4** (profile editor + My Models publish). PR3 remains **merged / not production-deployed**. Android QA stays stable; no store submission / live Stars awards from this track.
+**Exact next step:** PM review Social **PR4 #354** (profile editor + My Models publish @ `10b8d54b`). PR3 `#353` remains **merged / not production-deployed**. Android QA stays stable; no store submission / live Stars awards from this track.
 
 ## Release roadmap (source of truth)
 
@@ -31,7 +31,7 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **PR1–PR3 merged · PR4 in review** | Competitions on `main` (not deployed) · profile/models PR open |
+| **FashionRise Social** | **PR1–PR3 merged · PR4 #354 in review** | Competitions on `main` (not deployed) · profile/models @ `10b8d54b` |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
@@ -47,6 +47,7 @@
 | Consent | New purpose `croquis_public_share` · explicit checkbox · Alembic **033** |
 | Feeds | Published models enter existing Discover / worldwide / competition enrollment paths unchanged |
 | QA | BE `tests/test_profile_models_publish.py` **3 passed** · FE `tsc --noEmit` green · Runway/AuthProvider smoke **18 passed** |
+| PR | **#354** · tip **`10b8d54b`** · branch `cursor/web-fashionrise-profile-models-77c6` |
 | Constraints | No reward/group/streak changes · Android QA isolated · no iOS/store/push/purchase/prod deploy |
 | Production | **Not deployed** · no live Stars awards |
 | Next | **PM review before merge** |
