@@ -448,6 +448,8 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId('runway-my-profile'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-avatar-preview')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-edit-avatar')).toHaveTextContent(/Change photo/i)
     fireEvent.change(screen.getByTestId('designer-edit-name'), {
       target: { value: 'Studio Nova' },
     })

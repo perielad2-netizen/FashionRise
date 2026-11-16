@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, UserPlus, UserMinus } from 'lucide-react'
+import { Camera, ChevronLeft, UserMinus, UserPlus } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
@@ -179,10 +179,10 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
       <div className={styles.friendProfileIdentity}>
         {(() => {
           const avatarSrc =
-            friend.avatar_url ||
             (state.status === 'ready' ? state.profile?.avatar_url : null) ||
+            friend.avatar_url ||
             null
-          return avatarSrc ? (
+          const avatarNode = avatarSrc ? (
             <img
               src={avatarSrc}
               alt=""
@@ -195,6 +195,24 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
               {(label[0] || '?').toUpperCase()}
             </span>
           )
+          if (isSelf && editing) {
+            return (
+              <button
+                type="button"
+                className={styles.friendAvatarEdit}
+                data-testid="designer-avatar-preview"
+                aria-label="Change profile photo"
+                disabled={editBusy}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                {avatarNode}
+                <span className={styles.friendAvatarEditBadge} aria-hidden>
+                  <Camera size={13} />
+                </span>
+              </button>
+            )
+          }
+          return avatarNode
         })()}
         <div className={styles.friendText}>
           <strong data-testid="friend-profile-name">
@@ -207,6 +225,11 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
           ) : null}
         </div>
       </div>
+      {isSelf && editing ? (
+        <p className={styles.friendAvatarHint}>
+          Your photo updates here — and on your looks across FashionRise.
+        </p>
+      ) : null}
 
       {!isSelf && viewerId ? (
         <div className={styles.actions} style={{ marginTop: 8 }}>
@@ -299,6 +322,7 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
               onClick={() => avatarInputRef.current?.click()}
               data-testid="designer-edit-avatar"
             >
+              <Camera size={14} aria-hidden />
               Change photo
             </button>
             <button type="submit" className={styles.primaryBtn} disabled={editBusy}>

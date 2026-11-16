@@ -1984,12 +1984,78 @@
 .friendEditInput,
 .friendEditTextarea {
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--fr-text) 16%, transparent);
-  border-radius: 8px;
-  padding: 8px 10px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 10px 12px;
   font: inherit;
-  color: var(--fr-text);
-  background: color-mix(in srgb, var(--fr-surface, #fff) 92%, transparent);
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  color-scheme: dark;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.friendEditInput::placeholder,
+.friendEditTextarea::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.35);
+}
+
+.friendEditInput:-webkit-autofill,
+.friendEditInput:-webkit-autofill:hover,
+.friendEditInput:-webkit-autofill:focus,
+.friendEditTextarea:-webkit-autofill,
+.friendEditTextarea:-webkit-autofill:hover,
+.friendEditTextarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  transition: background-color 99999s ease-in-out 0s;
+  box-shadow: 0 0 0 1000px rgba(18, 18, 24, 0.98) inset;
+}
+
+.friendEditInput:focus-visible,
+.friendEditTextarea:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 1px;
+  border-color: rgba(249, 168, 212, 0.55);
+}
+
+.friendAvatarEdit {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 16px;
+}
+
+.friendAvatarEdit:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.friendAvatarEditBadge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid #0a0d14;
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+  color: #fff;
+  pointer-events: none;
+}
+
+.friendAvatarHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .friendPublicStats {
