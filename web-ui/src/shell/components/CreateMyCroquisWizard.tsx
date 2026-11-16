@@ -295,7 +295,10 @@ export function CreateMyCroquisWizard({
         onClick={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>
-          <h2 id="create-my-croquis-title">Create Model</h2>
+          <div className={styles.titleBlock}>
+            <p className={styles.eyebrow}>FashionRise</p>
+            <h2 id="create-my-croquis-title">Create Model</h2>
+          </div>
           <button type="button" className={styles.close} onClick={handleClose} aria-label="Close">
             ×
           </button>
@@ -331,9 +334,19 @@ export function CreateMyCroquisWizard({
               </p>
               <p className={styles.hint}>Kidswear uses Studio templates — no child photos.</p>
 
-              {localPreviewUrl ? (
-                <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
-              ) : null}
+              <button
+                type="button"
+                className={styles.photoHit}
+                onClick={() => inputRef.current?.click()}
+                disabled={busy}
+                aria-label={localFile ? 'Change photo' : 'Select photo'}
+              >
+                {localPreviewUrl ? (
+                  <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
+                ) : (
+                  <span className={styles.photoEmpty}>Tap to select a fully clothed pose photo</span>
+                )}
+              </button>
               <button
                 type="button"
                 className={styles.secondary}

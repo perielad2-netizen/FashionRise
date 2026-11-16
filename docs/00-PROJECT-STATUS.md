@@ -3,15 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Preview — Fitting Room Mobbin polish (2026-11-16 22:55 Asia/Jerusalem)
+## Preview — Create Model wizard Mobbin polish (2026-11-16 23:00 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-fitting-room-mobbin-polish-77c6` |
-| Preview | https://fashionrise.app/preview-fitting/ |
-| Change | Brand-first Fitting Room header, pink CTAs, image-first outfit/saved tiles |
-| Prod | Unchanged — tip remains Models LIVE until approve |
-| Series | Next after approve: Create |
+| Branch | `cursor/web-create-model-mobbin-polish-77c6` |
+| Preview | https://fashionrise.app/preview-create/ |
+| Change | Brand-first Create Model dialog, photo hit target, pink Upload & Generate |
+| Prod | Unchanged — tip remains Fitting LIVE until approve |
+| Series | End of studio-page polish loop after approve |
+
+## Deployed — Fitting Room Mobbin polish LIVE (2026-11-16 22:55 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#389** merged → `main` @ **`9d3fec3a`** |
+| Tip | FE **`9d3fec3a`** · `/var/www/fashionrise/releases/9d3fec3a-fitting-room-mobbin-polish` |
+| Change | Brand-first Fitting Room header, pink Try on, image-first outfit/saved tiles |
+| Preview | `/preview-fitting/` removed after promote |
+| Series | Continuing: Create |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/bace650e-my-models-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — My Models Mobbin + croquis crop fixes LIVE (2026-11-16 22:50 Asia/Jerusalem)
 
