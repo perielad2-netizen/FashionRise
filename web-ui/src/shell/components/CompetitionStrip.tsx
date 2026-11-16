@@ -31,11 +31,11 @@ function localWeekLabel(iso: string): string {
   }
 }
 
-export function CompetitionStrip() {
+export function CompetitionStrip({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const [status, setStatus] = useState<CompetitionStatus | null>(null)
   const [streak, setStreak] = useState<StreakStatus | null>(null)
   const [awards, setAwards] = useState<CompetitionAward[]>([])
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export function CompetitionStrip() {
   }
 
   return (
-    <section className={styles.strip} aria-label="Weekly FashionRise competition">
+    <section className={styles.strip} aria-label="Weekly Runway competition">
       <button type="button" className={styles.summary} onClick={() => setOpen((v) => !v)}>
         <span className={styles.badge}>
           <Trophy size={14} aria-hidden />
@@ -104,17 +104,16 @@ export function CompetitionStrip() {
                 : 'publish or engage to climb'}
             </p>
           )}
-          {status.weekly_rewards_enabled ? (
-            <div className={styles.cats}>
-              {status.award_categories.map((cat) => (
-                <span key={cat.id} className={styles.cat}>
-                  {cat.label} · {cat.stars}★
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className={styles.note}>Weekly Star prizes are not active yet.</p>
-          )}
+          <div className={styles.cats} aria-label="Award categories">
+            {status.award_categories.map((cat) => (
+              <span key={cat.id} className={styles.cat}>
+                {cat.label} · {cat.stars}★
+              </span>
+            ))}
+          </div>
+          {!status.weekly_rewards_enabled ? (
+            <p className={styles.note}>Weekly Star prizes are not active yet — categories stay listed for Runway.</p>
+          ) : null}
           {status.top_designs.length > 0 && (
             <div className={styles.list}>
               <h3>Group top designs</h3>

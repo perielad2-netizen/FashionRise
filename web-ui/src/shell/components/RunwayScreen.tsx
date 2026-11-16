@@ -74,11 +74,11 @@ type Props = {
   openOwnProfile?: boolean
   onOwnProfileConsumed?: () => void
   /**
-   * Notify shell whether Runway is showing the immersive feed.
+   * Notify shell whether FashionRise is showing the immersive feed.
    * false → GlobalHeader (profile, Friends manage, etc.); true → full-bleed feed.
    */
   onImmersiveFeedChange?: (immersiveFeed: boolean) => void
-  /** Bump from shell when user chooses Runway in the nav — closes profile and returns to the feed. */
+  /** Bump from shell when user chooses FashionRise in the nav — closes profile and returns to the feed. */
   feedFocusToken?: number
 }
 

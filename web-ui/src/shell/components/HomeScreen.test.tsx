@@ -51,7 +51,7 @@ describe('HomeScreen', () => {
     const fashionRise = screen.getByTestId('home-open-fashionrise')
     expect(fashionRise).toHaveAccessibleName(/FashionRise/i)
     fireEvent.click(fashionRise)
-    expect(onNavigate).toHaveBeenCalledWith('runway')
+    expect(onNavigate).toHaveBeenCalledWith('fashionrise')
 
     const cta = screen.getByTestId('home-start-creating')
     expect(cta).toHaveAccessibleName(/Start creating/i)

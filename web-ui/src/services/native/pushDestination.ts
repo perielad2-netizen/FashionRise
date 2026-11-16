@@ -29,9 +29,9 @@ export function isPushDestinationPath(pathname: string): boolean {
   )
 }
 
-/** Safe SPA path for a push tap; defaults to Runway. Never returns credential-bearing URLs. */
+/** Safe SPA path for a push tap; defaults to FashionRise feed. Never returns credential-bearing URLs. */
 export function sanitizePushDestination(raw: unknown): string {
-  const fallback = '/studio/runway'
+  const fallback = '/studio/fashionrise'
   if (typeof raw !== 'string' || !raw.trim()) return fallback
   let url = raw.trim()
   try {

@@ -6,6 +6,7 @@ import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
 import { FittingRoomScreen } from '@/shell/components/FittingRoomScreen'
 import { HomeScreen } from '@/shell/components/HomeScreen'
+import { RunwayBoardScreen } from '@/shell/components/RunwayBoardScreen'
 import { RunwayScreen } from '@/shell/components/RunwayScreen'
 import { MyCroquisScreen } from '@/shell/components/MyCroquisScreen'
 import { MyDesignsScreen } from '@/shell/components/MyDesignsScreen'
@@ -23,10 +24,13 @@ export const MY_DESIGNS_PATH = '/studio/designs'
 export const MY_LOOKS_PATH = '/studio/looks'
 export const MY_CROQUIS_PATH = '/studio/croquis'
 export const FITTING_ROOM_PATH = '/studio/fitting-room'
+/** FashionRise = Instagram-style immersive social feed. */
+export const FASHIONRISE_PATH = '/studio/fashionrise'
+/** Runway = rankings + weekly competition results (not the immersive feed). */
 export const RUNWAY_PATH = '/studio/runway'
-/** Opens FashionRise Runway directly into My Profile (edit). */
-export const RUNWAY_MY_PROFILE_PATH = `${RUNWAY_PATH}?profile=me`
-/** @deprecated legacy Fashion Stars path — redirects to Runway */
+/** Opens FashionRise directly into My Profile (edit). */
+export const RUNWAY_MY_PROFILE_PATH = `${FASHIONRISE_PATH}?profile=me`
+/** @deprecated legacy Fashion Stars path — redirects to FashionRise feed */
 export const FASHION_STARS_PATH = '/studio/fashion-stars'
 export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
 
@@ -63,11 +67,13 @@ export function StudioPage() {
                 : null
               : path === HOME_PATH
                 ? 'home'
-                : path === RUNWAY_PATH || path === FASHION_STARS_PATH
-                  ? 'runway'
-                  : path === STUDIO_PATH
-                    ? 'studio'
-                    : null
+                : path === FASHIONRISE_PATH || path === FASHION_STARS_PATH
+                  ? 'fashionrise'
+                  : path === RUNWAY_PATH
+                    ? 'runway'
+                    : path === STUDIO_PATH
+                      ? 'studio'
+                      : null
 
   const onNavigate = useCallback(
     (destination: NavDestination) => {
@@ -76,6 +82,7 @@ export function StudioPage() {
       else if (destination === 'looks') navigate(MY_LOOKS_PATH)
       else if (destination === 'croquis') navigate(MY_CROQUIS_PATH)
       else if (destination === 'fitting-room') navigate(FITTING_ROOM_PATH)
+      else if (destination === 'fashionrise') navigate(FASHIONRISE_PATH)
       else if (destination === 'runway') navigate(RUNWAY_PATH)
       else navigate(STUDIO_PATH)
     },
@@ -92,11 +99,11 @@ export function StudioPage() {
   )
   const focusLookId = searchParams.get('look')
   const openOwnProfile = searchParams.get('profile') === 'me'
-  /** false while designer profile / Friends manage (or left runway) — keeps GlobalHeader visible. */
-  const [runwayImmersiveFeed, setRunwayImmersiveFeed] = useState(true)
-  const [runwayFeedFocusToken, setRunwayFeedFocusToken] = useState(0)
+  /** false while designer profile / Friends manage (or left FashionRise feed) — keeps GlobalHeader visible. */
+  const [fashionRiseImmersiveFeed, setFashionRiseImmersiveFeed] = useState(true)
+  const [fashionRiseFeedFocusToken, setFashionRiseFeedFocusToken] = useState(0)
   useEffect(() => {
-    if (view !== 'runway') setRunwayImmersiveFeed(true)
+    if (view !== 'fashionrise') setFashionRiseImmersiveFeed(true)
   }, [view])
   const clearFocusLook = useCallback(() => {
     if (!searchParams.has('look')) return
@@ -113,10 +120,10 @@ export function StudioPage() {
   const openMyProfile = useCallback(() => {
     navigate(RUNWAY_MY_PROFILE_PATH)
   }, [navigate])
-  const focusRunwayFeed = useCallback(() => {
-    setRunwayImmersiveFeed(true)
-    setRunwayFeedFocusToken((n) => n + 1)
-    navigate(RUNWAY_PATH)
+  const focusFashionRiseFeed = useCallback(() => {
+    setFashionRiseImmersiveFeed(true)
+    setFashionRiseFeedFocusToken((n) => n + 1)
+    navigate(FASHIONRISE_PATH)
   }, [navigate])
 
   const currentNav: NavDestination = useMemo(() => {
@@ -125,27 +132,28 @@ export function StudioPage() {
     if (view === 'looks' || view === 'techpack') return 'looks'
     if (view === 'croquis') return 'croquis'
     if (view === 'fitting-room') return 'fitting-room'
+    if (view === 'fashionrise') return 'fashionrise'
     if (view === 'runway') return 'runway'
     return 'create'
   }, [view])
 
   const onShellNavigate = useCallback(
     (destination: NavDestination) => {
-      if (destination === 'runway') {
-        focusRunwayFeed()
+      if (destination === 'fashionrise') {
+        focusFashionRiseFeed()
         return
       }
       onNavigate(destination)
     },
-    [focusRunwayFeed, onNavigate],
+    [focusFashionRiseFeed, onNavigate],
   )
 
   if (view === null) return <Navigate to={HOME_PATH} replace />
-  if (path === FASHION_STARS_PATH) return <Navigate to={RUNWAY_PATH} replace />
+  if (path === FASHION_STARS_PATH) return <Navigate to={FASHIONRISE_PATH} replace />
 
-  // Full-bleed immersive chrome is the endless feed only. Profile, Friends,
-  // and every other studio page keep the shared GlobalHeader + nav drawer.
-  const immersive = view === 'runway' && runwayImmersiveFeed
+  // Full-bleed immersive chrome is FashionRise feed only. Runway rankings,
+  // profile, Friends, and every other studio page keep GlobalHeader + nav.
+  const immersive = view === 'fashionrise' && fashionRiseImmersiveFeed
 
   return (
     <div className={`${styles.page} studioShellRoot studio-chrome`}>
@@ -163,15 +171,17 @@ export function StudioPage() {
             username={editor.user?.username ?? 'Creator'}
             onNavigate={onShellNavigate}
           />
-        ) : view === 'runway' ? (
+        ) : view === 'fashionrise' ? (
           <RunwayScreen
             onOpenCreate={() => onShellNavigate('create')}
             onOpenLooks={() => onShellNavigate('looks')}
             openOwnProfile={openOwnProfile}
             onOwnProfileConsumed={clearOwnProfileParam}
-            onImmersiveFeedChange={setRunwayImmersiveFeed}
-            feedFocusToken={runwayFeedFocusToken}
+            onImmersiveFeedChange={setFashionRiseImmersiveFeed}
+            feedFocusToken={fashionRiseFeedFocusToken}
           />
+        ) : view === 'runway' ? (
+          <RunwayBoardScreen />
         ) : view === 'library' && editor.user?.id ? (
           <MyDesignsScreen
             ownerId={editor.user.id}
