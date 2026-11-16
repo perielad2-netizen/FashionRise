@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, UserPlus, UserMinus } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
@@ -9,9 +9,11 @@ import {
   followCreator,
   getFollowStatus,
   getPublicProfile,
+  updateMyProfile,
   unfollowCreator,
   type PublicProfile,
 } from '@/services/profilesApi'
+import { uploadReferenceImage } from '@/services/uploadsApi'
 import styles from './RunwayScreen.module.css'
 
 /** Minimal designer identity — friends circle or gallery creator. */
@@ -25,6 +27,8 @@ export type DesignerRef = {
 type Props = {
   friend: FriendUser | DesignerRef
   onBack: () => void
+  /** When true and viewing self, open the existing Edit Profile form once ready. */
+  startInEditMode?: boolean
 }
 
 type LoadState =
@@ -36,11 +40,18 @@ type LoadState =
  * FashionRise designer profile — public bio, stats, published looks, follow.
  * Never loads private designs or unpublished looks.
  */
-export function FriendProfilePanel({ friend, onBack }: Props) {
+export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [followBusy, setFollowBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editBio, setEditBio] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
+  const openedEditRef = useRef(false)
   const label =
     friend.display_name ||
     friend.username ||
@@ -51,6 +62,8 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
   useEffect(() => {
     const controller = new AbortController()
     setState({ status: 'loading' })
+    setEditing(false)
+    openedEditRef.current = false
     void Promise.all([
       getPublicProfile(friend.user_id, controller.signal).catch(() => null),
       listUserGallery(friend.user_id, controller.signal),
@@ -93,6 +106,58 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
       setState((prev) => (prev.status === 'ready' ? { ...prev, following: !next } : prev))
     } finally {
       setFollowBusy(false)
+    }
+  }
+
+  const beginEdit = () => {
+    if (state.status !== 'ready' || !isSelf) return
+    setEditName(state.profile?.display_name || friend.display_name || '')
+    setEditBio(state.profile?.bio || '')
+    setEditError(null)
+    setEditing(true)
+  }
+
+  useEffect(() => {
+    if (!startInEditMode || !isSelf || openedEditRef.current) return
+    if (state.status !== 'ready') return
+    openedEditRef.current = true
+    beginEdit()
+  }, [startInEditMode, isSelf, state])
+
+  const saveProfile = async () => {
+    if (editBusy || state.status !== 'ready') return
+    setEditBusy(true)
+    setEditError(null)
+    try {
+      const next = await updateMyProfile({
+        display_name: editName.trim().slice(0, 120) || undefined,
+        bio: editBio.trim() ? editBio.trim().slice(0, 2000) : '',
+      })
+      setState((prev) =>
+        prev.status === 'ready' ? { ...prev, profile: { ...prev.profile!, ...next } } : prev,
+      )
+      setEditing(false)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Could not save profile')
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  const onAvatarSelected = async (file: File | null) => {
+    if (!file || editBusy || state.status !== 'ready') return
+    setEditBusy(true)
+    setEditError(null)
+    try {
+      const uploaded = await uploadReferenceImage(file)
+      const next = await updateMyProfile({ avatar_url: uploaded.url })
+      setState((prev) =>
+        prev.status === 'ready' ? { ...prev, profile: { ...prev.profile!, ...next } } : prev,
+      )
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Could not update photo')
+    } finally {
+      setEditBusy(false)
     }
   }
 
@@ -165,6 +230,95 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
             )}
           </button>
         </div>
+      ) : null}
+
+      {isSelf && state.status === 'ready' ? (
+        <div className={styles.actions} style={{ marginTop: 8 }}>
+          {!editing ? (
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              data-testid="designer-edit-profile"
+              onClick={beginEdit}
+            >
+              Edit profile
+            </button>
+          ) : null}
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            data-testid="designer-avatar-input"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null
+              e.target.value = ''
+              void onAvatarSelected(file)
+            }}
+          />
+        </div>
+      ) : null}
+
+      {isSelf && editing ? (
+        <form
+          className={styles.friendEditForm}
+          data-testid="designer-profile-editor"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void saveProfile()
+          }}
+        >
+          <label className={styles.friendEditLabel}>
+            Display name
+            <input
+              className={styles.friendEditInput}
+              value={editName}
+              maxLength={120}
+              disabled={editBusy}
+              data-testid="designer-edit-name"
+              onChange={(e) => setEditName(e.target.value)}
+            />
+          </label>
+          <label className={styles.friendEditLabel}>
+            Bio
+            <textarea
+              className={styles.friendEditTextarea}
+              value={editBio}
+              maxLength={2000}
+              rows={3}
+              disabled={editBusy}
+              data-testid="designer-edit-bio"
+              onChange={(e) => setEditBio(e.target.value)}
+            />
+          </label>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={editBusy}
+              onClick={() => avatarInputRef.current?.click()}
+              data-testid="designer-edit-avatar"
+            >
+              Change photo
+            </button>
+            <button type="submit" className={styles.primaryBtn} disabled={editBusy}>
+              {editBusy ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={editBusy}
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </button>
+          </div>
+          {editError ? (
+            <p className={styles.status} role="alert">
+              {editError}
+            </p>
+          ) : null}
+        </form>
       ) : null}
 
       {state.status === 'loading' ? (

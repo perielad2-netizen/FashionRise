@@ -219,6 +219,22 @@
   font-size: 13px;
 }
 
+.runwayCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fr-text);
+  cursor: pointer;
+}
+
+.runwayCheck input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
 @media (max-width: 640px) {
   .head {
     padding: 12px;

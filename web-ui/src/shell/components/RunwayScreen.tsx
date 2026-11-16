@@ -156,6 +156,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [pushNotice, setPushNotice] = useState<string | null>(null)
   const [pushNeedsGesture, setPushNeedsGesture] = useState(false)
   const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
+  const [openOwnProfileEditing, setOpenOwnProfileEditing] = useState(false)
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -478,7 +479,11 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       <section className={styles.screen} aria-label="Designer profile">
         <FriendProfilePanel
           friend={viewingDesigner}
-          onBack={() => setViewingDesigner(null)}
+          startInEditMode={openOwnProfileEditing && viewingDesigner.user_id === viewerId}
+          onBack={() => {
+            setViewingDesigner(null)
+            setOpenOwnProfileEditing(false)
+          }}
         />
       </section>
     )
@@ -509,6 +514,22 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           </p>
         </div>
         <div className={styles.headActions}>
+          {viewerId ? (
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              data-testid="runway-my-profile"
+              onClick={() => {
+                setOpenOwnProfileEditing(true)
+                setViewingDesigner({
+                  user_id: viewerId,
+                  username: viewerUsername || undefined,
+                })
+              }}
+            >
+              My Profile
+            </button>
+          ) : null}
           <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
             My Looks
           </button>

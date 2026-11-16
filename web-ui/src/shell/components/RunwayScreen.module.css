@@ -1343,6 +1343,30 @@
   color: var(--fr-muted);
 }
 
+.friendEditForm {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.friendEditLabel {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.friendEditInput,
+.friendEditTextarea {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--fr-text) 16%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--fr-text);
+  background: color-mix(in srgb, var(--fr-surface, #fff) 92%, transparent);
+}
+
 .friendPublicStats {
   list-style: none;
   margin: 0;

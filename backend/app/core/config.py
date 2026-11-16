@@ -91,6 +91,13 @@ class Settings(BaseSettings):
         "FashionRise users, and I grant FashionRise permission to display this content "
         "on the Runway."
     )
+    # My Models → FashionRise public publish (likeness / personal photograph rights).
+    croquis_public_share_consent_version: str = "croquis-public-share-2026-11-16"
+    croquis_public_share_notice_text: str = (
+        "I confirm I have the rights to publish this personal model and any photograph "
+        "it is based on, and I grant FashionRise permission to display it publicly on "
+        "FashionRise (Discover, rankings, and competitions)."
+    )
     # Upload bounds (source photos). Separate from fabric limits.
     max_croquis_upload_size_mb: int = 10
     max_croquis_dimension_px: int = 4096

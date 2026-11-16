@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeft, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, Globe2, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
+import { sha256Hex } from '@/lib/personalCroquisNotices'
+import {
+  CROQUIS_PUBLIC_SHARE_CHECKBOX_LABEL,
+  CROQUIS_PUBLIC_SHARE_NOTICE_TEXT,
+  CROQUIS_PUBLIC_SHARE_NOTICE_VERSION,
+} from '@/lib/croquisPublicShareConsent'
 import {
   acceptedVersionNumber,
   erasePersonalCroquis,
   fetchCroquisAssetBlob,
   listPersonalCroquis,
+  publishPersonalCroquisToFashionRise,
+  unpublishPersonalCroquisFromFashionRise,
   type PersonalCroquisRead,
 } from '@/services/personalCroquisApi'
 import { ApiError } from '@/services/api/client'
@@ -39,6 +47,11 @@ type DeleteDialog =
       message: string
       canRetry: boolean
     }
+
+type PublishDialog =
+  | { phase: 'confirm'; row: PersonalCroquisRead }
+  | { phase: 'publishing'; row: PersonalCroquisRead }
+  | { phase: 'error'; row: PersonalCroquisRead; message: string }
 
 function formatDate(iso: string): string {
   const t = Date.parse(iso)
@@ -122,8 +135,11 @@ export function MyCroquisScreen({
   const [reloadToken, setReloadToken] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
+  const [publishDialog, setPublishDialog] = useState<PublishDialog | null>(null)
+  const [publishAgreed, setPublishAgreed] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const deleteInFlightRef = useRef(false)
+  const publishInFlightRef = useRef(false)
 
   const reload = useCallback(() => {
     setReloadToken((n) => n + 1)
@@ -169,6 +185,64 @@ export function MyCroquisScreen({
     },
     [activeStudioPinId],
   )
+
+  const beginPublish = useCallback((row: PersonalCroquisRead) => {
+    if (acceptedVersionNumber(row) == null) return
+    setNotice(null)
+    setPublishAgreed(false)
+    setPublishDialog({ phase: 'confirm', row })
+  }, [])
+
+  const confirmPublish = useCallback(async () => {
+    if (!publishDialog || publishDialog.phase === 'error') return
+    if (!publishAgreed || publishInFlightRef.current) return
+    const { row } = publishDialog
+    publishInFlightRef.current = true
+    setPublishDialog({ phase: 'publishing', row })
+    try {
+      const notice_text_hash = await sha256Hex(CROQUIS_PUBLIC_SHARE_NOTICE_TEXT)
+      await publishPersonalCroquisToFashionRise(row.id, {
+        public_share_attested: true,
+        notice_version: CROQUIS_PUBLIC_SHARE_NOTICE_VERSION,
+        notice_text_hash,
+      })
+      setPublishDialog(null)
+      setPublishAgreed(false)
+      setNotice(`Published “${row.display_name || 'Untitled model'}” to FashionRise.`)
+      reload()
+    } catch (err) {
+      setPublishDialog({
+        phase: 'error',
+        row,
+        message:
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error && err.message
+              ? err.message
+              : 'Could not publish this model.',
+      })
+    } finally {
+      publishInFlightRef.current = false
+    }
+  }, [publishAgreed, publishDialog, reload])
+
+  const confirmUnpublish = useCallback(async (row: PersonalCroquisRead) => {
+    if (publishInFlightRef.current) return
+    publishInFlightRef.current = true
+    try {
+      await unpublishPersonalCroquisFromFashionRise(row.id)
+      setNotice(`Removed “${row.display_name || 'Untitled model'}” from FashionRise.`)
+      reload()
+    } catch (err) {
+      setNotice(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not unpublish this model.',
+      )
+    } finally {
+      publishInFlightRef.current = false
+    }
+  }, [reload])
 
   const confirmDelete = useCallback(async () => {
     // Allow Retry delete after an API error (phase === 'error' with canRetry).
@@ -336,6 +410,29 @@ export function MyCroquisScreen({
                         <Sparkles size={14} aria-hidden />
                         Use in Studio
                       </button>
+                      {row.fashionrise_item_id ? (
+                        <button
+                          type="button"
+                          className={styles.ghostBtn}
+                          onClick={() => void confirmUnpublish(row)}
+                          aria-label={`Unpublish ${title} from FashionRise`}
+                          data-testid="croquis-unpublish"
+                        >
+                          <Globe2 size={14} aria-hidden />
+                          Unpublish
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.openBtn}
+                          onClick={() => beginPublish(row)}
+                          aria-label={`Publish ${title} to FashionRise`}
+                          data-testid="croquis-publish"
+                        >
+                          <Globe2 size={14} aria-hidden />
+                          Publish
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={styles.deleteBtn}
@@ -360,6 +457,77 @@ export function MyCroquisScreen({
           onClose={() => setWizardOpen(false)}
           onPinAccepted={onPinAccepted}
         />
+      ) : null}
+
+      {publishDialog ? (
+        <ConfirmDialog
+          title={
+            publishDialog.phase === 'error'
+              ? 'Could not publish model'
+              : 'Publish to FashionRise?'
+          }
+          busy={publishDialog.phase === 'publishing'}
+          scrollable
+          onEscape={() => {
+            if (publishDialog.phase !== 'publishing') {
+              setPublishDialog(null)
+              setPublishAgreed(false)
+            }
+          }}
+          actions={
+            publishDialog.phase === 'error'
+              ? [
+                  {
+                    label: 'Close',
+                    variant: 'ghost',
+                    onClick: () => {
+                      setPublishDialog(null)
+                      setPublishAgreed(false)
+                    },
+                  },
+                ]
+              : [
+                  {
+                    label: 'Cancel',
+                    variant: 'ghost',
+                    disabled: publishDialog.phase === 'publishing',
+                    onClick: () => {
+                      setPublishDialog(null)
+                      setPublishAgreed(false)
+                    },
+                  },
+                  {
+                    label:
+                      publishDialog.phase === 'publishing' ? 'Publishing…' : 'Publish',
+                    variant: 'primary',
+                    disabled: !publishAgreed || publishDialog.phase === 'publishing',
+                    onClick: () => void confirmPublish(),
+                  },
+                ]
+          }
+        >
+          {publishDialog.phase === 'error' ? (
+            <p role="alert">{publishDialog.message}</p>
+          ) : (
+            <>
+              <p>
+                Publishing makes this accepted personal model visible to other FashionRise users on
+                Discover, worldwide rankings, and the current competition week. Private source
+                photographs stay private.
+              </p>
+              <label className={styles.runwayCheck}>
+                <input
+                  type="checkbox"
+                  checked={publishAgreed}
+                  disabled={publishDialog.phase === 'publishing'}
+                  onChange={(e) => setPublishAgreed(e.target.checked)}
+                  data-testid="croquis-public-share-consent"
+                />
+                <span>{CROQUIS_PUBLIC_SHARE_CHECKBOX_LABEL}</span>
+              </label>
+            </>
+          )}
+        </ConfirmDialog>
       ) : null}
 
       {deleteDialog ? (
