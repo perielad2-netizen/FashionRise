@@ -1,4 +1,4 @@
-import { FolderHeart, Home, Images, Shirt, Sparkles, Star, UserRound } from 'lucide-react'
+import { Clapperboard, FolderHeart, Home, Images, Shirt, Sparkles, Trophy, UserRound } from 'lucide-react'
 import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import styles from './GlobalNavigation.module.css'
@@ -9,6 +9,7 @@ export type NavDestination =
   | 'designs'
   | 'looks'
   | 'croquis'
+  | 'fashionrise'
   | 'runway'
   | 'fitting-room'
 
@@ -16,9 +17,15 @@ const BASE_ITEMS = [
   { id: 'home', label: 'Home', icon: Home, destination: 'home' as NavDestination | null },
   { id: 'create', label: 'Create', icon: Sparkles, destination: 'create' as NavDestination | null },
   {
+    id: 'fashionrise',
+    label: 'FashionRise',
+    icon: Clapperboard,
+    destination: 'fashionrise' as NavDestination | null,
+  },
+  {
     id: 'runway',
     label: 'Runway',
-    icon: Star,
+    icon: Trophy,
     destination: 'runway' as NavDestination | null,
   },
   {

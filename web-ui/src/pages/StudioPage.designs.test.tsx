@@ -327,25 +327,37 @@ describe('My Designs navigation and library', () => {
     expect(within(nav).getByRole('button', { name: 'Home' })).not.toBeDisabled()
     expect(within(nav).queryByRole('button', { name: 'Design Book' })).toBeNull()
     expect(within(nav).queryByRole('button', { name: 'Discover' })).toBeNull()
+    expect(within(nav).getByRole('button', { name: 'FashionRise' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'Runway' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
   })
 
-  it('opens Runway from the sidebar', async () => {
+  it('opens FashionRise feed from the sidebar', async () => {
     renderAt('/studio')
     await ready()
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
-    fireEvent.click(within(nav).getByRole('button', { name: 'Runway' }))
+    fireEvent.click(within(nav).getByRole('button', { name: 'FashionRise' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
     // Immersive feed hides the nav drawer from the a11y tree; reopen to assert current.
     fireEvent.click(screen.getByTestId('shell-nav-toggle'))
     expect(
       within(screen.getByRole('navigation', { name: 'FashionRise' })).getByRole('button', {
-        name: 'Runway',
+        name: 'FashionRise',
       }),
     ).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('opens Runway rankings from the sidebar', async () => {
+    renderAt('/studio')
+    await ready()
+    const nav = screen.getByRole('navigation', { name: 'FashionRise' })
+    fireEvent.click(within(nav).getByRole('button', { name: 'Runway' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Runway' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('runway-scope-worldwide')).toBeInTheDocument()
+    expect(screen.getByTestId('runway-top-limit-10')).toBeInTheDocument()
   })
 
   it('opens Home from the sidebar and returns to Create', async () => {

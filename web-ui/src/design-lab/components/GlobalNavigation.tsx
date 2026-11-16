@@ -5,6 +5,7 @@ import styles from './GlobalNavigation.module.css'
 const ITEMS = [
   { id: 'home', label: 'Home', icon: Home, active: false },
   { id: 'create', label: 'Create', icon: Sparkles, active: true },
+  { id: 'fashionrise', label: 'FashionRise', icon: Star, active: false },
   { id: 'runway', label: 'Runway', icon: Star, active: false },
   { id: 'looks', label: 'My Looks', icon: Images, active: false },
 ] as const

@@ -4,6 +4,7 @@ import { classifyFashionRiseUrl, isAllowedInAppPath } from './urlPolicy'
 describe('urlPolicy', () => {
   it('allowlists studio and auth SPA paths', () => {
     expect(isAllowedInAppPath('/studio/runway')).toBe(true)
+    expect(isAllowedInAppPath('/studio/fashionrise')).toBe(true)
     expect(isAllowedInAppPath('/reset-password')).toBe(true)
     expect(isAllowedInAppPath('/verify-email')).toBe(true)
     expect(isAllowedInAppPath('/privacy')).toBe(true)

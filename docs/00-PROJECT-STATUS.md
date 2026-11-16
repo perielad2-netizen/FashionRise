@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Product correction — FashionRise ≠ Runway (2026-11-16 Asia/Jerusalem)
+
+| Surface | Role |
+|---|---|
+| **FashionRise** | Instagram-style immersive social feed (`/studio/fashionrise`) — Discover / Following / Friends circle |
+| **Runway** | Rankings + weekly competitions (`/studio/runway`) — Worldwide Top **10 / 20 / 50**, Friends, Following, award categories (Top Design / Designer / Community Champion / Supporter / Commenter / Rater) |
+| Nav | Separate **FashionRise** + **Runway** items · Home featured CTA → FashionRise feed |
+| Note | Earlier PM “FashionRise social surface (not Runway 2.0)” prompts conflated the feed onto the Runway nav destination; this restores the product split |
+
 ## Android QA — Runway label + safe-top + avatar (2026-11-16 Asia/Jerusalem)
 
 | Item | Fix |

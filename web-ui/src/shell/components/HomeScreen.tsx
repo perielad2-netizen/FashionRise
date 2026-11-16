@@ -80,7 +80,7 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
             <button
               type="button"
               className={styles.featuredCta}
-              onClick={() => onNavigate('runway')}
+              onClick={() => onNavigate('fashionrise')}
               data-testid="home-open-fashionrise"
             >
               <Star size={18} aria-hidden />

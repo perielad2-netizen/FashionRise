@@ -363,6 +363,7 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     expect(within(nav).getByRole('button', { name: 'Home' })).not.toBeDisabled()
     expect(within(nav).queryByRole('button', { name: 'Design Book' })).toBeNull()
     expect(within(nav).queryByRole('button', { name: 'Discover' })).toBeNull()
+    expect(within(nav).getByRole('button', { name: 'FashionRise' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'Runway' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
   })
