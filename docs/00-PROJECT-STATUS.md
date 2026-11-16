@@ -3,19 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Discover all-published #366 shipping** · restore endless feed after #371 BE tip wiped live patch · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**Discover all-published #366 LIVE** · BE **`43ab55dd`** · FE **`c1fed241`** · discover **8/8** · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. Discover was capped again because #366 never merged and the #371 BE checkout restored the 7-day window. Merging #366 + BE redeploy. Rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. Discover endless feed restored (#366 on `main` + BE tip). Designer profile #371 + friends full-profile #372 FE tip remain live. Rewards remain **OFF**.
 
-## Discover all-published #366 — SHIPPING (2026-11-16)
+## Discover all-published #366 — BE LIVE (2026-11-16)
 
-| Item | Detail |
+| Item | Result |
 |---|---|
-| Bug | Feed showed ~5 looks; 8 public exist. Cause: 7-day eligibility + soft creator cap; FE stops load-more when first page `< 24` |
-| Fix | All public+ok looks eligible · soft ≤2/creator then fill remaining slots · [#366](https://github.com/perielad2-netizen/FashionRise/pull/366) |
-| Why regress | #371 BE `11d1b685` checkout replaced earlier live Discover patch that was not on `main` |
-| Verify | pytest discover 12/12 |
-| Deploy | BE tip with #366 · FE unchanged unless needed · Alembic **035** · rewards OFF |
+| Bug | Feed showed ~5 looks while 8 public exist (7-day cut + creator soft-cap; FE end-of-feed when page `< 24`) |
+| Merge | [#366](https://github.com/perielad2-netizen/FashionRise/pull/366) → `main` @ **`43ab55dd`** (includes #371/#372) |
+| Why regress | #371 BE `11d1b685` checkout replaced an earlier live Discover patch that was **not** on `main` |
+| Backend | Detached **`43ab55dd`** · API active · `/health` 200 · Alembic **035** |
+| Frontend | Unchanged tip **`c1fed241-friends-profile-full`** |
+| Smoke | Discover **8** = newest **8** · `weekly_rewards_enabled=false` |
+| Preserve | `/var/backups/fashionrise/pm-discover-366-preserve-20261116T171715Z` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 11d1b685 && systemctl restart fashionrise-api` |
 
 ## Friends → full designer profile hotfix — FE LIVE (2026-11-16)
 
