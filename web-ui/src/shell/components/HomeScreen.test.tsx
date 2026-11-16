@@ -34,10 +34,13 @@ describe('HomeScreen', () => {
     render(<HomeScreen username="Maya Designer" onNavigate={onNavigate} />)
 
     expect(screen.getByRole('heading', { level: 1, name: /Sketch it\. See it come to life\./i })).toBeInTheDocument()
-    expect(screen.getByText(/Welcome back, Maya/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument()
     expect(screen.getByText('Fashion')).toBeInTheDocument()
     expect(screen.getByText('Rise')).toBeInTheDocument()
-    expect(screen.getByText(/Turn your fashion ideas into stunning AI creations/i)).toBeInTheDocument()
+    expect(
+      screen.getByText('Turn your fashion ideas into stunning AI creations.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/jump back into saved/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('home-before-after-gallery')).toBeInTheDocument()
     expect(
       screen.getByTestId('home-gallery-composite-pink-gown-sketch-to-look'),
