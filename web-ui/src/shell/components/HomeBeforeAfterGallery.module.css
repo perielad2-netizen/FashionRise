@@ -1,9 +1,10 @@
 .gallery {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
+  animation: galleryRise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .header {
@@ -11,30 +12,32 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  padding: 0 2px;
 }
 
 .title {
   margin: 0;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.02em;
-  color: var(--fr-text);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.55);
 }
 
 .subtitle {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--fr-muted);
 }
 
 .viewport {
   min-width: 0;
-  border-radius: 18px;
-  border: 1px solid rgba(244, 114, 182, 0.28);
+  border-radius: 20px;
+  border: 1px solid rgba(244, 114, 182, 0.22);
   background: rgba(15, 22, 38, 0.55);
   overflow: hidden;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
 }
 
 .track {
@@ -206,7 +209,22 @@
   }
 }
 
+@keyframes galleryRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .gallery {
+    animation: none;
+  }
+
   .track {
     scroll-behavior: auto;
   }

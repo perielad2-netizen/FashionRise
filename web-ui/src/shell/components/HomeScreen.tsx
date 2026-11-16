@@ -99,28 +99,31 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
         </div>
       </header>
 
-      <nav className={styles.destinations} aria-label="Studio destinations">
-        {destinations.map((item) => {
-          const Icon = item.icon
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.destination}
-              onClick={() => onNavigate(item.id)}
-            >
-              <span className={styles.destinationIcon} aria-hidden>
-                <Icon size={18} strokeWidth={1.75} />
-              </span>
-              <span className={styles.destinationText}>
-                <span className={styles.destinationLabel}>{item.label}</span>
-                <span className={styles.destinationHint}>{item.hint}</span>
-              </span>
-              <ChevronRight className={styles.destinationChevron} size={18} aria-hidden />
-            </button>
-          )
-        })}
-      </nav>
+      <div className={styles.studioBlock}>
+        <p className={styles.sectionLabel}>Your studio</p>
+        <nav className={styles.destinations} aria-label="Studio destinations">
+          {destinations.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={styles.destination}
+                onClick={() => onNavigate(item.id)}
+              >
+                <span className={styles.destinationIcon} aria-hidden>
+                  <Icon size={18} strokeWidth={1.75} />
+                </span>
+                <span className={styles.destinationText}>
+                  <span className={styles.destinationLabel}>{item.label}</span>
+                  <span className={styles.destinationHint}>{item.hint}</span>
+                </span>
+                <ChevronRight className={styles.destinationChevron} size={18} aria-hidden />
+              </button>
+            )
+          })}
+        </nav>
+      </div>
     </section>
   )
 }
