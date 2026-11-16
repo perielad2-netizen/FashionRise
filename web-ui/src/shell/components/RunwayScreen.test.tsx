@@ -214,6 +214,7 @@ describe('RunwayScreen', () => {
             title: 'Discover look',
             user_id: 'creator-a',
             username: 'atelier_a',
+            avatar_url: '/api/v1/profiles/creator-a/avatar',
           },
         ]
       }
@@ -607,6 +608,9 @@ describe('RunwayScreen', () => {
     )
     expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
     expect(await screen.findByText('@atelier_a')).toBeInTheDocument()
+    const avatar = await screen.findByTestId('designer-avatar-photo')
+    expect(avatar).toHaveAttribute('src', '/api/v1/profiles/creator-a/avatar')
+    expect(screen.queryByTestId('designer-avatar-fallback')).toBeNull()
     expect(screen.queryByText('@Designer')).toBeNull()
     expect(screen.queryByText('Look ·')).toBeNull()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()

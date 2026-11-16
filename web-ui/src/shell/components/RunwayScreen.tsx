@@ -62,6 +62,7 @@ import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import {
   followCreator,
   getFollowStatus,
+  profileAvatarSrc,
   unfollowCreator,
 } from '@/services/profilesApi'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
@@ -1348,6 +1349,44 @@ function FriendsPanel({
   )
 }
 
+/** Profile photo on FashionRise look chips — falls back to initial when missing. */
+function DesignerAvatar({
+  userId,
+  label,
+  avatarUrl,
+}: {
+  userId: string
+  label: string
+  avatarUrl?: string | null
+}) {
+  const [broken, setBroken] = useState(false)
+  const initial = (label.trim()[0] || '·').toUpperCase()
+  // null = API says no photo; undefined = older payload — still try the avatar route.
+  const src =
+    avatarUrl === null
+      ? null
+      : profileAvatarSrc(userId, avatarUrl || `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`)
+
+  if (!src || broken) {
+    return (
+      <span className={styles.designerAvatar} aria-hidden data-testid="designer-avatar-fallback">
+        {initial}
+      </span>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className={styles.designerAvatarImg}
+      data-testid="designer-avatar-photo"
+      draggable={false}
+      onError={() => setBroken(true)}
+    />
+  )
+}
+
 function RunwayCard({
   item,
   rank,
@@ -1390,6 +1429,13 @@ function RunwayCard({
   const chatTitleId = useId()
   const chatInputId = useId()
   const designerLabel = item.username?.trim() || null
+  const designerAvatar = (
+    <DesignerAvatar
+      userId={item.user_id}
+      label={designerLabel || item.title || '·'}
+      avatarUrl={item.avatar_url}
+    />
+  )
 
   useEffect(() => {
     impressionSentRef.current = false
@@ -1819,9 +1865,7 @@ function RunwayCard({
                       })
                     }
                   >
-                    <span className={styles.designerAvatar} aria-hidden>
-                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                    </span>
+                    {designerAvatar}
                     <span className={styles.designerChipText}>
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'View designer'}
@@ -1830,9 +1874,7 @@ function RunwayCard({
                   </button>
                 ) : (
                   <div className={styles.designerChip}>
-                    <span className={styles.designerAvatar} aria-hidden>
-                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                    </span>
+                    {designerAvatar}
                     <span className={styles.designerChipText}>
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'Designer'}

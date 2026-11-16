@@ -11,11 +11,11 @@
 
 | Item | Detail |
 |---|---|
-| Scope | Shared `FriendProfilePanel` luxury Designer Card hero · same view for owner/visitor · Edit Designer Card sheet · Collection grid + look preview · no auto-open edit on My Profile |
+| Scope | Shared `FriendProfilePanel` luxury Designer Card hero · same view for owner/visitor · Edit Designer Card sheet · Collection grid + look preview · no auto-open edit on My Profile · **published-look chips show saved profile photo** (`GalleryRead.avatar_url` + look chip `<img>`) |
 | Branch | `cursor/web-designer-profile-premium-77c6` |
 | Verify | Vitest FriendProfilePanel + RunwayScreen · `tsc -b` · production `npm run build` |
 | Disabled gates | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · streak rewards OFF · Stars purchasing OFF · no Codemagic/Android QA changes |
-| Next | UI approval → then FE tip deploy (not before) |
+| Next | UI approval → then FE+BE tip deploy together (avatar on looks needs BE field; FE also tries avatar route when field absent) |
 
 ## FashionRise Social — scope & progress
 

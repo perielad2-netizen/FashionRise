@@ -350,7 +350,8 @@
   cursor: pointer;
 }
 
-.designerAvatar {
+.designerAvatar,
+.designerAvatarImg {
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
@@ -362,6 +363,11 @@
   background: rgba(214, 51, 132, 0.55);
   font-size: 12px;
   font-weight: 700;
+  object-fit: cover;
+}
+
+.designerAvatarImg {
+  background: rgba(12, 14, 20, 0.55);
 }
 
 .designerChipText {

@@ -28,7 +28,7 @@ def create_gallery_item(
     data: GalleryCreate, user: CurrentUser, db: Session = Depends(get_db)
 ) -> GalleryRead:
     item = gallery_service.create_gallery_item(db, user, data)
-    return gallery_service.to_gallery_read(item, username=user.username)
+    return gallery_service.to_gallery_reads_for_viewer(db, [item], user)[0]
 
 
 @router.get("", response_model=list[GalleryRead])
