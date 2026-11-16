@@ -1,12 +1,14 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.gallery_comment import GalleryComment
 from app.models.gallery_comment_like import GalleryCommentLike
+from app.models.gallery_impression import GalleryImpression
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
@@ -22,6 +24,13 @@ from app.schemas.gallery import (
     GallerySort,
 )
 from app.services import ai_service
+from app.services.gallery_discover import (
+    DISCOVER_WINDOW,
+    ELIGIBLE_HARD_CAP,
+    DiscoverCandidate,
+    diversify_select_page,
+    rank_discover_candidates,
+)
 
 
 def to_gallery_read(
@@ -272,6 +281,200 @@ def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
         .limit(cap)
     )
     return list(db.scalars(q).all())
+
+
+def _discover_eligible_filter(cutoff: datetime):
+    return (
+        GalleryItem.visibility == "public",
+        GalleryItem.moderation_status == "ok",
+        GalleryItem.created_at >= cutoff,
+    )
+
+
+def _discover_projection():
+    return (
+        GalleryItem.id,
+        GalleryItem.user_id,
+        GalleryItem.likes_count,
+        GalleryItem.rating_count,
+        GalleryItem.unique_impressions_count,
+        GalleryItem.created_at,
+    )
+
+
+def fetch_discover_candidate_rows(
+    db: Session,
+    *,
+    cutoff: datetime,
+    now: datetime,
+    hard_cap: int = ELIGIBLE_HARD_CAP,
+):
+    """Bounded candidate set that spans the full 7-day window.
+
+    Under the cap: load every eligible row. Over the cap: take a fair per-day
+    quota (cold-start first) so older eligible days are not wiped by a newest flood.
+    """
+    filters = _discover_eligible_filter(cutoff)
+    total = int(
+        db.scalar(select(func.count()).select_from(GalleryItem).where(*filters)) or 0
+    )
+    if total <= hard_cap:
+        return list(
+            db.execute(
+                select(*_discover_projection())
+                .where(*filters)
+                .order_by(GalleryItem.created_at.desc())
+            ).all()
+        )
+
+    # Stratify across UTC day buckets inside the rolling window.
+    bucket_count = 7
+    per_bucket = max(1, hard_cap // bucket_count)
+    out: list = []
+    seen: set[uuid.UUID] = set()
+    for i in range(bucket_count):
+        start = cutoff + timedelta(days=i)
+        end = min(start + timedelta(days=1), now + timedelta(seconds=1))
+        bucket_rows = db.execute(
+            select(*_discover_projection())
+            .where(
+                *filters,
+                GalleryItem.created_at >= start,
+                GalleryItem.created_at < end,
+            )
+            .order_by(
+                GalleryItem.unique_impressions_count.asc(),
+                (GalleryItem.likes_count + GalleryItem.rating_count).desc(),
+                GalleryItem.created_at.desc(),
+            )
+            .limit(per_bucket)
+        ).all()
+        for row in bucket_rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            out.append(row)
+    return out
+
+
+def list_discover_feed(
+    db: Session,
+    *,
+    limit: int = 48,
+    offset: int = 0,
+    exclude_ids: list[uuid.UUID] | None = None,
+    now: datetime | None = None,
+) -> list[GalleryItem]:
+    """Fair Discovery: full 7-day eligible pool, per-page creator diversity, optional exclude."""
+    now_utc = now or datetime.now(timezone.utc)
+    cutoff = now_utc - DISCOVER_WINDOW
+    rank_rows = fetch_discover_candidate_rows(db, cutoff=cutoff, now=now_utc)
+    candidates = [
+        DiscoverCandidate(
+            id=row.id,
+            user_id=row.user_id,
+            likes_count=int(row.likes_count or 0),
+            rating_count=int(row.rating_count or 0),
+            unique_impressions_count=int(row.unique_impressions_count or 0),
+            created_at=row.created_at,
+        )
+        for row in rank_rows
+    ]
+    scored = rank_discover_candidates(candidates, now=now_utc)
+    skip = list(exclude_ids or [])
+    # When exclude is provided (load-more), build the next diversified page from remaining.
+    # Offset still works for stable paging without exclude.
+    if skip:
+        page = diversify_select_page(scored, limit=limit, exclude_ids=skip)
+    else:
+        # Build a diversified stream page-by-page so creator caps reset each page.
+        stream: list[DiscoverCandidate] = []
+        seen: list[uuid.UUID] = []
+        need = offset + limit
+        guard = 0
+        while len(stream) < need and guard < need + 5:
+            guard += 1
+            nxt = diversify_select_page(
+                scored, limit=limit, exclude_ids=seen
+            )
+            if not nxt:
+                break
+            stream.extend(nxt)
+            seen.extend(c.id for c in nxt)
+        page = stream[offset : offset + limit]
+    if not page:
+        return []
+    page_ids = [c.id for c in page]
+    items = list(db.scalars(select(GalleryItem).where(GalleryItem.id.in_(page_ids))).all())
+    by_id = {item.id: item for item in items}
+    return [by_id[item_id] for item_id in page_ids if item_id in by_id]
+
+
+def record_gallery_impressions(
+    db: Session,
+    viewer: User,
+    gallery_item_ids: list[uuid.UUID],
+) -> int:
+    """Record unique Discover impressions. Concurrent-safe; skips self/duplicates."""
+    from sqlalchemy.exc import IntegrityError
+
+    if not gallery_item_ids:
+        return 0
+    # Preserve order, de-dupe request payload.
+    seen: set[uuid.UUID] = set()
+    ordered: list[uuid.UUID] = []
+    for item_id in gallery_item_ids[:100]:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        ordered.append(item_id)
+
+    items = list(
+        db.scalars(
+            select(GalleryItem).where(
+                GalleryItem.id.in_(ordered),
+                GalleryItem.visibility == "public",
+                GalleryItem.moderation_status == "ok",
+            )
+        ).all()
+    )
+    by_id = {item.id: item for item in items}
+    recorded = 0
+    for item_id in ordered:
+        item = by_id.get(item_id)
+        if item is None or item.user_id == viewer.id:
+            continue
+        try:
+            # Savepoint so a race on the unique constraint does not abort the whole batch.
+            # Counters use SQL +1 so concurrent *different* viewers cannot lose updates.
+            def _insert_and_bump() -> None:
+                db.add(
+                    GalleryImpression(
+                        gallery_item_id=item.id,
+                        viewer_user_id=viewer.id,
+                    )
+                )
+                db.flush()
+                db.execute(
+                    update(GalleryItem)
+                    .where(GalleryItem.id == item.id)
+                    .values(
+                        impressions_count=GalleryItem.impressions_count + 1,
+                        unique_impressions_count=GalleryItem.unique_impressions_count + 1,
+                    )
+                )
+
+            if hasattr(db, "begin_nested"):
+                with db.begin_nested():
+                    _insert_and_bump()
+            else:
+                _insert_and_bump()
+            recorded += 1
+        except IntegrityError:
+            # Concurrent duplicate for the same viewer×item — treat as already recorded.
+            continue
+    db.commit()
+    return recorded
 
 
 def get_gallery_item(db: Session, item_id: uuid.UUID) -> GalleryItem:

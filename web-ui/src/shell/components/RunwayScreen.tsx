@@ -32,6 +32,7 @@ import {
   listGalleryComments,
   postGalleryComment,
   rateGalleryItem,
+  recordGalleryImpressions,
   unlikeGalleryComment,
   unlikeGalleryItem,
   type GalleryComment,
@@ -70,6 +71,7 @@ type LoadState =
   | { status: 'error'; message: string }
   | {
       status: 'ready'
+      discover: GalleryItem[]
       circle: GalleryItem[]
       following: GalleryItem[]
       top10: GalleryItem[]
@@ -80,11 +82,12 @@ type FriendsState =
   | { status: 'error'; message: string }
   | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
 
-type TabId = 'feed' | 'following' | 'top' | 'friends'
-type BrowseSheet = 'top10' | 'circle' | 'following'
+type TabId = 'discover' | 'feed' | 'following' | 'top' | 'friends'
+type BrowseSheet = 'top10' | 'circle' | 'following' | 'discover'
 type TopLimit = 10 | 20 | 50
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
+  { id: 'discover', label: 'Discover', hint: 'Fair worldwide looks from many creators' },
   { id: 'feed', label: 'Feed', hint: 'Looks from you and your friends only' },
   { id: 'following', label: 'Following', hint: 'Looks from designers you follow' },
   { id: 'top', label: 'Top', hint: 'Worldwide top liked and rated looks' },
@@ -93,6 +96,36 @@ const TABS: Array<{ id: TabId; label: string; hint: string }> = [
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
 const SCORE_HINT = 'Looks earn FashionRise scores from likes + ratings (1–10).'
+const DISCOVER_PAGE_SIZE = 24
+
+/** Batch unique Discover impressions only after cards become meaningfully visible. */
+function useDiscoverImpressionReporter() {
+  const pendingRef = useRef<Set<string>>(new Set())
+  const sentRef = useRef<Set<string>>(new Set())
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return useCallback((galleryItemId: string) => {
+    if (!galleryItemId || sentRef.current.has(galleryItemId)) return
+    pendingRef.current.add(galleryItemId)
+    if (timerRef.current) return
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      const ids = [...pendingRef.current]
+      pendingRef.current.clear()
+      if (ids.length === 0) return
+      for (const id of ids) sentRef.current.add(id)
+      void recordGalleryImpressions(ids).catch(() => {
+        for (const id of ids) sentRef.current.delete(id)
+      })
+    }, 350)
+  }, [])
+}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
@@ -105,10 +138,13 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const viewerUsername = user?.username ?? null
-  const [tab, setTab] = useState<TabId>('feed')
+  const [tab, setTab] = useState<TabId>('discover')
   const [browseSheet, setBrowseSheet] = useState<BrowseSheet | null>(null)
   const [topLimit, setTopLimit] = useState<TopLimit>(10)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [discoverHasMore, setDiscoverHasMore] = useState(true)
+  const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false)
+  const reportDiscoverImpression = useDiscoverImpressionReporter()
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
   const [friendUsername, setFriendUsername] = useState('')
   const [friendBusy, setFriendBusy] = useState(false)
@@ -283,18 +319,31 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       if (tab === 'top') {
         const top10 = await listGallery({ sort: 'top10', limit: topLimit, signal })
         if (signal?.aborted) return
-        setState({ status: 'ready', circle: [], following: [], top10 })
+        setState({ status: 'ready', discover: [], circle: [], following: [], top10 })
         return
       }
       if (tab === 'following') {
         const following = await listGallery({ sort: 'following', limit: 48, signal })
         if (signal?.aborted) return
-        setState({ status: 'ready', circle: [], following, top10: [] })
+        setState({ status: 'ready', discover: [], circle: [], following, top10: [] })
+        return
+      }
+      if (tab === 'discover') {
+        const discover = await listGallery({
+          sort: 'discover',
+          limit: DISCOVER_PAGE_SIZE,
+          signal,
+        })
+        if (signal?.aborted) return
+        setDiscoverHasMore(discover.length >= DISCOVER_PAGE_SIZE)
+        setState({ status: 'ready', discover, circle: [], following: [], top10: [] })
+        // Impressions are recorded only when cards become meaningfully visible
+        // (IntersectionObserver) — never for an entire API batch on load.
         return
       }
       const circle = await listGallery({ sort: 'circle', limit: 48, signal })
       if (signal?.aborted) return
-      setState({ status: 'ready', circle, following: [], top10: [] })
+      setState({ status: 'ready', discover: [], circle, following: [], top10: [] })
     } catch (err) {
       if (signal?.aborted) return
       const message =
@@ -312,6 +361,36 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     void load(ac.signal)
     return () => ac.abort()
   }, [load])
+
+  const loadMoreDiscover = useCallback(async () => {
+    if (discoverLoadingMore || !discoverHasMore || state.status !== 'ready') return
+    setDiscoverLoadingMore(true)
+    try {
+      const exclude = state.discover.map((item) => item.id)
+      const more = await listGallery({
+        sort: 'discover',
+        limit: DISCOVER_PAGE_SIZE,
+        exclude,
+      })
+      setDiscoverHasMore(more.length >= DISCOVER_PAGE_SIZE)
+      if (more.length === 0) return
+      setState((prev) => {
+        if (prev.status !== 'ready') return prev
+        const seen = new Set(prev.discover.map((item) => item.id))
+        const merged = [...prev.discover]
+        for (const item of more) {
+          if (seen.has(item.id)) continue
+          seen.add(item.id)
+          merged.push(item)
+        }
+        return { ...prev, discover: merged }
+      })
+    } catch {
+      setDiscoverHasMore(false)
+    } finally {
+      setDiscoverLoadingMore(false)
+    }
+  }, [discoverHasMore, discoverLoadingMore, state])
 
   const onAddFriend = useCallback(
     async (event: FormEvent) => {
@@ -385,6 +464,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         rows.map((row) => (row.id === next.id ? { ...row, ...next } : row))
       return {
         status: 'ready',
+        discover: rewrite(prev.discover),
         circle: rewrite(prev.circle),
         following: rewrite(prev.following),
         top10: rewrite(prev.top10),
@@ -416,13 +496,15 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             FashionRise
           </h1>
           <p className={styles.subtitle}>
-            {tab === 'top'
-              ? `Worldwide rankings of the top fashion looks, based on likes and ratings. ${SCORE_HINT}`
-              : tab === 'following'
-                ? `Designers you follow — new looks as they publish. ${SCORE_HINT}`
-                : tab === 'feed'
-                  ? `Your friends circle feed — looks from you and your friends. ${SCORE_HINT}`
-                  : 'Add friends and manage your private circle.'}
+            {tab === 'discover'
+              ? `Fair Discover — new looks get a chance, strong engagement rises, many creators. ${SCORE_HINT}`
+              : tab === 'top'
+                ? `Worldwide rankings of the top fashion looks, based on likes and ratings. ${SCORE_HINT}`
+                : tab === 'following'
+                  ? `Designers you follow — new looks as they publish. ${SCORE_HINT}`
+                  : tab === 'feed'
+                    ? `Your friends circle feed — looks from you and your friends. ${SCORE_HINT}`
+                    : 'Add friends and manage your private circle.'}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -433,7 +515,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             <Sparkles size={16} aria-hidden />
             Start creating
           </button>
-          {tab === 'feed' || tab === 'following' || tab === 'top' ? (
+          {tab === 'discover' || tab === 'feed' || tab === 'following' || tab === 'top' ? (
             <button
               type="button"
               className={styles.refreshBtn}
@@ -443,7 +525,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                   ? 'Refresh Top rankings'
                   : tab === 'following'
                     ? 'Refresh Following feed'
-                    : 'Refresh feed'
+                    : tab === 'discover'
+                      ? 'Refresh Discover feed'
+                      : 'Refresh feed'
               }
             >
               <RefreshCw size={14} aria-hidden />
@@ -497,6 +581,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             title={item.hint}
             data-testid={`runway-tab-${item.id}`}
           >
+            {item.id === 'discover' ? <Globe2 size={14} aria-hidden /> : null}
             {item.id === 'friends' ? <Users size={14} aria-hidden /> : null}
             {item.id === 'feed' ? <Users size={14} aria-hidden /> : null}
             {item.id === 'following' ? <UserPlus size={14} aria-hidden /> : null}
@@ -607,6 +692,79 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               )}
             </div>
           </div>
+        ) : tab === 'discover' ? (
+          <div className={styles.feedHub}>
+            <div className={styles.rankBoardHead}>
+              <h2 className={styles.sectionTitle}>
+                <Globe2 size={18} aria-hidden />
+                Discover
+              </h2>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => setBrowseSheet('discover')}
+                data-testid="runway-open-discover"
+              >
+                Open full feed
+              </button>
+            </div>
+            <p className={styles.rankInfo}>
+              <Info size={13} aria-hidden />
+              Last 7 days · fresh looks get exposure · engagement vs views · mixed creators
+            </p>
+
+            {state.discover.length === 0 ? (
+              <EmptyState
+                title="Nothing to discover yet"
+                body="Publish a look from My Looks — new designs get a fair chance here for seven days."
+                actions={
+                  <div className={styles.feedHubHints}>
+                    <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
+                      Go to My Looks
+                    </button>
+                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
+                      Browse Top
+                    </button>
+                  </div>
+                }
+              />
+            ) : (
+              <>
+                <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Discover feed">
+                  {state.discover.map((item) => (
+                    <RunwayCard
+                      key={item.id}
+                      item={item}
+                      layout="stack"
+                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
+                      onItemChange={patchItem}
+                      onOpenDesigner={(designer) => setViewingDesigner(designer)}
+                      onVisibleImpression={
+                        viewerId && item.user_id !== viewerId
+                          ? reportDiscoverImpression
+                          : undefined
+                      }
+                    />
+                  ))}
+                </ul>
+                {discoverHasMore ? (
+                  <div className={styles.feedHubHints}>
+                    <button
+                      type="button"
+                      className={styles.ghostBtn}
+                      data-testid="runway-discover-load-more"
+                      disabled={discoverLoadingMore}
+                      onClick={() => void loadMoreDiscover()}
+                    >
+                      {discoverLoadingMore ? 'Loading…' : 'Load more'}
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
         ) : tab === 'following' ? (
           <div className={styles.feedHub}>
             <div className={styles.rankBoardHead}>
@@ -716,7 +874,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               ? state.top10
               : browseSheet === 'following'
                 ? state.following
-                : state.circle
+                : browseSheet === 'discover'
+                  ? state.discover
+                  : state.circle
           }
           viewerId={viewerId}
           viewerUsername={viewerUsername}
@@ -731,6 +891,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             setBrowseSheet(null)
             setViewingDesigner(designer)
           }}
+          onVisibleImpression={
+            browseSheet === 'discover' ? reportDiscoverImpression : undefined
+          }
         />
       ) : null}
     </section>
@@ -747,6 +910,7 @@ function RunwayBrowseSheet({
   onOpenLooks,
   onOpenFriends,
   onOpenDesigner,
+  onVisibleImpression,
 }: {
   kind: BrowseSheet
   items: GalleryItem[]
@@ -757,20 +921,26 @@ function RunwayBrowseSheet({
   onOpenLooks: () => void
   onOpenFriends: () => void
   onOpenDesigner: (designer: DesignerRef) => void
+  onVisibleImpression?: (galleryItemId: string) => void
 }) {
   const titleId = useId()
   const isTop10 = kind === 'top10'
   const isFollowing = kind === 'following'
+  const isDiscover = kind === 'discover'
   const title = isTop10
     ? 'Top rankings worldwide'
     : isFollowing
       ? 'Following'
-      : 'My circle'
+      : isDiscover
+        ? 'Discover'
+        : 'My circle'
   const hint = isTop10
     ? 'Most liked public looks across FashionRise — scroll to see the full board.'
     : isFollowing
       ? 'Looks from designers you follow — scroll down to see more.'
-      : 'Only your looks and your friends’ published looks — scroll down to see more.'
+      : isDiscover
+        ? 'Fair Discover — seven-day looks, fresh exposure, many creators — scroll for more.'
+        : 'Only your looks and your friends’ published looks — scroll down to see more.'
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -812,7 +982,7 @@ function RunwayBrowseSheet({
           </button>
           <div className={styles.sheetTitleBlock}>
             <h2 id={titleId} className={styles.sheetTitle}>
-              {isTop10 ? (
+              {isTop10 || isDiscover ? (
                 <Globe2 size={18} aria-hidden />
               ) : isFollowing ? (
                 <UserPlus size={18} aria-hidden />
@@ -833,21 +1003,25 @@ function RunwayBrowseSheet({
                   ? 'No Top rankings yet'
                   : isFollowing
                     ? 'No follows yet'
-                    : 'Your circle is quiet'
+                    : isDiscover
+                      ? 'Nothing to discover yet'
+                      : 'Your circle is quiet'
               }
               body={
                 isTop10
                   ? 'Publish a look from My Looks to appear on the worldwide board.'
                   : isFollowing
                     ? 'Follow designers from their FashionRise profiles to fill this feed.'
-                    : 'Publish a look from My Looks, or add friends so their FashionRise posts show up here.'
+                    : isDiscover
+                      ? 'Publish a look from My Looks — new designs get a fair chance for seven days.'
+                      : 'Publish a look from My Looks, or add friends so their FashionRise posts show up here.'
               }
               actions={
                 <>
                   <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
                     Go to My Looks
                   </button>
-                  {!isTop10 && !isFollowing ? (
+                  {!isTop10 && !isFollowing && !isDiscover ? (
                     <button type="button" className={styles.ghostBtn} onClick={onOpenFriends}>
                       Add friends
                     </button>
@@ -859,7 +1033,13 @@ function RunwayBrowseSheet({
             <ul
               className={styles.sheetList}
               aria-label={
-                isTop10 ? 'Top rankings worldwide' : isFollowing ? 'Following feed' : 'Circle feed'
+                isTop10
+                  ? 'Top rankings worldwide'
+                  : isFollowing
+                    ? 'Following feed'
+                    : isDiscover
+                      ? 'Discover feed'
+                      : 'Circle feed'
               }
             >
               {items.map((item, index) => (
@@ -873,6 +1053,11 @@ function RunwayBrowseSheet({
                   viewerUsername={viewerUsername}
                   onItemChange={onItemChange}
                   onOpenDesigner={onOpenDesigner}
+                  onVisibleImpression={
+                    onVisibleImpression && viewerId && item.user_id !== viewerId
+                      ? onVisibleImpression
+                      : undefined
+                  }
                 />
               ))}
             </ul>
@@ -1080,6 +1265,7 @@ function RunwayCard({
   viewerUsername,
   onItemChange,
   onOpenDesigner,
+  onVisibleImpression,
 }: {
   item: GalleryItem
   rank?: number
@@ -1090,9 +1276,13 @@ function RunwayCard({
   viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
   onOpenDesigner?: (designer: DesignerRef) => void
+  /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
+  onVisibleImpression?: (galleryItemId: string) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const cardRef = useRef<HTMLLIElement | null>(null)
+  const impressionSentRef = useRef(false)
   const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -1103,6 +1293,31 @@ function RunwayCard({
   const canReact = !isOwn
   const chatTitleId = useId()
   const chatInputId = useId()
+
+  useEffect(() => {
+    impressionSentRef.current = false
+  }, [item.id])
+
+  useEffect(() => {
+    if (!onVisibleImpression || isOwn) return
+    const node = cardRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || entry.intersectionRatio < 0.55) continue
+          if (impressionSentRef.current) continue
+          impressionSentRef.current = true
+          onVisibleImpression(item.id)
+          observer.disconnect()
+          return
+        }
+      },
+      { threshold: [0.55], rootMargin: '0px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [isOwn, item.id, onVisibleImpression])
 
   const refreshItem = useCallback(async () => {
     const fresh = await getGalleryItem(item.id)
@@ -1268,7 +1483,12 @@ function RunwayCard({
           : styles.rankBadge
 
   return (
-    <li className={cardClass}>
+    <li
+      ref={cardRef}
+      className={cardClass}
+      data-gallery-item-id={item.id}
+      data-testid={onVisibleImpression ? `runway-discover-card-${item.id}` : undefined}
+    >
       <div className={ranked ? styles.rankThumb : styles.thumb}>
         {rank != null ? (
           <span className={badgeClass}>

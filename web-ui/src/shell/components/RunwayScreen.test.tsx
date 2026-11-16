@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RunwayScreen } from './RunwayScreen'
 
 const listGallery = vi.fn()
+const recordGalleryImpressions = vi.fn()
 const getGalleryItem = vi.fn()
 const likeGalleryItem = vi.fn()
 const unlikeGalleryItem = vi.fn()
@@ -20,6 +21,7 @@ const removeFriend = vi.fn()
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
+  recordGalleryImpressions: (...args: unknown[]) => recordGalleryImpressions(...args),
   getGalleryItem: (...args: unknown[]) => getGalleryItem(...args),
   likeGalleryItem: (...args: unknown[]) => likeGalleryItem(...args),
   unlikeGalleryItem: (...args: unknown[]) => unlikeGalleryItem(...args),
@@ -117,6 +119,7 @@ const topItem = {
 describe('RunwayScreen', () => {
   beforeEach(() => {
     listGallery.mockReset()
+    recordGalleryImpressions.mockReset()
     getGalleryItem.mockReset()
     likeGalleryItem.mockReset()
     unlikeGalleryItem.mockReset()
@@ -142,8 +145,14 @@ describe('RunwayScreen', () => {
     enableRunwayPush.mockResolvedValue('granted')
     disableRunwayPush.mockResolvedValue(undefined)
     ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'granted' })
+    recordGalleryImpressions.mockResolvedValue({ recorded: 0 })
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
       if (opts?.sort === 'top10') return [{ ...topItem }]
+      if (opts?.sort === 'discover') {
+        return [{ ...circleItem, id: 'discover-1', title: 'Discover look', user_id: 'creator-a' }]
+      }
+      if (opts?.sort === 'circle') return [{ ...circleItem }]
+      if (opts?.sort === 'following') return []
       return [{ ...circleItem }]
     })
     listGalleryComments.mockResolvedValue([])
@@ -186,24 +195,69 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
   })
 
-  it('keeps Feed and Top as separate pages', async () => {
+  it('loads more Discover results with exclude dedupe', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string; exclude?: string[] }) => {
+      if (opts?.sort === 'discover' && (opts.exclude?.length ?? 0) > 0) {
+        return [
+          {
+            ...circleItem,
+            id: 'discover-next',
+            title: 'Discover page two',
+            user_id: 'creator-b',
+          },
+        ]
+      }
+      if (opts?.sort === 'discover') {
+        return Array.from({ length: 24 }, (_, i) => ({
+          ...circleItem,
+          id: `discover-${i + 1}`,
+          title: i === 0 ? 'Discover look' : `Discover filler ${i + 1}`,
+          user_id: `creator-${i % 5}`,
+        }))
+      }
+      return []
+    })
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    expect(await screen.findByText('Discover look')).toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('runway-discover-load-more'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sort: 'discover',
+          exclude: expect.arrayContaining(['discover-1', 'discover-24']),
+        }),
+      ),
+    )
+    expect(await screen.findByText('Discover page two')).toBeInTheDocument()
+    expect(recordGalleryImpressions).not.toHaveBeenCalled()
+  })
+
+  it('defaults to Discover and keeps Feed/Top separate', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
     await waitFor(() =>
-      expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
+      expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
+    // Impressions fire only when cards are meaningfully visible — not on API load.
+    expect(recordGalleryImpressions).not.toHaveBeenCalled()
     expect(listGallery).not.toHaveBeenCalledWith(
       expect.objectContaining({ sort: 'top10' }),
     )
-    expect(await screen.findByTestId('runway-open-circle')).toBeInTheDocument()
+    expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
+    expect(await screen.findByText('Discover look')).toBeInTheDocument()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
-    expect(await screen.findByText('Friend circle look')).toBeInTheDocument()
     expect(screen.queryByText('Worldwide hit')).toBeNull()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('runway-tab-feed'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
+    )
+    expect(await screen.findByText('Friend circle look')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('runway-tab-top'))
     await waitFor(() =>
@@ -498,7 +552,7 @@ describe('RunwayScreen', () => {
 
   it('auto-enables Runway push by default on load', async () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    await screen.findByTestId('runway-open-circle')
+    await screen.findByTestId('runway-open-discover')
     await waitFor(() => expect(ensureDefaultRunwayPush).toHaveBeenCalled())
     const toggle = await screen.findByTestId('runway-push-toggle')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
