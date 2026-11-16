@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Stars Mobbin redesign LIVE (2026-11-16 21:57 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#384** merged → `main` @ **`d89bbf3a`** |
+| Tip | FE **`d89bbf3a`** · `/var/www/fashionrise/releases/d89bbf3a-stars-mobbin-polish` |
+| Change | CapCut-style Stars sheet: FashionRise eyebrow, large balance hero, pack grid, gold Buy |
+| Preview | `/preview-stars/` removed after promote |
+| Series | FashionRise → Home → Friends → Profile → Stars **complete** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/77dce926-profile-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Profile Mobbin redesign LIVE (2026-11-16 21:52 Asia/Jerusalem)
 
 | Field | Value |
