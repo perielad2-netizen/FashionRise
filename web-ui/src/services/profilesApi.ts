@@ -89,19 +89,40 @@ export async function updateMyProfile(
   })
 }
 
-/** Same-origin avatar route (nginx allowlisted). Never /static/uploads. */
+/**
+ * Resolve an `<img src>` for a designer photo.
+ *
+ * - Legacy `/static/uploads/...` values stay as-is (do not rewrite to the private
+ *   avatar route — that file may not exist there).
+ * - New private-avatar uploads use `/api/v1/profiles/{id}/avatar`.
+ */
 export function profileAvatarSrc(
   userId: string,
   avatarUrl: string | null | undefined,
   cacheKey?: string | null,
 ): string | null {
   if (!avatarUrl) return null
-  const base =
-    avatarUrl.includes('/static/uploads/') || avatarUrl.includes('/profiles/')
-      ? `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
-      : avatarUrl.startsWith('http') || avatarUrl.startsWith('/') || avatarUrl.startsWith('blob:')
+
+  let base: string
+  if (avatarUrl.includes('/static/uploads/')) {
+    // Preserve earlier upload workflow URLs.
+    base =
+      avatarUrl.startsWith('http') || avatarUrl.startsWith('/')
         ? avatarUrl
-        : `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
+        : `/${avatarUrl.replace(/^\/+/, '')}`
+  } else if (avatarUrl.includes('/profiles/') && avatarUrl.includes('/avatar')) {
+    base = `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
+  } else if (
+    avatarUrl.startsWith('http') ||
+    avatarUrl.startsWith('/') ||
+    avatarUrl.startsWith('blob:')
+  ) {
+    base = avatarUrl
+  } else {
+    // Unknown relative marker from the new private-avatar flow.
+    base = `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
+  }
+
   if (!cacheKey || base.startsWith('blob:')) return base
   const join = base.includes('?') ? '&' : '?'
   return `${base}${join}v=${encodeURIComponent(cacheKey)}`

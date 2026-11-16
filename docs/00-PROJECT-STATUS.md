@@ -3,19 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**designer profile premium redesign** · draft PR · **not deployed** · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**designer profile premium #371** · conditional PM approval · shipping FE+BE · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE** with Reels chrome (#365 FE). Designer profile premium redesign is in review (no prod tip until UI approved). Stars weekly/streak rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. Designer profile premium redesign (#371) shipping after avatar-storage corrections. Stars weekly/streak rewards remain **OFF**.
 
-## Designer profile premium redesign — DRAFT / NOT DEPLOYED (2026-11-16)
+## Designer profile premium #371 — SHIPPING (2026-11-16)
 
 | Item | Detail |
 |---|---|
-| Scope | Shared `FriendProfilePanel` luxury Designer Card hero · same view for owner/visitor · Edit Designer Card sheet · Collection grid + look preview · no auto-open edit on My Profile · **published-look chips show saved profile photo** (`GalleryRead.avatar_url` + look chip `<img>`) |
-| Branch | `cursor/web-designer-profile-premium-77c6` |
-| Verify | Vitest FriendProfilePanel + RunwayScreen · `tsc -b` · production `npm run build` |
-| Disabled gates | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · streak rewards OFF · Stars purchasing OFF · no Codemagic/Android QA changes |
-| Next | UI approval → then FE+BE tip deploy together (avatar on looks needs BE field; FE also tries avatar route when field absent) |
+| Scope | Luxury Designer Card profile · Edit sheet · Collection + look preview · look-chip profile photos · **legacy `/static/uploads` avatar URLs preserved** · **account delete unlinks private avatar only** |
+| Branch / PR | `cursor/web-designer-profile-premium-77c6` · [#371](https://github.com/perielad2-netizen/FashionRise/pull/371) |
+| Verify | Vitest profile/Runway/avatarSrc · pytest `test_profile_avatar` + account deletion · `tsc -b` · production `npm run build` |
+| Alembic | Remains **035** (no migration) |
+| Disabled gates | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · streak rewards OFF · Stars purchasing OFF · no Codemagic/push/store |
+| Next | Merge + coordinated BE/FE deploy · smoke My Profile / Edit / avatar / Follow / collection |
 
 ## FashionRise Social — scope & progress
 

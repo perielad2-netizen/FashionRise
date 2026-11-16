@@ -116,18 +116,37 @@ def upload_own_avatar(
     return profile
 
 
+def is_private_avatar_url(avatar_url: str | None) -> bool:
+    """True when avatar_url points at the new private avatar API route."""
+    if not avatar_url:
+        return False
+    value = avatar_url.strip()
+    return "/profiles/" in value and value.rstrip("/").endswith("/avatar")
+
+
 def resolve_avatar_file(db: Session, user_id: uuid.UUID) -> tuple[str, Path] | None:
-    """Return (media_type, path) when a private avatar exists for the user."""
+    """Return (media_type, path) when a private avatar exists for the user.
+
+    Legacy ``/static/uploads/...`` avatar_url values are not rewritten here —
+    callers must keep serving those URLs as-is. This route only returns bytes
+    that actually live under ``private_avatars/``.
+    """
     profile = db.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
-    if profile is None:
-        return None
-    # Only serve when profile claims an avatar (API path or legacy marker).
-    if not profile.avatar_url:
+    if profile is None or not profile.avatar_url:
         return None
     path = LocalStorageBackend().resolve_private_avatar_file(user_id=user_id)
     if path is None:
         return None
     return ("image/jpeg", path)
+
+
+def unlink_private_avatar_after_account_delete(user_id: uuid.UUID) -> bool:
+    """Best-effort remove the owner's private avatar after the account row is gone.
+
+    Scoped strictly to ``private_avatars/{user_id}/avatar.jpg`` — never another
+    user's file. Call only after a successful account-deletion commit.
+    """
+    return LocalStorageBackend().delete_private_avatar_file(user_id=user_id)
 
 
 def read_avatar_upload_bytes(stream, max_bytes: int) -> bytes:

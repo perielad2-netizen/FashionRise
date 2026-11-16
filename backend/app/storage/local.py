@@ -118,9 +118,36 @@ class LocalStorageBackend:
             path.relative_to(root)
         except ValueError:
             return None
-        if path.is_file():
+        if path.is_file() and not path.is_symlink():
             return path
         return None
+
+    def delete_private_avatar_file(self, *, user_id: uuid.UUID) -> bool:
+        """Unlink ``private_avatars/{user_id}/avatar.jpg`` only (never another owner)."""
+        key = self.avatar_storage_key(user_id)
+        safe = key.lstrip("/").replace("..", "")
+        root = self.private_avatar_root()
+        path = (root / safe).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            return False
+        # Parent directory must be exactly this user id under the avatar root.
+        if path.parent != (root / str(user_id)).resolve():
+            return False
+        if path.is_symlink() or not path.is_file():
+            return False
+        try:
+            path.unlink()
+        except OSError:
+            return False
+        try:
+            parent = path.parent
+            if parent.is_dir() and not any(parent.iterdir()):
+                parent.rmdir()
+        except OSError:
+            pass
+        return not path.exists()
 
     def _full_path(self, key: str) -> Path:
         safe = key.lstrip("/").replace("..", "")
