@@ -3,15 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Preview — Create Model wizard Mobbin polish (2026-11-16 23:00 Asia/Jerusalem)
+## Deployed — Create Model wizard Mobbin polish LIVE (2026-11-16 23:00 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-create-model-mobbin-polish-77c6` |
-| Preview | https://fashionrise.app/preview-create/ |
+| PR | **#390** merged → `main` @ **`f5a0cccb`** |
+| Tip | FE **`f5a0cccb`** · `/var/www/fashionrise/releases/f5a0cccb-create-model-mobbin-polish` |
 | Change | Brand-first Create Model dialog, photo hit target, pink Upload & Generate |
-| Prod | Unchanged — tip remains Fitting LIVE until approve |
-| Series | End of studio-page polish loop after approve |
+| Preview | `/preview-create/` removed after promote |
+| Series | **Studio-page Mobbin polish loop complete** (FashionRise → Home → Friends → Profile → Stars → Designs → Looks → Models → Fitting → Create) |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/9d3fec3a-fitting-room-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Fitting Room Mobbin polish LIVE (2026-11-16 22:55 Asia/Jerusalem)
 
