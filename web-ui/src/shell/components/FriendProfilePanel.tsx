@@ -1,29 +1,52 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, UserPlus, UserMinus } from 'lucide-react'
+import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
 import type { FriendUser } from '@/services/friendsApi'
 import { listUserGallery, type GalleryItem } from '@/services/galleryApi'
-import { getPublicProfile, type PublicProfile } from '@/services/profilesApi'
+import {
+  followCreator,
+  getFollowStatus,
+  getPublicProfile,
+  unfollowCreator,
+  type PublicProfile,
+} from '@/services/profilesApi'
 import styles from './RunwayScreen.module.css'
 
+/** Minimal designer identity — friends circle or gallery creator. */
+export type DesignerRef = {
+  user_id: string
+  username?: string
+  display_name?: string
+  avatar_url?: string | null
+}
+
 type Props = {
-  friend: FriendUser
+  friend: FriendUser | DesignerRef
   onBack: () => void
 }
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; profile: PublicProfile | null; looks: GalleryItem[] }
+  | { status: 'ready'; profile: PublicProfile | null; looks: GalleryItem[]; following: boolean }
 
 /**
- * V2-0010 — read-only friend profile + published Runway looks.
+ * FashionRise designer profile — public bio, stats, published looks, follow.
  * Never loads private designs or unpublished looks.
  */
 export function FriendProfilePanel({ friend, onBack }: Props) {
+  const { user } = useAuth()
+  const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
-  const label = friend.display_name || friend.username
+  const [followBusy, setFollowBusy] = useState(false)
+  const label =
+    friend.display_name ||
+    friend.username ||
+    (state.status === 'ready' ? state.profile?.display_name : null) ||
+    'Designer'
+  const isSelf = Boolean(viewerId && viewerId === friend.user_id)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -31,10 +54,21 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
     void Promise.all([
       getPublicProfile(friend.user_id, controller.signal).catch(() => null),
       listUserGallery(friend.user_id, controller.signal),
+      viewerId && viewerId !== friend.user_id
+        ? getFollowStatus(friend.user_id, controller.signal).catch(() => ({
+            user_id: friend.user_id,
+            following: false,
+          }))
+        : Promise.resolve({ user_id: friend.user_id, following: false }),
     ])
-      .then(([profile, looks]) => {
+      .then(([profile, looks, follow]) => {
         if (controller.signal.aborted) return
-        setState({ status: 'ready', profile, looks })
+        setState({
+          status: 'ready',
+          profile,
+          looks,
+          following: Boolean(follow?.following),
+        })
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
@@ -45,7 +79,22 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
         })
       })
     return () => controller.abort()
-  }, [friend.user_id])
+  }, [friend.user_id, viewerId])
+
+  const onToggleFollow = async () => {
+    if (!viewerId || isSelf || state.status !== 'ready' || followBusy) return
+    const next = !state.following
+    setFollowBusy(true)
+    setState((prev) => (prev.status === 'ready' ? { ...prev, following: next } : prev))
+    try {
+      if (next) await followCreator(friend.user_id)
+      else await unfollowCreator(friend.user_id)
+    } catch {
+      setState((prev) => (prev.status === 'ready' ? { ...prev, following: !next } : prev))
+    } finally {
+      setFollowBusy(false)
+    }
+  }
 
   return (
     <div className={styles.friendProfile} data-testid="friend-profile-panel">
@@ -59,28 +108,64 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
           <ChevronLeft size={18} aria-hidden />
           Back
         </button>
-        <p className={styles.friendProfileEyebrow}>Friend profile</p>
+        <p className={styles.friendProfileEyebrow}>FashionRise designer</p>
       </header>
 
       <div className={styles.friendProfileIdentity}>
-        {friend.avatar_url ? (
-          <img
-            src={friend.avatar_url}
-            alt=""
-            className={styles.friendAvatar}
-            width={56}
-            height={56}
-          />
-        ) : (
-          <span className={styles.friendAvatarFallback} aria-hidden>
-            {(label[0] || '?').toUpperCase()}
-          </span>
-        )}
+        {(() => {
+          const avatarSrc =
+            friend.avatar_url ||
+            (state.status === 'ready' ? state.profile?.avatar_url : null) ||
+            null
+          return avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt=""
+              className={styles.friendAvatar}
+              width={56}
+              height={56}
+            />
+          ) : (
+            <span className={styles.friendAvatarFallback} aria-hidden>
+              {(label[0] || '?').toUpperCase()}
+            </span>
+          )
+        })()}
         <div className={styles.friendText}>
-          <strong data-testid="friend-profile-name">{label}</strong>
-          <span data-testid="friend-profile-username">@{friend.username}</span>
+          <strong data-testid="friend-profile-name">
+            {state.status === 'ready' && state.profile?.display_name
+              ? state.profile.display_name
+              : label}
+          </strong>
+          {friend.username ? (
+            <span data-testid="friend-profile-username">@{friend.username}</span>
+          ) : null}
         </div>
       </div>
+
+      {!isSelf && viewerId ? (
+        <div className={styles.actions} style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            disabled={followBusy || state.status !== 'ready'}
+            data-testid="designer-follow-btn"
+            onClick={() => void onToggleFollow()}
+          >
+            {state.status === 'ready' && state.following ? (
+              <>
+                <UserMinus size={14} aria-hidden />
+                Following
+              </>
+            ) : (
+              <>
+                <UserPlus size={14} aria-hidden />
+                Follow
+              </>
+            )}
+          </button>
+        </div>
+      ) : null}
 
       {state.status === 'loading' ? (
         <p className={styles.status} role="status">
@@ -107,21 +192,36 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
           <ul className={styles.friendPublicStats} aria-label="Public stats">
             <li>
               <strong data-testid="friend-published-count">{state.looks.length}</strong>
-              <span>Published looks</span>
+              <span>Published</span>
             </li>
             {state.profile ? (
-              <li>
-                <strong>{state.profile.followers_count}</strong>
-                <span>Followers</span>
-              </li>
+              <>
+                <li>
+                  <strong data-testid="designer-followers">{state.profile.followers_count}</strong>
+                  <span>Followers</span>
+                </li>
+                <li>
+                  <strong data-testid="designer-likes">{state.profile.likes_received_count}</strong>
+                  <span>Likes</span>
+                </li>
+                <li>
+                  <strong data-testid="designer-reputation">
+                    {Math.round(state.profile.reputation_score)}
+                  </strong>
+                  <span>
+                    Reputation
+                    {state.profile.reputation_tier ? ` · ${state.profile.reputation_tier}` : ''}
+                  </span>
+                </li>
+              </>
             ) : null}
           </ul>
 
-          <section className={styles.friendLooksSection} aria-label="Published Runway looks">
-            <h2 className={styles.friendSectionTitle}>Published on Runway</h2>
+          <section className={styles.friendLooksSection} aria-label="Published FashionRise looks">
+            <h2 className={styles.friendSectionTitle}>Published on FashionRise</h2>
             {state.looks.length === 0 ? (
               <p className={styles.friendBioMuted} data-testid="friend-looks-empty">
-                No published Runway looks yet.
+                No published FashionRise looks yet.
               </p>
             ) : (
               <ul className={styles.friendLooksGrid}>
@@ -147,7 +247,7 @@ function FriendLookTile({ item }: { item: GalleryItem }) {
       {src ? (
         <img
           src={src}
-          alt={item.title || 'Published Runway look'}
+          alt={item.title || 'Published FashionRise look'}
           className={styles.friendLookImage}
           loading="lazy"
           decoding="async"

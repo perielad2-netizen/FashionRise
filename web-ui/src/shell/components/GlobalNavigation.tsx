@@ -16,6 +16,12 @@ const BASE_ITEMS = [
   { id: 'home', label: 'Home', icon: Home, destination: 'home' as NavDestination | null },
   { id: 'create', label: 'Create', icon: Sparkles, destination: 'create' as NavDestination | null },
   {
+    id: 'runway',
+    label: 'FashionRise',
+    icon: Star,
+    destination: 'runway' as NavDestination | null,
+  },
+  {
     id: 'designs',
     label: 'My Designs',
     icon: FolderHeart,
@@ -34,12 +40,6 @@ const BASE_ITEMS = [
     icon: Shirt,
     destination: 'fitting-room' as NavDestination | null,
     requiresFittingRoom: true,
-  },
-  {
-    id: 'runway',
-    label: 'Runway',
-    icon: Star,
-    destination: 'runway' as NavDestination | null,
   },
   { id: 'looks', label: 'My Looks', icon: Images, destination: 'looks' as NavDestination | null },
 ]

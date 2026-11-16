@@ -48,6 +48,11 @@ describe('HomeScreen', () => {
       1,
     )
 
+    const fashionRise = screen.getByTestId('home-open-fashionrise')
+    expect(fashionRise).toHaveAccessibleName(/FashionRise/i)
+    fireEvent.click(fashionRise)
+    expect(onNavigate).toHaveBeenCalledWith('runway')
+
     const cta = screen.getByTestId('home-start-creating')
     expect(cta).toHaveAccessibleName(/Start creating/i)
     fireEvent.click(cta)
@@ -55,12 +60,11 @@ describe('HomeScreen', () => {
 
     const destinations = screen.getByRole('navigation', { name: 'Studio destinations' })
     expect(within(destinations).queryByRole('button', { name: /^Create\b/i })).toBeNull()
+    expect(within(destinations).queryByRole('button', { name: /FashionRise|Runway/i })).toBeNull()
     fireEvent.click(within(destinations).getByRole('button', { name: /My Designs/i }))
     expect(onNavigate).toHaveBeenCalledWith('designs')
     fireEvent.click(within(destinations).getByRole('button', { name: /My Looks/i }))
     expect(onNavigate).toHaveBeenCalledWith('looks')
-    fireEvent.click(within(destinations).getByRole('button', { name: /^Runway/i }))
-    expect(onNavigate).toHaveBeenCalledWith('runway')
     fireEvent.click(within(destinations).getByRole('button', { name: /My Models/i }))
     expect(onNavigate).toHaveBeenCalledWith('croquis')
   })
