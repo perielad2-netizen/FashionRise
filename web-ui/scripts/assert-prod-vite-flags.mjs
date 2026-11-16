@@ -54,24 +54,24 @@ export const CROQUIS_NOTICE_ENV_KEYS = Object.freeze([
 
 /**
  * Approved production notice SHA256 digests (UTF-8) for adults-beta / storage /
- * ai-provider versions `2026-11-01`. Must match backend `MY_CROQUIS_*_NOTICE_TEXT`.
+ * ai-provider versions `2026-11-17`. Must match backend `MY_CROQUIS_*_NOTICE_TEXT`.
  * Override via `EXPECTED_MY_CROQUIS_*_NOTICE_SHA256` only when intentionally
  * rotating approved legal copy together with the backend.
  */
 export const EXPECTED_PROD_NOTICE_SHA256 = Object.freeze({
   VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT:
-    '882c9ed42b5f8b75d5b4e414732329ddd7daa0dfb537491bdded0428b6e41df9',
+    '579a9d61e0b18be316f095068b651e4cfc0ac7c83c545cc086d45f83e5f581bd',
   VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT:
-    '27882295bca4c06b61ea0cb729127345f006cb01b1b3c32ca5e986bc0838a589',
+    '0bf393b8738c0e612955a614fb9d011cc361eb3e134f1adb920a12d180e8163b',
   VITE_MY_CROQUIS_AI_NOTICE_TEXT:
-    'c3226ed38db0b86f3ab18377340c37ded733b0603bddae7c597a7b2aeea39cb8',
+    '5cdb56d7edf5f4a3f9e2e9f6b0cfa25ce9a7b3347cb352bd60a179d606149949',
 })
 
 /** FE notice version constants — must stay aligned with backend attestation versions. */
 export const EXPECTED_PROD_NOTICE_VERSIONS = Object.freeze({
-  adults: 'adults-beta-2026-11-01',
-  storage: 'storage-2026-11-01',
-  ai: 'ai-provider-2026-11-01',
+  adults: 'adults-beta-2026-11-17',
+  storage: 'storage-2026-11-17',
+  ai: 'ai-provider-2026-11-17',
 })
 
 export function sha256Hex(text) {

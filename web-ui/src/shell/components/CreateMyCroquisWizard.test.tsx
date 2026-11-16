@@ -135,21 +135,21 @@ describe('CreateMyCroquisWizard offline harness', () => {
     attestAdults.mockResolvedValue({
       id: 'att-1',
       purpose: 'adults_beta',
-      consent_version: 'adults-beta-2026-11-01',
+      consent_version: 'adults-beta-2026-11-17',
       adults_attested: true,
       created_at: '2026-10-31T12:00:00+00:00',
     })
     acknowledgeStorageConsent.mockResolvedValue({
       id: 'consent-1',
       purpose: 'croquis_storage',
-      consent_version: 'storage-2026-11-01',
+      consent_version: 'storage-2026-11-17',
       adults_attested: true,
       created_at: '2026-10-31T12:00:00+00:00',
     })
     acknowledgeAiConsent.mockResolvedValue({
       id: 'ai-consent-1',
       purpose: 'croquis_ai_provider',
-      consent_version: 'ai-provider-2026-11-01',
+      consent_version: 'ai-provider-2026-11-17',
       adults_attested: true,
       created_at: '2026-10-31T12:00:00+00:00',
     })
@@ -207,6 +207,12 @@ describe('CreateMyCroquisWizard offline harness', () => {
 
     expect(screen.getByText(/Select a fully clothed fashion pose photo/i)).toBeTruthy()
     expect(screen.getByText(/Kidswear uses Studio templates/i)).toBeTruthy()
+    expect(
+      screen.getByText(
+        /I confirm I have the rights and permissions to use this photo and agree to private storage and AI processing/i,
+      ),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Read full terms/i })).toBeTruthy()
     expect(screen.getByRole('checkbox')).toBeDisabled()
     expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
 
@@ -216,6 +222,25 @@ describe('CreateMyCroquisWizard offline harness', () => {
     })
     expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
     expect(screen.getByRole('checkbox')).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /Upload & Generate/i })).toBeDisabled()
+  })
+
+  it('expands full upload terms and Privacy Policy without checking the box', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
+
+    const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [file] },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Read full terms/i }))
+    expect(screen.getByTestId('create-model-upload-terms')).toBeTruthy()
+    expect(screen.getByText(/By uploading this image, I confirm that:/i)).toBeTruthy()
+    expect(screen.getByText(/does not automatically make it public/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Privacy Policy/i })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByText(/Approved notices on record/i)).toBeTruthy()
+    expect(screen.getByTestId('create-model-upload-consent')).not.toBeChecked()
     expect(screen.getByRole('button', { name: /Upload & Generate/i })).toBeDisabled()
   })
 

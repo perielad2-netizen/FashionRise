@@ -77,9 +77,9 @@ class Settings(BaseSettings):
     my_croquis_ai_claim_lease_seconds: int = 300
     my_croquis_ai_consent_max_age_seconds: int = 3600
     # Consent notice versions. Collection remains fail-closed until approved notice text is set.
-    my_croquis_storage_consent_version: str = "storage-2026-11-01"
-    my_croquis_ai_consent_version: str = "ai-provider-2026-11-01"
-    my_croquis_adults_attestation_version: str = "adults-beta-2026-11-01"
+    my_croquis_storage_consent_version: str = "storage-2026-11-17"
+    my_croquis_ai_consent_version: str = "ai-provider-2026-11-17"
+    my_croquis_adults_attestation_version: str = "adults-beta-2026-11-17"
     # Approved notice bodies. Empty (default) → refuse to record consent (not legal-authoritative).
     # Tests may inject synthetic fixtures via env; never ship production-legal copy here.
     my_croquis_adults_notice_text: str = ""
@@ -90,19 +90,58 @@ class Settings(BaseSettings):
     # Adults-only account attestation: 0 = durable for this notice version (no daily re-check).
     # Bump my_croquis_adults_attestation_version / notice text when the legal copy changes.
     my_croquis_adults_attestation_max_age_seconds: int = 0
-    # FashionRise Runway publish — rights to share with users + display license.
-    runway_share_consent_version: str = "runway-share-2026-11-08"
+    # FashionRise Runway / public gallery publish — standardized public-publish notice.
+    # Must stay byte-identical with web-ui `formatPublicPublishNoticeText()`.
+    runway_share_consent_version: str = "runway-share-2026-11-17"
     runway_share_notice_text: str = (
-        "I confirm I have the rights to share this design and its images with other "
-        "FashionRise users, and I grant FashionRise permission to display this content "
-        "on the Runway."
+        "By publishing this content, I confirm that:\n\n"
+        "1. I own the content or have all necessary rights and permissions for its public "
+        "use, including the original images, AI-generated or modified elements, artwork, "
+        "logos, trademarks and other third-party materials.\n"
+        "2. If identifiable people appear in the content, including celebrities or public "
+        "figures, I have the necessary consent or other lawful authorization for their "
+        "appearance, any relevant AI modifications and the intended public use.\n"
+        "3. My content does not unlawfully infringe another person's copyright, privacy, "
+        "publicity, personality, trademark or other legal rights.\n"
+        "4. My content does not falsely imply that another person or brand endorses "
+        "FashionRise, my design or any product.\n"
+        "5. I will not publish deceptive impersonations, nonconsensual intimate imagery, "
+        "exploitative or humiliating depictions, or sexualized depictions of minors.\n"
+        "6. I grant FashionRise a non-exclusive, worldwide, royalty-free license to host, "
+        "reproduce, display, distribute and technically adapt this published content as "
+        "reasonably necessary to operate FashionRise, including public feeds, designer "
+        "profiles, previews, rankings, sharing and competitions.\n"
+        "7. I understand that publication makes my content visible to other users, and "
+        "FashionRise may restrict or remove it in response to violations, legal complaints "
+        "or applicable law.\n"
+        "8. I accept responsibility for my submissions and for having the rights and "
+        "permissions required to publish them."
     )
-    # My Models → FashionRise public publish (likeness / personal photograph rights).
-    croquis_public_share_consent_version: str = "croquis-public-share-2026-11-16"
+    # My Models → FashionRise public publish (same public-publish agreement; separate purpose).
+    croquis_public_share_consent_version: str = "croquis-public-share-2026-11-17"
     croquis_public_share_notice_text: str = (
-        "I confirm I have the rights to publish this personal model and any photograph "
-        "it is based on, and I grant FashionRise permission to display it publicly on "
-        "FashionRise (Discover, rankings, and competitions)."
+        "By publishing this content, I confirm that:\n\n"
+        "1. I own the content or have all necessary rights and permissions for its public "
+        "use, including the original images, AI-generated or modified elements, artwork, "
+        "logos, trademarks and other third-party materials.\n"
+        "2. If identifiable people appear in the content, including celebrities or public "
+        "figures, I have the necessary consent or other lawful authorization for their "
+        "appearance, any relevant AI modifications and the intended public use.\n"
+        "3. My content does not unlawfully infringe another person's copyright, privacy, "
+        "publicity, personality, trademark or other legal rights.\n"
+        "4. My content does not falsely imply that another person or brand endorses "
+        "FashionRise, my design or any product.\n"
+        "5. I will not publish deceptive impersonations, nonconsensual intimate imagery, "
+        "exploitative or humiliating depictions, or sexualized depictions of minors.\n"
+        "6. I grant FashionRise a non-exclusive, worldwide, royalty-free license to host, "
+        "reproduce, display, distribute and technically adapt this published content as "
+        "reasonably necessary to operate FashionRise, including public feeds, designer "
+        "profiles, previews, rankings, sharing and competitions.\n"
+        "7. I understand that publication makes my content visible to other users, and "
+        "FashionRise may restrict or remove it in response to violations, legal complaints "
+        "or applicable law.\n"
+        "8. I accept responsibility for my submissions and for having the rights and "
+        "permissions required to publish them."
     )
     # Upload bounds (source photos). Separate from fabric limits.
     max_croquis_upload_size_mb: int = 10

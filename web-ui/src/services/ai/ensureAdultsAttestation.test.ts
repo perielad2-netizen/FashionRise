@@ -8,7 +8,7 @@ vi.mock('@/lib/personalCroquisNotices', () => ({
   approvedCroquisNoticeText: vi.fn((purpose: string) =>
     purpose === 'adults' ? 'Approved adults notice for try-on refresh.' : '',
   ),
-  croquisNoticeVersion: vi.fn(() => 'adults-beta-2026-11-01'),
+  croquisNoticeVersion: vi.fn(() => 'adults-beta-2026-11-17'),
   sha256Hex: vi.fn(async () => 'abc123'),
 }))
 
@@ -29,7 +29,7 @@ describe('ensureAdultsAttestationForTryOn (#180)', () => {
     expect(attestAdults).toHaveBeenCalledWith(
       {
         adults_attested: true,
-        notice_version: 'adults-beta-2026-11-01',
+        notice_version: 'adults-beta-2026-11-17',
         notice_text_hash: 'abc123',
       },
       undefined,
