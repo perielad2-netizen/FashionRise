@@ -817,7 +817,7 @@ describe('RunwayScreen', () => {
     fireEvent.change(screen.getByLabelText(/Add friend by username/i), {
       target: { value: 'newfriend' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /^Add$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Add friend$/i }))
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
   })
 
