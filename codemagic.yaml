@@ -261,8 +261,8 @@ workflows:
   fashionrise-android-play-internal:
     name: FashionRise Android (Play AAB)
     max_build_duration: 120
-    # Personal / free Codemagic plan: linux_x2 unavailable; mac_mini_m2 builds Android AABs.
-    instance_type: mac_mini_m2
+    # Linux builder for Android AAB (iOS workflows stay on mac_mini_m2).
+    instance_type: linux_x2
     working_directory: web-ui
 
     environment:
