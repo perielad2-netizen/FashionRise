@@ -876,29 +876,47 @@ describe('RunwayScreen', () => {
     ])
     removeFriend.mockResolvedValue(undefined)
 
-    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const onImmersiveFeedChange = vi.fn()
+    const { rerender } = render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        onImmersiveFeedChange={onImmersiveFeedChange}
+        feedFocusToken={0}
+      />,
+    )
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
+    expect(onImmersiveFeedChange).toHaveBeenCalledWith(true)
     await openMoreMenu()
     fireEvent.click(screen.getByTestId('runway-tab-friends'))
     expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
     expect(screen.getByTestId('friend-remove-yaniv')).toBeInTheDocument()
+    expect(onImmersiveFeedChange).toHaveBeenCalledWith(false)
 
     fireEvent.click(screen.getByTestId('friend-open-yaniv'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
     expect(await screen.findByTestId('friend-look-g-public')).toBeInTheDocument()
     expect(screen.getByTestId('designer-follow-btn')).toBeInTheDocument()
+    expect(screen.queryByTestId('friend-profile-back')).not.toBeInTheDocument()
     // Full-screen profile — Friends manage chrome must not remain around it.
     expect(screen.queryByRole('heading', { name: 'Friends' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Add people by username/i)).not.toBeInTheDocument()
     expect(screen.queryByText('12')).not.toBeInTheDocument()
+    expect(onImmersiveFeedChange).toHaveBeenCalledWith(false)
 
-    fireEvent.click(screen.getByTestId('friend-profile-back'))
-    expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Friends' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('friend-remove-yaniv'))
-    await waitFor(() => expect(removeFriend).toHaveBeenCalledWith('yaniv'))
+    // Shell nav → Runway bumps feedFocusToken and returns to the feed.
+    rerender(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        onImmersiveFeedChange={onImmersiveFeedChange}
+        feedFocusToken={1}
+      />,
+    )
+    expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
+    expect(screen.queryByTestId('friend-profile-panel')).not.toBeInTheDocument()
+    expect(onImmersiveFeedChange).toHaveBeenCalledWith(true)
   })
 
   it('auto-enables Runway push by default on load', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronLeft, UserMinus, UserPlus, X } from 'lucide-react'
+import { Camera, UserMinus, UserPlus, X } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
@@ -28,7 +28,6 @@ export type DesignerRef = {
 
 type Props = {
   friend: FriendUser | DesignerRef
-  onBack: () => void
   /** When true and viewing self, open the Edit Designer Card sheet once ready. */
   startInEditMode?: boolean
 }
@@ -57,7 +56,7 @@ function tierLabel(tier: string | null | undefined): string | null {
  * FashionRise designer profile — premium brand cover, follow, published collection.
  * Never loads private designs or unpublished looks.
  */
-export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: Props) {
+export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -262,18 +261,6 @@ export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: 
 
   return (
     <div className={styles.panel} data-testid="friend-profile-panel">
-      <div className={styles.navRow}>
-        <button
-          type="button"
-          className={styles.backBtn}
-          onClick={onBack}
-          data-testid="friend-profile-back"
-        >
-          <ChevronLeft size={18} aria-hidden />
-          Back
-        </button>
-      </div>
-
       <section className={`${styles.hero} ${heroTone}`} aria-label="Designer card">
         {coverUrl ? (
           <div

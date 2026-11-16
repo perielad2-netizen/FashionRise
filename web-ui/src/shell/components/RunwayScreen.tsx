@@ -73,6 +73,13 @@ type Props = {
   /** Deep-link from Home header avatar → open own editable profile. */
   openOwnProfile?: boolean
   onOwnProfileConsumed?: () => void
+  /**
+   * Notify shell whether Runway is showing the immersive feed.
+   * false → GlobalHeader (profile, Friends manage, etc.); true → full-bleed feed.
+   */
+  onImmersiveFeedChange?: (immersiveFeed: boolean) => void
+  /** Bump from shell when user chooses Runway in the nav — closes profile and returns to the feed. */
+  feedFocusToken?: number
 }
 
 type LoadState =
@@ -196,6 +203,8 @@ export function RunwayScreen({
   onOpenLooks,
   openOwnProfile = false,
   onOwnProfileConsumed,
+  onImmersiveFeedChange,
+  feedFocusToken = 0,
 }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
@@ -230,6 +239,23 @@ export function RunwayScreen({
     })
     onOwnProfileConsumed?.()
   }, [openOwnProfile, onOwnProfileConsumed, viewerId, viewerUsername])
+
+  const immersiveFeed = !viewingDesigner && tab !== 'friends'
+  useEffect(() => {
+    onImmersiveFeedChange?.(immersiveFeed)
+    return () => onImmersiveFeedChange?.(true)
+  }, [immersiveFeed, onImmersiveFeedChange])
+
+  const feedFocusSeenRef = useRef(feedFocusToken)
+  useEffect(() => {
+    if (feedFocusSeenRef.current === feedFocusToken) return
+    feedFocusSeenRef.current = feedFocusToken
+    setViewingDesigner(null)
+    setOpenOwnProfileEditing(false)
+    setBrowseSheet(null)
+    setMenuOpen(false)
+    setTab('discover')
+  }, [feedFocusToken])
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -616,10 +642,6 @@ export function RunwayScreen({
         <FriendProfilePanel
           friend={viewingDesigner}
           startInEditMode={openOwnProfileEditing && viewingDesigner.user_id === viewerId}
-          onBack={() => {
-            setViewingDesigner(null)
-            setOpenOwnProfileEditing(false)
-          }}
         />
       </section>
     )
@@ -818,14 +840,6 @@ export function RunwayScreen({
         {tab === 'friends' ? (
           <div className={styles.friendsWrap}>
             <header className={styles.friendsHeader}>
-              <button
-                type="button"
-                className={styles.friendsBack}
-                onClick={() => setTab('discover')}
-              >
-                <ChevronLeft size={16} aria-hidden />
-                Feed
-              </button>
               <div className={styles.friendsTitleBlock}>
                 <p className={styles.friendsEyebrow}>FashionRise</p>
                 <h1 className={styles.friendsTitle}>Friends</h1>

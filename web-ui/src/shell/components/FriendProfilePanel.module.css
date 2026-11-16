@@ -3,38 +3,12 @@
   flex-direction: column;
   gap: 18px;
   min-height: min-content;
+  /* GlobalHeader + shell already own the top safe area on non-feed pages. */
   padding:
-    calc(10px + env(safe-area-inset-top, 0px))
+    10px
     14px
     calc(28px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px));
   color: var(--fr-text, #f5f2f0);
-}
-
-.navRow {
-  display: flex;
-  align-items: center;
-  /* Clear floating immersive hamburger. */
-  padding-left: calc(48px + env(safe-area-inset-left, 0px));
-}
-
-.backBtn {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 4px 0 0;
-  border: 0;
-  background: transparent;
-  color: var(--fr-pink-soft, #f472b6);
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.backBtn:focus-visible {
-  outline: 2px solid #f9a8d4;
-  outline-offset: 2px;
-  border-radius: 8px;
 }
 
 .hero {

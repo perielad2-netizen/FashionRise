@@ -176,7 +176,8 @@
   position: relative;
   display: grid;
   gap: 22px;
-  padding: 68px 18px 36px;
+  /* GlobalHeader owns top chrome — no immersive hamburger inset. */
+  padding: 18px 18px 36px;
   min-height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -189,27 +190,6 @@
 .friendsHeader {
   display: grid;
   gap: 14px;
-}
-
-.friendsBack {
-  width: fit-content;
-  min-height: 36px;
-  padding: 0 2px;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.friendsBack:focus-visible {
-  outline: 2px solid #f9a8d4;
-  outline-offset: 2px;
-  border-radius: 8px;
 }
 
 .friendsTitleBlock {
