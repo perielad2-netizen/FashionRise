@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Home Mobbin redesign LIVE (2026-11-16 21:34 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#381** merged → `main` @ **`305dbe2e`** |
+| Tip | FE **`305dbe2e`** · `/var/www/fashionrise/releases/305dbe2e-home-mobbin-polish` |
+| Change | Brand-first Home, edge-to-edge sketch→look stage, Start creating primary, 2×2 Your studio tiles |
+| Preview | `/preview-home/` removed after promote |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1f750e3d-fashionrise-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — FashionRise feed Mobbin polish LIVE (2026-11-16 21:23 Asia/Jerusalem)
 
 | Field | Value |

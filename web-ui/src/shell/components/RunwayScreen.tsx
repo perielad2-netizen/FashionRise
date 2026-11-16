@@ -666,25 +666,27 @@ export function RunwayScreen({
       aria-labelledby="runway-title"
       onPointerDown={onRunwayGestureForPush}
     >
-      <header className={styles.chrome}>
-        <h1 id="runway-title" className={styles.srOnly}>
-          FashionRise
-        </h1>
-        <div className={styles.chromeTop}>
-          <div className={styles.chromeActions}>
-            <button
-              type="button"
-              className={styles.iconBtn}
-              aria-label="More"
-              aria-expanded={menuOpen}
-              data-testid="runway-more-menu"
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              <MoreHorizontal size={18} aria-hidden />
-            </button>
+      {tab !== 'friends' ? (
+        <header className={styles.chrome}>
+          <h1 id="runway-title" className={styles.srOnly}>
+            FashionRise
+          </h1>
+          <div className={styles.chromeTop}>
+            <div className={styles.chromeActions}>
+              <button
+                type="button"
+                className={styles.iconBtn}
+                aria-label="More"
+                aria-expanded={menuOpen}
+                data-testid="runway-more-menu"
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                <MoreHorizontal size={18} aria-hidden />
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      ) : null}
 
       {menuOpen ? (
         <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
@@ -839,8 +841,10 @@ export function RunwayScreen({
             <header className={styles.friendsHeader}>
               <div className={styles.friendsTitleBlock}>
                 <p className={styles.friendsEyebrow}>FashionRise</p>
-                <h1 className={styles.friendsTitle}>Friends</h1>
-                <p className={styles.friendsLead}>Add people by username and keep your circle close.</p>
+                <h1 id="runway-title" className={styles.friendsTitle}>
+                  Friends
+                </h1>
+                <p className={styles.friendsLead}>Invite designers into your private circle.</p>
               </div>
             </header>
             <FriendsPanel
@@ -1196,8 +1200,47 @@ function FriendsPanel({
     }
   }, [])
 
+  const ready = state.status === 'ready'
+  const circlePreview = ready ? state.friends.slice(0, 4) : []
+
   return (
     <div className={styles.friendsPanel}>
+      <div className={styles.friendsHeroCard} aria-hidden={false}>
+        <div className={styles.friendsHeroCopy}>
+          <p className={styles.friendsHeroKicker}>Your private circle</p>
+          <p className={styles.friendsHeroTitle}>Design together</p>
+          <p className={styles.friendsHeroBody}>
+            {ready
+              ? state.friends.length > 0
+                ? `${state.friends.length} designer${state.friends.length === 1 ? '' : 's'} in your circle`
+                : 'Add someone by username to start'
+              : 'Loading your circle…'}
+          </p>
+        </div>
+        <div className={styles.friendsHeroAvatars} aria-hidden>
+          {circlePreview.length > 0 ? (
+            circlePreview.map((row) => {
+              const label = row.friend.display_name || row.friend.username
+              return (
+                <span key={row.id} className={styles.friendsHeroAvatar}>
+                  <DesignerAvatar
+                    userId={row.friend.user_id}
+                    label={label}
+                    avatarUrl={row.friend.avatar_url}
+                  />
+                </span>
+              )
+            })
+          ) : (
+            <>
+              <span className={styles.friendsHeroSlot}>+</span>
+              <span className={styles.friendsHeroSlot}>+</span>
+              <span className={styles.friendsHeroSlot}>+</span>
+            </>
+          )}
+        </div>
+      </div>
+
       <form
         ref={formRef}
         className={styles.addFriendForm}
@@ -1233,15 +1276,15 @@ function FriendsPanel({
             enterKeyHint="done"
             disabled={busy}
           />
-          <button
-            type="submit"
-            className={styles.addFriendSubmit}
-            disabled={busy || !username.trim()}
-          >
-            <UserPlus size={15} aria-hidden />
-            {busy ? 'Adding…' : 'Add'}
-          </button>
         </div>
+        <button
+          type="submit"
+          className={styles.addFriendSubmit}
+          disabled={busy || !username.trim()}
+        >
+          <UserPlus size={16} aria-hidden />
+          {busy ? 'Adding…' : 'Add friend'}
+        </button>
       </form>
 
       {notice ? (
@@ -1268,7 +1311,7 @@ function FriendsPanel({
         />
       ) : null}
 
-      {state.status === 'ready' ? (
+      {ready ? (
         <>
           {state.requests.length > 0 ? (
             <section className={styles.friendSection} aria-label="Friend requests">
@@ -1279,24 +1322,30 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.requests.map((row) => {
                   const label = row.friend.display_name || row.friend.username
-                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
-                    <li key={row.id} className={styles.friendCard}>
-                      <span className={styles.friendAvatar} aria-hidden>
-                        {initial}
-                      </span>
-                      <div className={styles.friendText}>
-                        <strong>{label}</strong>
-                        <span>@{row.friend.username}</span>
+                    <li key={row.id} className={`${styles.friendCard} ${styles.friendCardRequest}`}>
+                      <div className={styles.friendCardMain}>
+                        <DesignerAvatar
+                          userId={row.friend.user_id}
+                          label={label}
+                          avatarUrl={row.friend.avatar_url}
+                        />
+                        <div className={styles.friendText}>
+                          <strong>{label}</strong>
+                          <span>@{row.friend.username}</span>
+                          <em className={styles.friendAsk}>Add as a friend?</em>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        className={styles.addFriendSubmit}
-                        disabled={busy}
-                        onClick={() => onAccept(row.id)}
-                      >
-                        Accept
-                      </button>
+                      <div className={styles.friendCardActions}>
+                        <button
+                          type="button"
+                          className={styles.friendAccept}
+                          disabled={busy}
+                          onClick={() => onAccept(row.id)}
+                        >
+                          Accept
+                        </button>
+                      </div>
                     </li>
                   )
                 })}
@@ -1310,15 +1359,24 @@ function FriendsPanel({
               <span className={styles.friendSectionCount}>{state.friends.length}</span>
             </div>
             {state.friends.length === 0 ? (
-              <EmptyState
-                title="No friends yet"
-                body="Add someone by FashionRise username to build your private circle."
-              />
+              <div className={styles.friendsEmpty}>
+                <button
+                  type="button"
+                  className={styles.friendsEmptyBtn}
+                  aria-label="Focus add friend"
+                  onClick={() => inputRef.current?.focus()}
+                >
+                  <UserPlus size={28} aria-hidden />
+                </button>
+                <p className={styles.friendsEmptyTitle}>Add a friend</p>
+                <p className={styles.friendsEmptyBody}>
+                  Invite the designers closest to you by FashionRise username.
+                </p>
+              </div>
             ) : (
               <ul className={styles.friendList}>
                 {state.friends.map((row) => {
                   const label = row.friend.display_name || row.friend.username
-                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
                     <li key={row.id} className={styles.friendCard}>
                       <button
@@ -1334,9 +1392,11 @@ function FriendsPanel({
                           })
                         }
                       >
-                        <span className={styles.friendAvatar} aria-hidden>
-                          {initial}
-                        </span>
+                        <DesignerAvatar
+                          userId={row.friend.user_id}
+                          label={label}
+                          avatarUrl={row.friend.avatar_url}
+                        />
                         <span className={styles.friendText}>
                           <strong>{label}</strong>
                           <span>@{row.friend.username}</span>
@@ -1347,6 +1407,7 @@ function FriendsPanel({
                         className={styles.friendRemove}
                         disabled={busy}
                         data-testid={`friend-remove-${row.friend.user_id}`}
+                        aria-label={`Remove ${label}`}
                         onClick={() => onRemove(row.friend.user_id, label)}
                       >
                         Remove
