@@ -227,6 +227,7 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
   const tier = state.status === 'ready' ? tierLabel(state.profile?.reputation_tier) : null
   const coverUrl =
     state.status === 'ready' && state.profile?.cover_url ? state.profile.cover_url : null
+  const [avatarBroken, setAvatarBroken] = useState(false)
   const avatarSrc =
     localAvatarPreview ||
     profileAvatarSrc(
@@ -234,16 +235,33 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
       (state.status === 'ready' ? state.profile?.avatar_url : null) || friend.avatar_url || null,
       state.status === 'ready' ? state.profile?.updated_at : null,
     )
+  const showAvatarPhoto = Boolean(avatarSrc) && !avatarBroken
 
-  const avatarNode = avatarSrc ? (
-    <img src={avatarSrc} alt="" className={styles.avatar} width={84} height={84} />
-  ) : (
-    <span className={styles.avatarFallback} aria-hidden>
+  useEffect(() => {
+    setAvatarBroken(false)
+  }, [avatarSrc])
+
+  const avatarFallback = (
+    <span className={styles.avatarFallback} aria-hidden data-testid="designer-avatar-fallback">
       {(displayName[0] || '?').toUpperCase()}
     </span>
   )
 
-  const heroAvatar = avatarSrc ? (
+  const avatarNode = showAvatarPhoto ? (
+    <img
+      src={avatarSrc!}
+      alt=""
+      className={styles.avatar}
+      width={84}
+      height={84}
+      data-testid="designer-avatar-photo"
+      onError={() => setAvatarBroken(true)}
+    />
+  ) : (
+    avatarFallback
+  )
+
+  const heroAvatar = showAvatarPhoto ? (
     <button
       type="button"
       className={styles.avatarBtn}

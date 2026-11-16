@@ -7,7 +7,7 @@ import {
   recoverPendingStarsPurchases,
   startIapTransactionUpdateRecovery,
 } from './iap'
-import { isNativeShell } from './platform'
+import { isNativeShell, nativePlatform } from './platform'
 import { syncNativePushAfterAuth } from './nativePush'
 
 /** Soften native chrome once the SPA mounts. Safe no-op on web. */
@@ -20,6 +20,10 @@ export async function bootstrapNativeShell(): Promise<void> {
     // overlay:false + contentInset automatic left a blank strip under the status bar.
     await StatusBar.setOverlaysWebView({ overlay: true })
     document.documentElement.classList.add('fr-native-shell')
+    const platform = nativePlatform()
+    if (platform === 'android' || platform === 'ios') {
+      document.documentElement.classList.add(`fr-native-${platform}`)
+    }
   } catch {
     /* web / unsupported */
   }

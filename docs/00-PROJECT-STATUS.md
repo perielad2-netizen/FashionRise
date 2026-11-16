@@ -3,6 +3,14 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Android QA — Runway label + safe-top + avatar (2026-11-16 Asia/Jerusalem)
+
+| Item | Fix |
+| --- | --- |
+| Nav | Sidebar label restored to **Runway** (was “FashionRise”) |
+| Top margin | `--fr-safe-top` floor for Capacitor (`fr-native-shell` / Android) so header + immersive feed clear the status bar |
+| Profile photo | Absolutize avatar URLs for native API base; letter fallback when `<img>` fails |
+
 ## Codemagic Android → linux_x2 (2026-11-16 Asia/Jerusalem)
 
 | Item | Value |
