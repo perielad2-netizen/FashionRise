@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Fitting Room camera + gallery** — FE tip `7dfc22a9` live.)
+**Last updated:** 2026-11-16 (**Studio fabrics** — 12 starters + pattern scale for all · PR open.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,15 +12,25 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (`7dfc22a9+`); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (`79d9876c+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
+| **Studio fabrics** | **PR open** | 12 photoreal starters · scale on all fabrics · created fabrics in one grid |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh Fitting Room · confirm Take photo / Take clothing photo open camera · rebuild Android from `main` for CAMERA permission.
+**Exact next step:** Review/merge Studio fabrics PR · then continue FashionRise Social / Android QA.
+
+## Studio fabrics — 12 starters + universal pattern scale (2026-11-16)
+
+| Status | Detail |
+|---|---|
+| Change | Dropped weak procedural first-6 · 12 image starters (staples + AI defaults) · pattern scale for **all** fabrics · AI/upload appear in same grid · Fine/Medium/Coarse + live preview |
+| Staples | Blue denim · White silk · Black cotton · Brown corduroy · Blush chiffon · Charcoal wool |
+| Kept AI | Gold glitter · Blue velvet · White lace · Offwhite satin · Stockings · Stitch jeans |
+| Branch | `cursor/web-fabric-scale-all-12-77c6` |
 
 ## Fitting Room — camera + gallery (2026-11-16) — tip LIVE / #346
 

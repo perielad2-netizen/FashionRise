@@ -246,7 +246,36 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(80px, 100px));
   justify-content: start;
-  gap: 8px;
+  gap: 10px 8px;
+  margin-bottom: 8px;
+}
+
+.fabricCell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  align-content: start;
+}
+
+.fabricCaption {
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--fr-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.removeFabricInline {
+  border: none;
+  background: transparent;
+  color: var(--fr-muted);
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  justify-self: center;
 }
 
 .createGradient {
@@ -406,31 +435,44 @@
 }
 
 .fabricActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 12px;
 }
 
 .addFabric {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(214, 51, 132, 0.45);
-  background: rgba(214, 51, 132, 0.16);
-  color: #ffd6e8;
-  font-size: 11px;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 182, 214, 0.55);
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   cursor: pointer;
+  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.35);
+}
+
+.addFabric:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.addFabric:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .addFabric:disabled {
   opacity: 0.55;
   cursor: default;
+  box-shadow: none;
 }
 
 .hiddenFile {
@@ -491,9 +533,60 @@
 }
 
 .scaleBlock {
-  margin-top: 8px;
+  margin-top: 10px;
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scalePreviewRow {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.scalePreview {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: #3f3340;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.scaleControls {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scalePresets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scalePreset,
+.scalePresetActive {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.scalePresetActive {
+  border-color: rgba(214, 51, 132, 0.55);
+  background: rgba(214, 51, 132, 0.2);
+  color: #ffe4f0;
+  font-weight: 650;
 }
 
 .scaleRow {

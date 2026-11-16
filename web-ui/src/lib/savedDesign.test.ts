@@ -168,7 +168,11 @@ describe('saved design envelope format', () => {
     const saved = savedRow('filled', snapshotFromDocument(withFills))
     const parsed = parseSavedDesign(JSON.parse(JSON.stringify(saved)), OWNER)
     expect(parsed?.snapshot.fills).toHaveLength(1)
-    expect(parsed?.snapshot.fills?.[0]?.style).toEqual({ kind: 'fabric', fabricId: 'satin' })
+    expect(parsed?.snapshot.fills?.[0]?.style).toEqual({
+      kind: 'fabric',
+      fabricId: 'satin',
+      scale: 1,
+    })
 
     const legacySnapshot: SavedDesignSnapshot = {
       strokes: withFills.strokes,
