@@ -1,4 +1,4 @@
-import { FABRIC_PRESETS } from '@/lib/fills'
+import { FABRIC_PRESETS, RETIRED_FABRIC_PRESETS, findFabricPreset } from '@/lib/fills'
 
 const imageCache = new Map<string, HTMLImageElement>()
 const inflight = new Map<string, Promise<HTMLImageElement>>()
@@ -20,7 +20,7 @@ export function getCachedDefaultFabricImage(fabricId: string): HTMLImageElement 
 }
 
 export function loadDefaultFabricImage(fabricId: string): Promise<HTMLImageElement> {
-  const preset = FABRIC_PRESETS.find((p) => p.id === fabricId && p.tileUrl)
+  const preset = findFabricPreset(fabricId)
   if (!preset?.tileUrl) {
     return Promise.reject(new Error(`No default tile for fabric ${fabricId}`))
   }
@@ -44,11 +44,15 @@ export function loadDefaultFabricImage(fabricId: string): Promise<HTMLImageEleme
 /** Prefetch every image-backed default fabric (idempotent). */
 export function preloadDefaultFabricTiles(): Promise<void> {
   if (preloadPromise) return preloadPromise
-  const ids = FABRIC_PRESETS.filter((p) => p.tileUrl).map((p) => p.id)
+  const ids = [
+    ...FABRIC_PRESETS.filter((p) => p.tileUrl).map((p) => p.id),
+    ...RETIRED_FABRIC_PRESETS.filter((p) => p.tileUrl).map((p) => p.id),
+  ]
   preloadPromise = Promise.allSettled(ids.map((id) => loadDefaultFabricImage(id))).then(() => undefined)
   return preloadPromise
 }
 
+/** Active starter tile ids (picker). Retired tiles still load via findFabricPreset. */
 export function defaultFabricTileIds(): string[] {
   return FABRIC_PRESETS.filter((p) => p.tileUrl).map((p) => p.id)
 }

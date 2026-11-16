@@ -14,7 +14,7 @@
 import { getCachedDefaultFabricImage } from '@/lib/defaultFabricTiles'
 import { getCachedFabricImage, ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
-import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
+import { findFabricPreset, type FillOp } from '@/lib/fills'
 import {
   renderFabricTile,
   renderUploadedFabricTile,
@@ -158,7 +158,7 @@ export async function captureFabricSwatchForMagic(
     const fabric = fill.style
     const scale =
       typeof fabric.scale === 'number' && Number.isFinite(fabric.scale) ? fabric.scale : 1
-    const preset = FABRIC_PRESETS.find((p) => p.id === fabric.fabricId)
+    const preset = findFabricPreset(fabric.fabricId)
     let tile: HTMLCanvasElement
     if (preset?.tileUrl) {
       const img = getCachedDefaultFabricImage(fabric.fabricId)

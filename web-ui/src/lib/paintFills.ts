@@ -2,7 +2,7 @@ import { getCachedDefaultFabricImage } from '@/lib/defaultFabricTiles'
 import { getCachedFabricImage, registerFabricCacheClearHook } from '@/lib/fabricAssetCache'
 import {
   fillOpToSvgPath,
-  FABRIC_PRESETS,
+  findFabricPreset,
   type FabricFillStyle,
   type FillOp,
   type FillStyle,
@@ -108,7 +108,7 @@ function makeFabricPattern(
   const scale =
     typeof style.scale === 'number' && Number.isFinite(style.scale) ? style.scale : 1
   const key = `${style.fabricId}:${scale.toFixed(3)}`
-  const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+  const preset = findFabricPreset(style.fabricId)
   if (preset?.tileUrl) {
     const img = getCachedDefaultFabricImage(style.fabricId)
     if (!img) return preset.fallbackColor ?? '#CCCCCC'
@@ -216,7 +216,7 @@ export const BUILTIN_FABRIC_TILE_PX = 64
 
 /** Render the exact built-in fabric tile shown on the Studio canvas (source of truth). */
 export function renderFabricTile(fabricId: string): HTMLCanvasElement {
-  const preset = FABRIC_PRESETS.find((p) => p.id === fabricId)
+  const preset = findFabricPreset(fabricId)
   if (preset?.tileUrl) {
     const img = getCachedDefaultFabricImage(fabricId)
     const size = img ? Math.max(img.naturalWidth, img.naturalHeight, BUILTIN_FABRIC_TILE_PX) : BUILTIN_FABRIC_TILE_PX
@@ -365,7 +365,7 @@ export function sampleColorFromStyle(style: FillStyle): string {
   if (style.kind === 'solid') return style.color
   if (style.kind === 'gradient') return style.colors[0]
   if (style.kind === 'uploaded-fabric') return '#BE185D'
-  const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+  const preset = findFabricPreset(style.fabricId)
   if (preset?.fallbackColor) return preset.fallbackColor
   switch (style.fabricId) {
     case 'satin':

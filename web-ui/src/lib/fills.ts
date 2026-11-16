@@ -123,6 +123,24 @@ export type FabricPreset = {
   fallbackColor?: string
 }
 
+/** Image starters retired from the picker; tiles kept so old designs still paint. */
+export const RETIRED_FABRIC_PRESETS: FabricPreset[] = [
+  {
+    id: 'blue-velvet',
+    label: 'Blue velvet',
+    preview: 'url(/fabrics/defaults/blue-velvet.png) center / cover',
+    tileUrl: '/fabrics/defaults/blue-velvet.png',
+    fallbackColor: '#1D4ED8',
+  },
+  {
+    id: 'charcoal-wool',
+    label: 'Charcoal wool',
+    preview: 'url(/fabrics/defaults/charcoal-wool.png) center / cover',
+    tileUrl: '/fabrics/defaults/charcoal-wool.png',
+    fallbackColor: '#2A2C30',
+  },
+]
+
 /** Twelve starter fabrics for every account — photoreal tiles (no weak procedurals). */
 export const FABRIC_PRESETS: FabricPreset[] = [
   // Everyday staples
@@ -155,33 +173,33 @@ export const FABRIC_PRESETS: FabricPreset[] = [
     fallbackColor: '#6B4226',
   },
   {
+    id: 'black-leather',
+    label: 'Black leather',
+    preview: 'url(/fabrics/defaults/black-leather.png) center / cover',
+    tileUrl: '/fabrics/defaults/black-leather.png',
+    fallbackColor: '#1A1A1A',
+  },
+  {
+    id: 'brown-leather',
+    label: 'Brown leather',
+    preview: 'url(/fabrics/defaults/brown-leather.png) center / cover',
+    tileUrl: '/fabrics/defaults/brown-leather.png',
+    fallbackColor: '#6B3A22',
+  },
+  {
     id: 'blush-chiffon',
     label: 'Blush chiffon',
     preview: 'url(/fabrics/defaults/blush-chiffon.png) center / cover',
     tileUrl: '/fabrics/defaults/blush-chiffon.png',
     fallbackColor: '#E8A0A8',
   },
-  {
-    id: 'charcoal-wool',
-    label: 'Charcoal wool',
-    preview: 'url(/fabrics/defaults/charcoal-wool.png) center / cover',
-    tileUrl: '/fabrics/defaults/charcoal-wool.png',
-    fallbackColor: '#2A2C30',
-  },
-  // Shared AI studio defaults (Peri + Yaniv)
+  // Shared AI studio defaults (Peri + Yaniv) — blue velvet retired from picker
   {
     id: 'gold-glitter',
     label: 'Gold glitter',
     preview: 'url(/fabrics/defaults/gold.png) center / cover',
     tileUrl: '/fabrics/defaults/gold.png',
     fallbackColor: '#D4A017',
-  },
-  {
-    id: 'blue-velvet',
-    label: 'Blue velvet',
-    preview: 'url(/fabrics/defaults/blue-velvet.png) center / cover',
-    tileUrl: '/fabrics/defaults/blue-velvet.png',
-    fallbackColor: '#1D4ED8',
   },
   {
     id: 'wedding-lace',
@@ -213,9 +231,16 @@ export const FABRIC_PRESETS: FabricPreset[] = [
   },
 ]
 
+export function findFabricPreset(fabricId: string): FabricPreset | undefined {
+  return (
+    FABRIC_PRESETS.find((p) => p.id === fabricId) ??
+    RETIRED_FABRIC_PRESETS.find((p) => p.id === fabricId)
+  )
+}
+
 export function isKnownFabricId(fabricId: string): boolean {
   return (
-    FABRIC_PRESETS.some((p) => p.id === fabricId) ||
+    Boolean(findFabricPreset(fabricId)) ||
     (LEGACY_FABRIC_IDS as readonly string[]).includes(fabricId)
   )
 }

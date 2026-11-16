@@ -89,6 +89,9 @@ describe('ColorAndMaterialsPanel', () => {
     expect(screen.getByTestId('fabric-preset-white-silk')).toBeTruthy()
     expect(screen.getByTestId('fabric-preset-black-cotton')).toBeTruthy()
     expect(screen.getByTestId('fabric-preset-brown-corduroy')).toBeTruthy()
+    expect(screen.getByTestId('fabric-preset-black-leather')).toBeTruthy()
+    expect(screen.getByTestId('fabric-preset-brown-leather')).toBeTruthy()
+    expect(screen.queryByTestId('fabric-preset-blue-velvet')).toBeNull()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Gradients' }))
     const rose = screen.getByRole('button', { name: 'Rose violet' })
@@ -115,8 +118,11 @@ describe('ColorAndMaterialsPanel', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Fabrics' }))
     expect(screen.getByTestId('fabric-scale-block')).toBeTruthy()
     expect(screen.getByTestId('fabric-scale-preview')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Fine' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Coarse' }))
+    expect(screen.queryByRole('button', { name: 'Fine' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Medium' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Coarse' })).toBeNull()
+    const slider = screen.getByLabelText('Fabric pattern scale') as HTMLInputElement
+    fireEvent.change(slider, { target: { value: '2' } })
     expect(onFillStyle).toHaveBeenCalledWith({
       kind: 'fabric',
       fabricId: 'blue-denim',
