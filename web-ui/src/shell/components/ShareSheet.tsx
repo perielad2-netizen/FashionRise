@@ -1,8 +1,7 @@
 import { useEffect, useId, useState } from 'react'
-import { Check, Copy, Download, MessageCircle, Share2, X } from 'lucide-react'
+import { Check, Copy, Download, Share2, X } from 'lucide-react'
 import {
   buildShareCaption,
-  buildWhatsAppShareUrl,
   canUseNativeShare,
   copyText,
   downloadImageFromUrl,
@@ -17,12 +16,11 @@ type Props = {
   payload?: SharePayload
 }
 
-type Flash = 'copied-caption' | 'saved-image' | 'shared' | 'whatsapp' | null
+type Flash = 'copied-caption' | 'saved-image' | 'shared' | null
 
 /**
- * Fallback share UI for browsers without the Web Share API (mostly desktop).
- * On phones, callers should call `requestShare` first and only open this sheet
- * when that returns `needs-fallback`.
+ * Desktop / rare fallback when the OS share sheet is unavailable.
+ * Android/iOS callers use `requestShare` first and should not open this.
  */
 export function ShareSheet({ open, onClose, payload }: Props) {
   const titleId = useId()
@@ -66,9 +64,7 @@ export function ShareSheet({ open, onClose, payload }: Props) {
         ? 'Image saved — attach it when you post'
         : flash === 'shared'
           ? 'Opened share options — pick an app'
-          : flash === 'whatsapp'
-            ? 'Opening WhatsApp with your caption'
-            : null
+          : null
 
   async function onShare() {
     setBusy(true)
@@ -78,9 +74,13 @@ export function ShareSheet({ open, onClose, payload }: Props) {
         const result = await shareNative(effective)
         if (result === 'shared') {
           setFlash('shared')
+          onClose()
           return
         }
-        if (result === 'cancelled') return
+        if (result === 'cancelled') {
+          onClose()
+          return
+        }
       }
       await copyText(caption)
       if (effective.imageUrl) {
@@ -98,20 +98,6 @@ export function ShareSheet({ open, onClose, payload }: Props) {
       }
     } catch {
       setError('Could not prepare share. Copy the caption and save the image instead.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onWhatsApp() {
-    setBusy(true)
-    setError(null)
-    try {
-      await copyText(caption)
-      setFlash('whatsapp')
-      window.open(buildWhatsAppShareUrl(caption), '_blank', 'noopener,noreferrer')
-    } catch {
-      setError('Could not open WhatsApp. Copy the caption instead.')
     } finally {
       setBusy(false)
     }
@@ -180,8 +166,8 @@ export function ShareSheet({ open, onClose, payload }: Props) {
 
         <p className={styles.hint}>
           {nativeOk
-            ? 'Share opens your device’s share menu so you can pick WhatsApp, Instagram, Facebook, or any other app.'
-            : 'Copy the FashionRise caption, save the look image, then paste both into the app you want to post with.'}
+            ? 'Opens your phone’s share menu — pick WhatsApp, Instagram, or any app.'
+            : 'Copy the FashionRise caption and save the look image, then paste both into the app you post with.'}
         </p>
 
         <pre className={styles.caption} data-testid="share-caption" aria-label="Share caption">
@@ -200,20 +186,9 @@ export function ShareSheet({ open, onClose, payload }: Props) {
             <span>{nativeOk ? 'Share…' : 'Copy caption & save image'}</span>
             <small>
               {nativeOk
-                ? 'Choose WhatsApp, Instagram, Facebook…'
+                ? 'WhatsApp, Instagram, Messages…'
                 : 'Created with FashionRise'}
             </small>
-          </button>
-          <button
-            type="button"
-            className={styles.action}
-            disabled={busy}
-            onClick={() => void onWhatsApp()}
-            data-testid="share-whatsapp"
-          >
-            <MessageCircle size={18} aria-hidden />
-            <span>WhatsApp text</span>
-            <small>Opens chat with caption</small>
           </button>
           <button
             type="button"

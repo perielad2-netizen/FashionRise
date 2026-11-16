@@ -12,7 +12,6 @@ describe('ShareSheet', () => {
     // Force fallback sheet path (no Web Share API in jsdom by default).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (navigator as any).share
-    vi.spyOn(window, 'open').mockImplementation(() => null)
   })
 
   it('shows Created with FashionRise caption and a single primary Share action', () => {
@@ -28,6 +27,7 @@ describe('ShareSheet', () => {
     expect(screen.getByTestId('share-caption').textContent).toContain('Created with FashionRise')
     expect(screen.getByTestId('share-caption').textContent).toContain('Search Google for FashionRise')
     expect(screen.getByTestId('share-primary')).toBeTruthy()
+    expect(screen.queryByTestId('share-whatsapp')).toBeNull()
     expect(screen.queryByTestId('share-instagram')).toBeNull()
     expect(screen.queryByTestId('share-facebook')).toBeNull()
   })
@@ -56,14 +56,13 @@ describe('ShareSheet', () => {
     expect(fetchMock).toHaveBeenCalled()
   })
 
-  it('opens WhatsApp with encoded Created with FashionRise text', async () => {
+  it('copies caption from the secondary action', async () => {
     render(<ShareSheet open onClose={() => undefined} payload={{ kind: 'look' }} />)
-    fireEvent.click(screen.getByTestId('share-whatsapp'))
+    fireEvent.click(screen.getByTestId('share-copy-caption'))
     await waitFor(() => {
-      expect(window.open).toHaveBeenCalled()
+      expect(navigator.clipboard.writeText).toHaveBeenCalled()
     })
-    const url = String(vi.mocked(window.open).mock.calls[0][0])
-    expect(url.startsWith('https://wa.me/?text=')).toBe(true)
-    expect(decodeURIComponent(url.split('text=')[1])).toContain('Created with FashionRise')
+    const copied = String(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0])
+    expect(copied).toContain('Created with FashionRise')
   })
 })

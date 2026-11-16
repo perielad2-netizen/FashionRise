@@ -1,12 +1,54 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const platform = vi.hoisted(() => ({
+  isNativeShell: vi.fn(() => false),
+}))
+
+vi.mock('@/services/native/platform', () => ({
+  isNativeShell: () => platform.isNativeShell(),
+  nativePlatform: () => (platform.isNativeShell() ? 'android' : 'web'),
+  isNativeBuild: () => false,
+}))
+
+const capacitorShare = vi.hoisted(() => ({
+  share: vi.fn().mockResolvedValue({}),
+}))
+
+vi.mock('@capacitor/share', () => ({
+  Share: {
+    share: (...args: unknown[]) => capacitorShare.share(...args),
+  },
+}))
+
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    isNativePlatform: () => platform.isNativeShell(),
+    getPlatform: () => (platform.isNativeShell() ? 'android' : 'web'),
+  },
+}))
+
+vi.mock('@/lib/nativeImageSave', () => ({
+  blobToBase64: vi.fn(async () => 'YWJj'),
+  writeCacheFileForDownload: vi.fn(async () => ({
+    uri: 'file:///cache/fr-share/look.png',
+  })),
+}))
+
 import {
   FASHIONRISE_PUBLIC_URL,
   buildShareCaption,
   buildWhatsAppShareUrl,
+  canUseNativeShare,
   requestShare,
 } from '@/lib/sharePromo'
 
 describe('sharePromo', () => {
+  beforeEach(() => {
+    platform.isNativeShell.mockReturnValue(false)
+    capacitorShare.share.mockClear()
+    capacitorShare.share.mockResolvedValue({})
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,7 +82,7 @@ describe('sharePromo', () => {
     expect(decodeURIComponent(url.split('text=')[1])).toContain('Created with FashionRise')
   })
 
-  it('requestShare opens the OS share sheet when available', async () => {
+  it('requestShare opens the OS share sheet when Web Share is available', async () => {
     const share = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { share, canShare: undefined })
     const result = await requestShare({ kind: 'look', title: 'Gown' })
@@ -51,8 +93,44 @@ describe('sharePromo', () => {
     expect(data.text).toContain('Search Google for FashionRise')
   })
 
-  it('requestShare asks for fallback when Web Share is missing', async () => {
+  it('requestShare asks for fallback when Web Share is missing on web', async () => {
     const result = await requestShare({ kind: 'look' })
     expect(result).toBe('needs-fallback')
+  })
+
+  it('requestShare uses Capacitor Share on native Android (no custom popup)', async () => {
+    platform.isNativeShell.mockReturnValue(true)
+    expect(canUseNativeShare()).toBe(true)
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['png'], { type: 'image/png' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await requestShare({
+      kind: 'look',
+      title: 'Wings',
+      imageUrl: 'blob:look',
+      imageFileName: 'fashionrise-look.png',
+    })
+
+    expect(result).toBe('shared')
+    expect(capacitorShare.share).toHaveBeenCalledTimes(1)
+    const args = capacitorShare.share.mock.calls[0][0] as {
+      text: string
+      files?: string[]
+      dialogTitle?: string
+    }
+    expect(args.text).toContain('Created with FashionRise')
+    expect(args.files?.[0]).toContain('file://')
+    expect(args.dialogTitle).toMatch(/Share your look/i)
+  })
+
+  it('Capacitor Share cancel does not open the fallback sheet', async () => {
+    platform.isNativeShell.mockReturnValue(true)
+    capacitorShare.share.mockRejectedValueOnce(new Error('Share cancelled'))
+    const result = await requestShare({ kind: 'look' })
+    expect(result).toBe('cancelled')
   })
 })
