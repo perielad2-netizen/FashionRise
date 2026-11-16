@@ -914,6 +914,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       {editor.draftConflict ? (
         <ConfirmDialog
           title="Draft recovery conflict"
+          busy={editor.saveStatus === 'saving'}
           actions={[
             {
               label: 'Use cloud draft',

@@ -111,6 +111,8 @@ export type PersistResult =
       fingerprint: string
       syncedRevision: number
       localPersisted: boolean
+      /** Exact local document that won OCC (Keep-this-device). Callers must not re-prepare. */
+      keptLocal?: StudioDraftDocument
     }
   | {
       ok: false
@@ -628,7 +630,11 @@ export async function commitKeepDeviceChoice(args: {
       lastSyncedFingerprint: null,
       expectedRevision: serverRevision,
     })
-    if (result.ok) return result
+    if (result.ok) {
+      // Return the exact local payload that won OCC — callers must not re-prepare
+      // (a second prepareKeepDeviceDocument can diverge after retry serverBack merges).
+      return { ...result, keptLocal: rebased }
+    }
     if (!result.conflict || attempt >= 3) return result
     const nextRev = result.conflict.server.clientRevision
     if (nextRev <= serverRevision) return result
@@ -644,6 +650,7 @@ export async function commitKeepDeviceChoice(args: {
         fingerprint: draftContentFingerprint(documentForCloud(result.conflict.server)),
         syncedRevision: result.conflict.server.clientRevision,
         localPersisted: result.localPersisted,
+        keptLocal: rebased,
       }
     }
     serverRevision = nextRev
@@ -651,7 +658,7 @@ export async function commitKeepDeviceChoice(args: {
   }
   // Unreachable — loop returns — keep TypeScript satisfied.
   const rebased = prepareKeepDeviceDocument(args.local, args.server, args.serverRevision)
-  return persistStudioDraft({
+  const last = await persistStudioDraft({
     userId: args.userId,
     designId: args.designId,
     document: rebased,
@@ -659,6 +666,7 @@ export async function commitKeepDeviceChoice(args: {
     lastSyncedFingerprint: null,
     expectedRevision: args.serverRevision,
   })
+  return last.ok ? { ...last, keptLocal: rebased } : last
 }
 
 /**

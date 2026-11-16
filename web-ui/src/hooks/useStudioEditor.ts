@@ -245,6 +245,8 @@ export function useStudioEditor() {
   const scheduleCloudSaveRef = useRef<() => void>(() => {})
   /** Blocks automatic cloud writes until the operator resolves a conflict. */
   const conflictOpenRef = useRef(false)
+  /** Prevents double-tap Keep/Use-cloud from racing two OCC saves. */
+  const conflictResolveInFlightRef = useRef(false)
   /** Blocks automatic cloud writes while a damaged cloud draft awaits explicit recovery. */
   const damagedCloudBlockRef = useRef(false)
   /** Blocks automatic cloud writes while a saved design replaces the working-draft content. */
@@ -3493,9 +3495,10 @@ export function useStudioEditor() {
   }, [])
 
   const resolveConflictKeepLocal = useCallback(() => {
-    if (!draftConflict || !user?.id) return
+    if (!draftConflict || !user?.id || conflictResolveInFlightRef.current) return
     const prompt = draftConflict
     conflictOpenRef.current = true
+    conflictResolveInFlightRef.current = true
     void (async () => {
       setSaveStatus('saving')
       setSaveError(null)
@@ -3505,86 +3508,82 @@ export function useStudioEditor() {
       const live = authoritativeDocRef.current
       const localToKeep =
         live.clientRevision >= prompt.local.clientRevision ? live : prompt.local
-      const result = await commitKeepDeviceChoice({
-        userId: user.id,
-        designId: prompt.designId,
-        local: localToKeep,
-        server: prompt.server,
-        serverRevision: prompt.server.clientRevision,
-      })
-      const rebased = prepareKeepDeviceDocument(
-        localToKeep,
-        prompt.server,
-        prompt.server.clientRevision,
-      )
-      if (result.ok) {
-        const expectedFp = draftContentFingerprint(documentForCloud(rebased))
-        const ackFp = draftContentFingerprint(documentForCloud(result.document))
-        if (result.fingerprint !== expectedFp && ackFp !== expectedFp) {
-          // Do not auto-resume a pending Open into another conflict loop.
+      try {
+        const result = await commitKeepDeviceChoice({
+          userId: user.id,
+          designId: prompt.designId,
+          local: localToKeep,
+          server: prompt.server,
+          serverRevision: prompt.server.clientRevision,
+        })
+        if (result.ok) {
+          const kept =
+            result.keptLocal ??
+            prepareKeepDeviceDocument(localToKeep, prompt.server, prompt.server.clientRevision)
+          // persistStudioDraft already verified the cloud ACK fingerprint. Do not
+          // re-prepare + re-compare here — a second prepare can diverge after OCC
+          // retries (serverBack merge) and falsely surface Save failed while the
+          // PUT already succeeded (Android Create Keep stuck loop).
+          conflictOpenRef.current = false
+          authoritativeDocRef.current = kept
+          designIdRef.current = result.designId
+          syncedRevisionRef.current = result.syncedRevision
+          syncedFingerprintRef.current = result.fingerprint
+          applyDocument(kept, result.designId)
+          setDraftConflict(null)
+          setSaveStatus('saved')
+          resumePendingOpenAfterConflict()
+          return
+        }
+        conflictOpenRef.current = true
+        if (result.conflict) {
+          // Genuine concurrent cloud advance — renew choice; never blind-overwrite.
           pendingOpenAfterConflictRef.current = null
-          conflictOpenRef.current = true
-          setDraftConflict({
-            local: rebased,
-            server: result.document,
-            designId: result.designId,
-          })
-          setSaveError('Server draft content differs from this device.')
+          setDraftConflict(result.conflict)
+          setSaveError(result.error)
           setSaveStatus('error')
           return
         }
-        conflictOpenRef.current = false
-        authoritativeDocRef.current = rebased
-        designIdRef.current = result.designId
-        syncedRevisionRef.current = result.syncedRevision
-        syncedFingerprintRef.current = result.fingerprint
-        applyDocument(rebased, result.designId)
-        setDraftConflict(null)
-        setSaveStatus('saved')
-        resumePendingOpenAfterConflict()
-        return
-      }
-      conflictOpenRef.current = true
-      if (result.conflict) {
-        // Genuine concurrent cloud advance — renew choice; never blind-overwrite.
-        pendingOpenAfterConflictRef.current = null
-        setDraftConflict(result.conflict)
         setSaveError(result.error)
         setSaveStatus('error')
-        return
+      } finally {
+        conflictResolveInFlightRef.current = false
       }
-      setSaveError(result.error)
-      setSaveStatus('error')
     })()
   }, [applyDocument, draftConflict, resumePendingOpenAfterConflict, user?.id])
 
   const resolveConflictUseServer = useCallback(() => {
-    if (!draftConflict || !user?.id) return
+    if (!draftConflict || !user?.id || conflictResolveInFlightRef.current) return
     const prompt = draftConflict
     conflictOpenRef.current = true
+    conflictResolveInFlightRef.current = true
     void (async () => {
       setSaveStatus('saving')
       setSaveError(null)
-      const replaced = await commitUseCloudChoice({
-        userId: user.id,
-        designId: prompt.designId,
-        server: prompt.server,
-      })
-      if (!replaced.ok) {
-        conflictOpenRef.current = true
-        setSaveError(replaced.error)
-        setSaveStatus('error')
-        return
+      try {
+        const replaced = await commitUseCloudChoice({
+          userId: user.id,
+          designId: prompt.designId,
+          server: prompt.server,
+        })
+        if (!replaced.ok) {
+          conflictOpenRef.current = true
+          setSaveError(replaced.error)
+          setSaveStatus('error')
+          return
+        }
+        conflictOpenRef.current = false
+        authoritativeDocRef.current = prompt.server
+        designIdRef.current = prompt.designId
+        syncedRevisionRef.current = prompt.server.clientRevision
+        syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(prompt.server))
+        applyDocument(prompt.server, prompt.designId)
+        setDraftConflict(null)
+        setSaveStatus('saved')
+        resumePendingOpenAfterConflict()
+      } finally {
+        conflictResolveInFlightRef.current = false
       }
-      conflictOpenRef.current = false
-      authoritativeDocRef.current = prompt.server
-      designIdRef.current = prompt.designId
-      syncedRevisionRef.current = prompt.server.clientRevision
-      syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(prompt.server))
-      applyDocument(prompt.server, prompt.designId)
-      setDraftConflict(null)
-      setSaveStatus('saved')
-      resumePendingOpenAfterConflict()
     })()
   }, [applyDocument, draftConflict, resumePendingOpenAfterConflict, user?.id])
 
@@ -3938,16 +3937,15 @@ export function useStudioEditor() {
               serverRevision: server.clientRevision,
             })
             if (forced.ok) {
-              const rebased = prepareKeepDeviceDocument(
-                openedAboveServer,
-                server,
-                server.clientRevision,
-              )
+              // Prefer the exact OCC-winning payload; never re-prepare against a
+              // stale pre-retry server snapshot (same Keep Save-failed footgun).
               const useDoc =
-                draftContentFingerprint(documentForCloud(forced.document)) ===
-                draftContentFingerprint(documentForCloud(rebased))
-                  ? forced.document
-                  : rebased
+                forced.keptLocal ??
+                prepareKeepDeviceDocument(
+                  openedAboveServer,
+                  server,
+                  server.clientRevision,
+                )
               const local = await persistLocalRecovery({
                 userId,
                 designId: forced.designId,
@@ -4404,7 +4402,8 @@ export function useStudioEditor() {
     saveStatus,
     saveStatusLabel,
     saveError,
-    retrySave: flushCloudSave,
+    // Conflict open: Retry means Keep this device (flushCloudSave no-ops while conflictOpenRef).
+    retrySave: draftConflict ? resolveConflictKeepLocal : flushCloudSave,
     modelSwitchPrompt,
     confirmModelKeepStrokes: () =>
       modelSwitchPrompt ? commitModelChange(modelSwitchPrompt.next, false) : undefined,
