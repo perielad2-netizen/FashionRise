@@ -10,7 +10,7 @@ from app.core.errors import NotFoundError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.profile import FollowStatusRead, ProfileRead, ProfileUpdate
+from app.schemas.profile import FollowerListItem, FollowStatusRead, ProfileRead, ProfileUpdate
 from app.services import follow_service, profile_avatar_service, profile_service
 
 router = APIRouter()
@@ -80,6 +80,42 @@ def get_profile_avatar(
 @router.get("/me/following-ids", response_model=list[uuid.UUID])
 def my_following_ids(user: CurrentUser, db: Session = Depends(get_db)) -> list[uuid.UUID]:
     return follow_service.list_following_ids(db, user.id)
+
+
+@router.get("/{user_id}/followers", response_model=list[FollowerListItem])
+def list_profile_followers(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
+    limit: int = 50,
+    offset: int = 0,
+) -> list[FollowerListItem]:
+    """People who follow this designer — open from the Followers profile tile."""
+    return follow_service.list_followers(
+        db,
+        user_id,
+        viewer_id=viewer.id if viewer else None,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/{user_id}/following", response_model=list[FollowerListItem])
+def list_profile_following(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
+    limit: int = 50,
+    offset: int = 0,
+) -> list[FollowerListItem]:
+    """Designers this user follows."""
+    return follow_service.list_following_people(
+        db,
+        user_id,
+        viewer_id=viewer.id if viewer else None,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{user_id}/follow-status", response_model=FollowStatusRead)

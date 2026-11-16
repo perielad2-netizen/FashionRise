@@ -5,14 +5,17 @@ import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
 import type { FriendUser } from '@/services/friendsApi'
 import { listUserGallery, type GalleryItem } from '@/services/galleryApi'
+import { syncFollowStatus } from '@/lib/followStatusStore'
 import {
   followCreator,
   getFollowStatus,
   getPublicProfile,
+  listProfileFollowers,
   profileAvatarSrc,
   updateMyProfile,
   unfollowCreator,
   uploadMyAvatar,
+  type FollowerListItem,
   type PublicProfile,
 } from '@/services/profilesApi'
 import { AvatarCropDialog } from './AvatarCropDialog'
@@ -70,9 +73,18 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
   const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(null)
   const [previewLook, setPreviewLook] = useState<GalleryItem | null>(null)
   const [previewAvatar, setPreviewAvatar] = useState(false)
+  const [followersOpen, setFollowersOpen] = useState(false)
+  const [followersState, setFollowersState] = useState<
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'error'; message: string }
+    | { status: 'ready'; people: FollowerListItem[] }
+  >({ status: 'idle' })
+  const [followerBusyId, setFollowerBusyId] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const openedEditRef = useRef(false)
   const editTitleId = useId()
+  const followersTitleId = useId()
   const label =
     friend.display_name ||
     friend.username ||
@@ -86,6 +98,8 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
     setEditing(false)
     setPreviewLook(null)
     setPreviewAvatar(false)
+    setFollowersOpen(false)
+    setFollowersState({ status: 'idle' })
     openedEditRef.current = false
     void Promise.all([
       getPublicProfile(friend.user_id, controller.signal).catch(() => null),
@@ -99,11 +113,15 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
     ])
       .then(([profile, looks, follow]) => {
         if (controller.signal.aborted) return
+        const following = Boolean(follow?.following)
+        if (viewerId && viewerId !== friend.user_id) {
+          syncFollowStatus(viewerId, friend.user_id, following)
+        }
         setState({
           status: 'ready',
           profile,
           looks,
-          following: Boolean(follow?.following),
+          following,
         })
       })
       .catch((err: unknown) => {
@@ -122,13 +140,64 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
     const next = !state.following
     setFollowBusy(true)
     setState((prev) => (prev.status === 'ready' ? { ...prev, following: next } : prev))
+    syncFollowStatus(viewerId, friend.user_id, next)
     try {
       if (next) await followCreator(friend.user_id)
       else await unfollowCreator(friend.user_id)
     } catch {
       setState((prev) => (prev.status === 'ready' ? { ...prev, following: !next } : prev))
+      syncFollowStatus(viewerId, friend.user_id, !next)
     } finally {
       setFollowBusy(false)
+    }
+  }
+
+  const openFollowers = () => {
+    if (state.status !== 'ready') return
+    setFollowersOpen(true)
+    setFollowersState({ status: 'loading' })
+    void listProfileFollowers(friend.user_id)
+      .then((people) => setFollowersState({ status: 'ready', people }))
+      .catch((err: unknown) =>
+        setFollowersState({
+          status: 'error',
+          message: err instanceof ApiError ? err.message : 'Could not load followers.',
+        }),
+      )
+  }
+
+  const onToggleFollowerFollow = async (person: FollowerListItem) => {
+    if (!viewerId || person.user_id === viewerId || followerBusyId) return
+    const next = !person.following
+    setFollowerBusyId(person.user_id)
+    setFollowersState((prev) =>
+      prev.status === 'ready'
+        ? {
+            ...prev,
+            people: prev.people.map((row) =>
+              row.user_id === person.user_id ? { ...row, following: next } : row,
+            ),
+          }
+        : prev,
+    )
+    syncFollowStatus(viewerId, person.user_id, next)
+    try {
+      if (next) await followCreator(person.user_id)
+      else await unfollowCreator(person.user_id)
+    } catch {
+      setFollowersState((prev) =>
+        prev.status === 'ready'
+          ? {
+              ...prev,
+              people: prev.people.map((row) =>
+                row.user_id === person.user_id ? { ...row, following: !next } : row,
+              ),
+            }
+          : prev,
+      )
+      syncFollowStatus(viewerId, person.user_id, !next)
+    } finally {
+      setFollowerBusyId(null)
     }
   }
 
@@ -325,8 +394,18 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
               {state.profile ? (
                 <>
                   <li>
-                    <strong data-testid="designer-followers">{state.profile.followers_count}</strong>
-                    <span>Followers</span>
+                    <button
+                      type="button"
+                      className={styles.statBtn}
+                      data-testid="designer-followers-btn"
+                      aria-haspopup="dialog"
+                      onClick={openFollowers}
+                    >
+                      <strong data-testid="designer-followers">
+                        {state.profile.followers_count}
+                      </strong>
+                      <span>Followers</span>
+                    </button>
                   </li>
                   <li>
                     <strong data-testid="designer-likes">{state.profile.likes_received_count}</strong>
@@ -561,6 +640,103 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
           name={displayName}
           onClose={() => setPreviewAvatar(false)}
         />
+      ) : null}
+
+      {followersOpen ? (
+        <div
+          className={styles.lookBackdrop}
+          role="presentation"
+          data-testid="designer-followers-sheet"
+          onClick={() => setFollowersOpen(false)}
+        >
+          <div
+            className={styles.lookDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={followersTitleId}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.lookDialogHead}>
+              <div>
+                <h2 id={followersTitleId} className={styles.lookDialogTitle}>
+                  Followers
+                </h2>
+                <p className={styles.lookDialogMeta}>
+                  Follow people who follow {displayName} — they show up on FashionRise too.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.closeIcon}
+                aria-label="Close followers"
+                onClick={() => setFollowersOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {followersState.status === 'loading' ? (
+              <p className={styles.status}>Loading followers…</p>
+            ) : null}
+            {followersState.status === 'error' ? (
+              <p className={styles.status} role="alert">
+                {followersState.message}
+              </p>
+            ) : null}
+            {followersState.status === 'ready' && followersState.people.length === 0 ? (
+              <p className={styles.status}>No followers yet.</p>
+            ) : null}
+            {followersState.status === 'ready' && followersState.people.length > 0 ? (
+              <ul className={styles.peopleList} data-testid="designer-followers-list">
+                {followersState.people.map((person) => {
+                  const personAvatar = profileAvatarSrc(person.user_id, person.avatar_url)
+                  const canFollow = Boolean(viewerId && viewerId !== person.user_id)
+                  return (
+                    <li key={person.user_id} className={styles.peopleRow}>
+                      <div className={styles.peopleIdentity}>
+                        {personAvatar ? (
+                          <img
+                            src={personAvatar}
+                            alt=""
+                            className={styles.peopleAvatar}
+                          />
+                        ) : (
+                          <span className={styles.peopleAvatarFallback} aria-hidden>
+                            {(person.display_name || person.username || '?').slice(0, 1)}
+                          </span>
+                        )}
+                        <div>
+                          <strong>{person.display_name || person.username}</strong>
+                          <div className={styles.handle}>@{person.username}</div>
+                        </div>
+                      </div>
+                      {canFollow ? (
+                        <button
+                          type="button"
+                          className={person.following ? styles.ghostBtn : styles.primaryBtn}
+                          disabled={followerBusyId === person.user_id}
+                          data-testid={`follower-follow-${person.user_id}`}
+                          onClick={() => void onToggleFollowerFollow(person)}
+                        >
+                          {person.following ? (
+                            <>
+                              <UserMinus size={14} aria-hidden />
+                              Following
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus size={14} aria-hidden />
+                              Follow
+                            </>
+                          )}
+                        </button>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </div>
   )

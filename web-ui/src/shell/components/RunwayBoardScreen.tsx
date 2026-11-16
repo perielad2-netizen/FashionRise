@@ -49,8 +49,20 @@ const WEEKLY_CATEGORIES: ReadonlyArray<{
   blurb: string
   Icon: LucideIcon
 }> = [
-  { id: 'top_design', label: 'Top Design', stars: 50, blurb: 'Best engaged look', Icon: Sparkles },
-  { id: 'top_designer', label: 'Top Designer', stars: 50, blurb: 'Strongest week', Icon: Palette },
+  {
+    id: 'top_design',
+    label: 'Top Design',
+    stars: 50,
+    blurb: 'Most engaged look this week',
+    Icon: Sparkles,
+  },
+  {
+    id: 'top_designer',
+    label: 'Top Designer',
+    stars: 50,
+    blurb: 'Strongest engagement this week',
+    Icon: Palette,
+  },
   {
     id: 'community_champion',
     label: 'Community Champion',

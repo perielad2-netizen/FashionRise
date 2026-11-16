@@ -168,10 +168,15 @@ def test_end_to_end_user_social_design_flow(client, db_session):
     assert ratings.status_code == 200
     assert any(r["user_id"] == b_user_id for r in ratings.json())
 
-    # Detail with B token should report liked_by_me=true.
+    # Detail with B token should report liked_by_me=true and honest comment count.
     detail = client.get(f"/api/v1/gallery/{gallery_item_id}", headers=b_headers)
     assert detail.status_code == 200
     assert detail.json()["liked_by_me"] is True
+    assert detail.json()["comments_count"] >= 1
+
+    followers = client.get(f"/api/v1/profiles/{a_user_id}/followers", headers=a_headers)
+    assert followers.status_code == 200, followers.text
+    assert any(row["user_id"] == b_user_id for row in followers.json())
 
     p1 = client.get("/api/v1/profiles/me", headers=a_headers)
     assert p1.status_code == 200

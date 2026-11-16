@@ -64,8 +64,18 @@ import {
   profileAvatarSrc,
   unfollowCreator,
 } from '@/services/profilesApi'
+import {
+  __followStatusCacheTestUtils,
+  applyFetchedFollowStatus,
+  followStatusCacheKey,
+  peekFollowStatus,
+  publishFollowStatus,
+  subscribeFollowStatus,
+} from '@/lib/followStatusStore'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
 import styles from './RunwayScreen.module.css'
+
+export { __followStatusCacheTestUtils, followStatusCacheKey }
 
 type Props = {
   onOpenCreate: () => void
@@ -105,62 +115,6 @@ type TopLimit = 10 | 20 | 50
 /** Browse sheets stay available for tests/deep links — not shown as feed filters. */
 const TOP_LIMIT_DEFAULT: TopLimit = 10
 const DISCOVER_PAGE_SIZE = 24
-
-/** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
-const followStatusCache = new Map<string, boolean>()
-const followStatusListeners = new Map<string, Set<(following: boolean) => void>>()
-
-export function followStatusCacheKey(viewerId: string, designerId: string): string {
-  return `${viewerId}:${designerId}`
-}
-
-function publishFollowStatus(cacheKey: string, following: boolean) {
-  followStatusCache.set(cacheKey, following)
-  const listeners = followStatusListeners.get(cacheKey)
-  if (!listeners) return
-  for (const listener of listeners) listener(following)
-}
-
-function subscribeFollowStatus(
-  cacheKey: string,
-  listener: (following: boolean) => void,
-): () => void {
-  let bucket = followStatusListeners.get(cacheKey)
-  if (!bucket) {
-    bucket = new Set()
-    followStatusListeners.set(cacheKey, bucket)
-  }
-  bucket.add(listener)
-  return () => {
-    bucket?.delete(listener)
-    if (bucket && bucket.size === 0) followStatusListeners.delete(cacheKey)
-  }
-}
-
-/** Apply a server Follow status only when the session cache is still empty. */
-function applyFetchedFollowStatus(cacheKey: string, following: boolean): boolean {
-  const existing = followStatusCache.get(cacheKey)
-  if (existing !== undefined) return existing
-  publishFollowStatus(cacheKey, following)
-  return following
-}
-
-/** Test-only helpers for account-switch Follow cache coverage. */
-export const __followStatusCacheTestUtils = {
-  clear() {
-    followStatusCache.clear()
-    followStatusListeners.clear()
-  },
-  set(viewerId: string, designerId: string, following: boolean) {
-    publishFollowStatus(followStatusCacheKey(viewerId, designerId), following)
-  },
-  get(viewerId: string, designerId: string): boolean | undefined {
-    return followStatusCache.get(followStatusCacheKey(viewerId, designerId))
-  },
-  size() {
-    return followStatusCache.size
-  },
-}
 
 /** Batch unique Discover impressions only after cards become meaningfully visible. */
 function useDiscoverImpressionReporter() {
@@ -1495,6 +1449,9 @@ function RunwayCard({
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comments, setComments] = useState<GalleryComment[] | null>(null)
   const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [commentsCount, setCommentsCount] = useState(() =>
+    Math.max(0, Number(item.comments_count ?? 0)),
+  )
   const [draft, setDraft] = useState('')
   const [followingDesigner, setFollowingDesigner] = useState(false)
   const [followKnown, setFollowKnown] = useState(false)
@@ -1517,19 +1474,31 @@ function RunwayCard({
   }, [item.id])
 
   useEffect(() => {
+    setComments(null)
+    setCommentsOpen(false)
+    setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
+    // Only reset when the card switches looks — bumping comments_count after load must not clear rows.
+  }, [item.id])
+
+  useEffect(() => {
+    if (comments != null) return
+    setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
+  }, [comments, item.comments_count])
+
+  useEffect(() => {
     if (!immersive || isOwn || !viewerId) {
       setFollowKnown(false)
       setFollowingDesigner(false)
       return
     }
     const cacheKey = followStatusCacheKey(viewerId, item.user_id)
-    const cached = followStatusCache.get(cacheKey)
+    const cached = peekFollowStatus(cacheKey)
     if (cached !== undefined) {
       setFollowingDesigner(cached)
       setFollowKnown(true)
     }
 
-    // Keep every card for this designer in sync after Follow/Unfollow on another look.
+    // Keep every card for this designer in sync after Follow/Unfollow on another look/profile.
     const unsubscribe = subscribeFollowStatus(cacheKey, (following) => {
       setFollowingDesigner(following)
       setFollowKnown(true)
@@ -1569,7 +1538,7 @@ function RunwayCard({
         }
         observer.disconnect()
         // Prefer session cache if another card already followed while we waited.
-        const latest = followStatusCache.get(cacheKey)
+        const latest = peekFollowStatus(cacheKey)
         if (latest !== undefined) {
           setFollowingDesigner(latest)
           setFollowKnown(true)
@@ -1626,10 +1595,12 @@ function RunwayCard({
     try {
       const rows = await listGalleryComments(item.id)
       setComments(rows)
+      setCommentsCount(rows.length)
+      onItemChange({ ...item, comments_count: rows.length })
     } catch (err) {
       setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
     }
-  }, [item.id])
+  }, [item, onItemChange])
 
   const openComments = useCallback(() => {
     setCommentsOpen(true)
@@ -1728,15 +1699,20 @@ function RunwayCard({
       try {
         const row = await postGalleryComment(item.id, body)
         setDraft('')
-        setComments((prev) => [
-          ...(prev ?? []),
-          {
-            ...row,
-            likes_count: row.likes_count ?? 0,
-            liked_by_me: false,
-            username: row.username || viewerUsername,
-          },
-        ])
+        setComments((prev) => {
+          const next = [
+            ...(prev ?? []),
+            {
+              ...row,
+              likes_count: row.likes_count ?? 0,
+              liked_by_me: false,
+              username: row.username || viewerUsername,
+            },
+          ]
+          setCommentsCount(next.length)
+          onItemChange({ ...item, comments_count: next.length })
+          return next
+        })
         setCommentsOpen(true)
       } catch (err) {
         setActionError(err instanceof ApiError ? err.message : 'Could not post comment.')
@@ -1744,7 +1720,7 @@ function RunwayCard({
         setBusy(null)
       }
     },
-    [busy, draft, item.id, viewerUsername],
+    [busy, draft, item, onItemChange, viewerUsername],
   )
 
   const onToggleCommentLike = useCallback(
@@ -1885,7 +1861,7 @@ function RunwayCard({
         >
           <MessageCircle size={immersive ? 26 : 12} aria-hidden />
           <span className={immersive ? styles.actionCount : undefined}>
-            {comments ? comments.length : immersive ? '0' : 'Chat'}
+            {comments ? comments.length : immersive ? String(commentsCount) : 'Chat'}
           </span>
         </button>
       ) : null}

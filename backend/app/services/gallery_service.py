@@ -41,6 +41,7 @@ def to_gallery_read(
     my_score: int | None = None,
     username: str | None = None,
     avatar_url: str | None = None,
+    comments_count: int | None = None,
 ) -> GalleryRead:
     base = GalleryRead.model_validate(item)
     image_path = f"/gallery/{item.id}/image" if item.look_id is not None else None
@@ -57,6 +58,7 @@ def to_gallery_read(
             "image_path": image_path,
             "username": author,
             "avatar_url": avatar_url,
+            "comments_count": max(0, int(comments_count or 0)),
         }
     )
 
@@ -102,6 +104,19 @@ def to_gallery_reads_for_viewer(
         ):
             avatar_urls[user_id] = avatar_url
 
+    comment_counts: dict[uuid.UUID, int] = {}
+    ids = [item.id for item in items]
+    if ids:
+        for gallery_item_id, count in db.execute(
+            select(GalleryComment.gallery_item_id, func.count())
+            .where(
+                GalleryComment.gallery_item_id.in_(ids),
+                GalleryComment.moderation_status == "ok",
+            )
+            .group_by(GalleryComment.gallery_item_id)
+        ):
+            comment_counts[gallery_item_id] = int(count)
+
     return [
         to_gallery_read(
             item,
@@ -109,6 +124,7 @@ def to_gallery_reads_for_viewer(
             my_score=my_scores.get(item.id) if viewer is not None else None,
             username=usernames.get(item.user_id),
             avatar_url=avatar_urls.get(item.user_id),
+            comments_count=comment_counts.get(item.id, 0),
         )
         for item in items
     ]

@@ -22,6 +22,8 @@ export type GalleryItem = {
   rating_average: number | null
   rating_count: number
   likes_count: number
+  /** Moderated ok comments — present on feed reads so immersive chat badges are honest. */
+  comments_count?: number
   moderation_status: string
   created_at: string
   updated_at: string
