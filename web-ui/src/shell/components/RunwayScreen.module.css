@@ -23,12 +23,12 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  /* Sit on the look (inside the image), clear shell hamburger on the left. */
+  /* Inside the look frame; ⋯ nudged left; clear shell hamburger on the left. */
   padding:
-    calc(18px + env(safe-area-inset-top, 0px))
-    12px
+    calc(22px + env(safe-area-inset-top, 0px))
+    18px
     4px
-    calc(52px + env(safe-area-inset-left, 0px));
+    calc(48px + env(safe-area-inset-left, 0px));
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, transparent 100%);
   pointer-events: none;
 }
@@ -121,8 +121,8 @@
 .menuPanel {
   position: absolute;
   z-index: 8;
-  top: calc(52px + env(safe-area-inset-top, 0px));
-  right: 10px;
+  top: calc(56px + env(safe-area-inset-top, 0px));
+  right: 14px;
   width: min(280px, calc(100% - 20px));
   display: grid;
   gap: 4px;
