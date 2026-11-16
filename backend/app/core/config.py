@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     private_techpack_subdir: str = "private_techpacks"
     # Private Create My Croquis bytes — sibling of private_fabrics; never public static.
     private_croquis_subdir: str = "private_croquis"
+    # Private profile avatars — served only via /profiles/{id}/avatar (never /static/uploads).
+    private_avatar_subdir: str = "private_avatars"
+    # Max raw bytes accepted for a profile avatar upload (before server normalize).
+    max_avatar_upload_bytes: int = 8 * 1024 * 1024
+    # Square output edge length for stored avatars.
+    avatar_output_px: int = 512
 
     # Create My Croquis gates (independent of Studio FRONT_BACK/MAGIC/DUAL). Fail closed.
     my_croquis_upload_enabled: bool = False

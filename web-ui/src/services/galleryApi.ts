@@ -29,6 +29,8 @@ export type GalleryItem = {
   my_score?: number | null
   /** Present when the API joins the author row. */
   username?: string | null
+  /** Present when the author has a saved profile photo. */
+  avatar_url?: string | null
 }
 
 export type GalleryRating = {

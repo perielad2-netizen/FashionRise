@@ -42,6 +42,7 @@ const getFollowStatus = vi.fn()
 const followCreator = vi.fn()
 const unfollowCreator = vi.fn()
 const updateMyProfile = vi.fn()
+const uploadMyAvatar = vi.fn()
 
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
@@ -49,6 +50,9 @@ vi.mock('@/services/profilesApi', () => ({
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
   updateMyProfile: (...args: unknown[]) => updateMyProfile(...args),
+  uploadMyAvatar: (...args: unknown[]) => uploadMyAvatar(...args),
+  profileAvatarSrc: (userId: string, avatarUrl: string | null | undefined) =>
+    avatarUrl ? `/api/v1/profiles/${userId}/avatar` : null,
 }))
 
 vi.mock('@/services/competitionsApi', () => ({
@@ -186,7 +190,9 @@ describe('RunwayScreen', () => {
     getPublicProfile.mockReset()
     getFollowStatus.mockReset()
     followCreator.mockReset()
+    followCreator.mockResolvedValue(undefined)
     unfollowCreator.mockReset()
+    unfollowCreator.mockResolvedValue(undefined)
     updateMyProfile.mockReset()
     removeFriend.mockReset()
     enableRunwayPush.mockReset()
@@ -208,6 +214,7 @@ describe('RunwayScreen', () => {
             title: 'Discover look',
             user_id: 'creator-a',
             username: 'atelier_a',
+            avatar_url: '/api/v1/profiles/creator-a/avatar',
           },
         ]
       }
@@ -233,6 +240,85 @@ describe('RunwayScreen', () => {
       following_count: 0,
       reputation_score: 0,
     }))
+  })
+
+  it('keeps Follow in sync across looks from the same designer', async () => {
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          this.cb(
+            [
+              {
+                isIntersecting: true,
+                intersectionRatio: 1,
+                target: el,
+              } as IntersectionObserverEntry,
+            ],
+            this as unknown as IntersectionObserver,
+          )
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
+
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'look-a1',
+            title: 'Look A1',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+          {
+            ...circleItem,
+            id: 'look-a2',
+            title: 'Look A2',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+        ]
+      }
+      return []
+    })
+    getFollowStatus.mockResolvedValue({ user_id: 'creator-a', following: false })
+
+    try {
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      const buttons = await screen.findAllByTestId('runway-follow-creator-a')
+      expect(buttons).toHaveLength(2)
+      await waitFor(() => expect(buttons[0]).not.toBeDisabled())
+      expect(buttons[0]).toHaveTextContent('Follow')
+      expect(buttons[1]).toHaveTextContent('Follow')
+
+      fireEvent.click(buttons[0])
+      await waitFor(() => expect(followCreator).toHaveBeenCalledWith('creator-a'))
+      await waitFor(() => {
+        const synced = screen.getAllByTestId('runway-follow-creator-a')
+        expect(synced[0]).toHaveTextContent('Following')
+        expect(synced[1]).toHaveTextContent('Following')
+        expect(synced[0]).toHaveAttribute('aria-pressed', 'true')
+        expect(synced[1]).toHaveAttribute('aria-pressed', 'true')
+      })
+      expect(__followStatusCacheTestUtils.get('viewer-1', 'creator-a')).toBe(true)
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
   })
 
   it('scopes Follow cache by viewer+designer so account switches do not leak state', async () => {
@@ -322,6 +408,33 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId(`runway-tab-${tabId}`))
   }
 
+  it('opens My Profile when openOwnProfile deep-link is set', async () => {
+    getPublicProfile.mockResolvedValue({
+      user_id: 'viewer-1',
+      username: 'viewer',
+      display_name: 'Viewer',
+      bio: '',
+      avatar_url: null,
+      designs_count: 0,
+      looks_count: 0,
+      followers_count: 0,
+      following_count: 0,
+      reputation_score: 0,
+    })
+    listUserGallery.mockResolvedValue([])
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        openOwnProfile
+        onOwnProfileConsumed={vi.fn()}
+      />,
+    )
+    expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('designer-edit-profile')).toHaveTextContent(/Edit Designer Card/i)
+  })
+
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
@@ -334,13 +447,18 @@ describe('RunwayScreen', () => {
       followers_count: 0,
       following_count: 0,
       reputation_score: 0,
+      reputation_tier: 'newcomer',
     })
     listUserGallery.mockResolvedValue([])
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await openMoreMenu()
     fireEvent.click(await screen.findByTestId('runway-my-profile'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('designer-edit-profile'))
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-avatar-preview')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-edit-avatar')).toHaveTextContent(/Change photo/i)
     fireEvent.change(screen.getByTestId('designer-edit-name'), {
       target: { value: 'Studio Nova' },
     })
@@ -490,6 +608,9 @@ describe('RunwayScreen', () => {
     )
     expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
     expect(await screen.findByText('@atelier_a')).toBeInTheDocument()
+    const avatar = await screen.findByTestId('designer-avatar-photo')
+    expect(avatar).toHaveAttribute('src', '/api/v1/profiles/creator-a/avatar')
+    expect(screen.queryByTestId('designer-avatar-fallback')).toBeNull()
     expect(screen.queryByText('@Designer')).toBeNull()
     expect(screen.queryByText('Look ·')).toBeNull()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
@@ -700,7 +821,7 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
   })
 
-  it('opens a read-only friend profile from a friend row and keeps Remove', async () => {
+  it('opens the full designer profile from a friend row (not nested in Friends chrome)', async () => {
     listFriends.mockResolvedValue([
       {
         id: 'fs-1',
@@ -766,10 +887,15 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
     expect(await screen.findByTestId('friend-look-g-public')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-follow-btn')).toBeInTheDocument()
+    // Full-screen profile — Friends manage chrome must not remain around it.
+    expect(screen.queryByRole('heading', { name: 'Friends' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Add people by username/i)).not.toBeInTheDocument()
     expect(screen.queryByText('12')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('friend-profile-back'))
     expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Friends' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('friend-remove-yaniv'))
     await waitFor(() => expect(removeFriend).toHaveBeenCalledWith('yaniv'))

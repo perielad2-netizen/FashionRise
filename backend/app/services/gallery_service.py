@@ -16,6 +16,7 @@ from app.models.rating import Rating
 from app.models.user import User
 from app.models.user_follow import UserFollow
 from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
+from app.models.user_profile import UserProfile
 from app.schemas.gallery import (
     GalleryCommentCreate,
     GalleryCommentRead,
@@ -39,6 +40,7 @@ def to_gallery_read(
     liked_by_me: bool | None = None,
     my_score: int | None = None,
     username: str | None = None,
+    avatar_url: str | None = None,
 ) -> GalleryRead:
     base = GalleryRead.model_validate(item)
     image_path = f"/gallery/{item.id}/image" if item.look_id is not None else None
@@ -54,6 +56,7 @@ def to_gallery_read(
             "my_score": my_score,
             "image_path": image_path,
             "username": author,
+            "avatar_url": avatar_url,
         }
     )
 
@@ -85,12 +88,19 @@ def to_gallery_reads_for_viewer(
             my_scores[gallery_item_id] = int(score)
 
     usernames: dict[uuid.UUID, str] = {}
+    avatar_urls: dict[uuid.UUID, str | None] = {}
     author_ids = list({item.user_id for item in items})
     if author_ids:
         for user_id, username in db.execute(
             select(User.id, User.username).where(User.id.in_(author_ids))
         ):
             usernames[user_id] = username
+        for user_id, avatar_url in db.execute(
+            select(UserProfile.user_id, UserProfile.avatar_url).where(
+                UserProfile.user_id.in_(author_ids)
+            )
+        ):
+            avatar_urls[user_id] = avatar_url
 
     return [
         to_gallery_read(
@@ -98,6 +108,7 @@ def to_gallery_reads_for_viewer(
             liked_by_me=(item.id in liked_ids) if viewer is not None else None,
             my_score=my_scores.get(item.id) if viewer is not None else None,
             username=usernames.get(item.user_id),
+            avatar_url=avatar_urls.get(item.user_id),
         )
         for item in items
     ]

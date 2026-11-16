@@ -24,6 +24,8 @@ export const MY_LOOKS_PATH = '/studio/looks'
 export const MY_CROQUIS_PATH = '/studio/croquis'
 export const FITTING_ROOM_PATH = '/studio/fitting-room'
 export const RUNWAY_PATH = '/studio/runway'
+/** Opens FashionRise Runway directly into My Profile (edit). */
+export const RUNWAY_MY_PROFILE_PATH = `${RUNWAY_PATH}?profile=me`
 /** @deprecated legacy Fashion Stars path — redirects to Runway */
 export const FASHION_STARS_PATH = '/studio/fashion-stars'
 export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
@@ -89,12 +91,22 @@ export function StudioPage() {
     [editor, navigate],
   )
   const focusLookId = searchParams.get('look')
+  const openOwnProfile = searchParams.get('profile') === 'me'
   const clearFocusLook = useCallback(() => {
     if (!searchParams.has('look')) return
     const next = new URLSearchParams(searchParams)
     next.delete('look')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
+  const clearOwnProfileParam = useCallback(() => {
+    if (!searchParams.has('profile')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('profile')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+  const openMyProfile = useCallback(() => {
+    navigate(RUNWAY_MY_PROFILE_PATH)
+  }, [navigate])
 
   const currentNav: NavDestination = useMemo(() => {
     if (view === 'home') return 'home'
@@ -117,6 +129,7 @@ export function StudioPage() {
         onComingSoon={editor.showComingSoon}
         currentNav={currentNav}
         onNavigate={onNavigate}
+        onOpenProfile={openMyProfile}
         immersive={view === 'runway'}
       >
         {view === 'home' ? (
@@ -128,6 +141,8 @@ export function StudioPage() {
           <RunwayScreen
             onOpenCreate={() => onNavigate('create')}
             onOpenLooks={() => onNavigate('looks')}
+            openOwnProfile={openOwnProfile}
+            onOwnProfileConsumed={clearOwnProfileParam}
           />
         ) : view === 'library' && editor.user?.id ? (
           <MyDesignsScreen

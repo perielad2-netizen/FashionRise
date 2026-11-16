@@ -1,0 +1,124 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: end center;
+  padding: max(12px, env(safe-area-inset-bottom)) 12px 12px;
+  background: rgba(4, 5, 10, 0.72);
+}
+
+.dialog {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 12px;
+  padding: 16px 16px 18px;
+  border-radius: 20px 20px 16px 16px;
+  background: linear-gradient(180deg, #161821 0%, #0d0f16 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.viewport {
+  position: relative;
+  width: min(100%, 320px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #0a0b10;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.viewport:active {
+  cursor: grabbing;
+}
+
+.image {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  pointer-events: none;
+}
+
+.loading {
+  margin: 0;
+  place-self: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+}
+
+.zoomLabel {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.zoomLabel input[type='range'] {
+  width: 100%;
+  accent-color: #f472b6;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.ghost,
+.primary {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.primary {
+  background: linear-gradient(135deg, #f9a8d4, #ec4899);
+  color: #1a0610;
+}
+
+.ghost:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (min-width: 720px) {
+  .backdrop {
+    place-items: center;
+    padding: 24px;
+  }
+
+  .dialog {
+    border-radius: 20px;
+  }
+}

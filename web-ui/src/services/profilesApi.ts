@@ -1,4 +1,5 @@
-import { apiRequest } from '@/services/api/client'
+import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
+import { tokenStore } from '@/services/auth/tokenStore'
 
 /**
  * Public profile fields from GET /profiles/{user_id}.
@@ -86,4 +87,94 @@ export async function updateMyProfile(
     body: JSON.stringify(payload),
     signal,
   })
+}
+
+/**
+ * Resolve an `<img src>` for a designer photo.
+ *
+ * - Legacy `/static/uploads/...` values stay as-is (do not rewrite to the private
+ *   avatar route — that file may not exist there).
+ * - New private-avatar uploads use `/api/v1/profiles/{id}/avatar`.
+ */
+export function profileAvatarSrc(
+  userId: string,
+  avatarUrl: string | null | undefined,
+  cacheKey?: string | null,
+): string | null {
+  if (!avatarUrl) return null
+
+  let base: string
+  if (avatarUrl.includes('/static/uploads/')) {
+    // Preserve earlier upload workflow URLs.
+    base =
+      avatarUrl.startsWith('http') || avatarUrl.startsWith('/')
+        ? avatarUrl
+        : `/${avatarUrl.replace(/^\/+/, '')}`
+  } else if (avatarUrl.includes('/profiles/') && avatarUrl.includes('/avatar')) {
+    base = `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
+  } else if (
+    avatarUrl.startsWith('http') ||
+    avatarUrl.startsWith('/') ||
+    avatarUrl.startsWith('blob:')
+  ) {
+    base = avatarUrl
+  } else {
+    // Unknown relative marker from the new private-avatar flow.
+    base = `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
+  }
+
+  if (!cacheKey || base.startsWith('blob:')) return base
+  const join = base.includes('?') ? '&' : '?'
+  return `${base}${join}v=${encodeURIComponent(cacheKey)}`
+}
+
+export async function uploadMyAvatar(
+  file: File,
+  signal?: AbortSignal,
+): Promise<PublicProfile> {
+  const tokens = tokenStore.get()
+  if (!tokens?.accessToken) {
+    throw new ApiError('Sign in required to update your photo.', 401, null)
+  }
+
+  const form = new FormData()
+  form.append('file', file, file.name || 'avatar.jpg')
+
+  let response: Response
+  try {
+    response = await fetch(`${getApiBaseUrl()}/profiles/me/avatar`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${tokens.accessToken}`,
+      },
+      body: form,
+      signal,
+    })
+  } catch {
+    throw new ApiError('Unable to reach FashionRise. Check that the API is running.', 0, null)
+  }
+
+  const text = await response.text()
+  let parsed: unknown = null
+  if (text) {
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = text
+    }
+  }
+
+  if (!response.ok) {
+    const detail =
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'detail' in parsed &&
+      typeof (parsed as { detail: unknown }).detail === 'string'
+        ? (parsed as { detail: string }).detail
+        : 'Could not update photo'
+    throw new ApiError(detail, response.status, parsed)
+  }
+
+  return parsed as PublicProfile
 }

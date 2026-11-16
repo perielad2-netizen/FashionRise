@@ -74,6 +74,7 @@ def test_discover_includes_older_publishes_and_records_impressions(client, db_se
     if other in by_id:
         assert by_id[other]["username"]
         assert by_id[other]["username"] != "Designer"
+        assert "avatar_url" in by_id[other]
 
     # Impressions: first post records, second is idempotent; self-view skipped.
     author_user = db_session.query(User).filter(User.email == "disc_author@example.com").one()

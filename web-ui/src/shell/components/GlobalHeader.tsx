@@ -25,6 +25,8 @@ type Props = {
   username: string
   onLogout: () => void
   onComingSoon?: (label: string) => void
+  /** Opens FashionRise My Profile (header avatar). */
+  onOpenProfile?: () => void
   /** Controlled account menu — shell coordinates with nav drawer. */
   accountMenuOpen?: boolean
   onAccountMenuOpenChange?: (open: boolean) => void
@@ -43,6 +45,7 @@ export function GlobalHeader({
   leading,
   username,
   onLogout,
+  onOpenProfile,
   accountMenuOpen: accountMenuOpenProp,
   onAccountMenuOpenChange,
 }: Props) {
@@ -186,9 +189,25 @@ export function GlobalHeader({
           <Star size={14} aria-hidden />
           <span>{starsLabel}</span>
         </button>
-        <span className={styles.avatar} aria-hidden>
-          <UserRound size={16} />
-        </span>
+        {onOpenProfile ? (
+          <button
+            type="button"
+            className={styles.avatarBtn}
+            data-testid="global-open-profile"
+            aria-label="My Profile"
+            title="My Profile"
+            onClick={() => {
+              setMenuOpen(false)
+              onOpenProfile()
+            }}
+          >
+            <UserRound size={16} aria-hidden />
+          </button>
+        ) : (
+          <span className={styles.avatar} aria-hidden>
+            <UserRound size={16} />
+          </span>
+        )}
         <div className={styles.menuWrap} ref={menuWrapRef}>
           <button
             type="button"
@@ -204,6 +223,21 @@ export function GlobalHeader({
           {menuOpen ? (
             <div className={styles.menu} role="menu" data-testid="global-account-menu-panel">
               <p className={styles.menuUser}>{username}</p>
+              {onOpenProfile ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  data-testid="menu-my-profile"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onOpenProfile()
+                  }}
+                >
+                  <UserRound size={14} />
+                  My Profile
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

@@ -372,7 +372,7 @@ def delete_account(db: Session, user: User) -> None:
     """
     from sqlalchemy import delete as sa_delete
 
-    from app.services import personal_croquis_publish, personal_croquis_service
+    from app.services import personal_croquis_publish, personal_croquis_service, profile_avatar_service
 
     user_id = user.id
     email = user.email
@@ -384,4 +384,6 @@ def delete_account(db: Session, user: User) -> None:
     db.execute(sa_delete(User).where(User.id == user_id))
     db.commit()
     personal_croquis_publish.finish_public_model_unlinks(db, public_model_keys)
+    # Owner-scoped private avatar only — after commit so a rolled-back delete keeps the file.
+    profile_avatar_service.unlink_private_avatar_after_account_delete(user_id)
     _log.info("account_deleted user_id=%s email_suffix=%s", user_id, (email or "")[-12:])

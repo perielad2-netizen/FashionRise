@@ -61,6 +61,8 @@ class GalleryRead(BaseModel):
     image_path: str | None = None
     """Author username for FashionRise overlays (optional; omitted when unavailable)."""
     username: str | None = None
+    """Author profile photo path/url when set — FashionRise look chips use the avatar route."""
+    avatar_url: str | None = None
 
 
 class GalleryCommentCreate(BaseModel):

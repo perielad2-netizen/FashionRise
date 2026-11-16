@@ -45,7 +45,6 @@ import {
   listFriends,
   removeFriend,
   requestFriendByUsername,
-  type FriendUser,
   type Friendship,
 } from '@/services/friendsApi'
 import { ApiError } from '@/services/api/client'
@@ -62,6 +61,7 @@ import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import {
   followCreator,
   getFollowStatus,
+  profileAvatarSrc,
   unfollowCreator,
 } from '@/services/profilesApi'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
@@ -70,6 +70,9 @@ import styles from './RunwayScreen.module.css'
 type Props = {
   onOpenCreate: () => void
   onOpenLooks: () => void
+  /** Deep-link from Home header avatar → open own editable profile. */
+  openOwnProfile?: boolean
+  onOwnProfileConsumed?: () => void
 }
 
 type LoadState =
@@ -98,18 +101,51 @@ const DISCOVER_PAGE_SIZE = 24
 
 /** Session cache keyed by viewer + designer so account switches cannot leak Follow state. */
 const followStatusCache = new Map<string, boolean>()
+const followStatusListeners = new Map<string, Set<(following: boolean) => void>>()
 
 export function followStatusCacheKey(viewerId: string, designerId: string): string {
   return `${viewerId}:${designerId}`
+}
+
+function publishFollowStatus(cacheKey: string, following: boolean) {
+  followStatusCache.set(cacheKey, following)
+  const listeners = followStatusListeners.get(cacheKey)
+  if (!listeners) return
+  for (const listener of listeners) listener(following)
+}
+
+function subscribeFollowStatus(
+  cacheKey: string,
+  listener: (following: boolean) => void,
+): () => void {
+  let bucket = followStatusListeners.get(cacheKey)
+  if (!bucket) {
+    bucket = new Set()
+    followStatusListeners.set(cacheKey, bucket)
+  }
+  bucket.add(listener)
+  return () => {
+    bucket?.delete(listener)
+    if (bucket && bucket.size === 0) followStatusListeners.delete(cacheKey)
+  }
+}
+
+/** Apply a server Follow status only when the session cache is still empty. */
+function applyFetchedFollowStatus(cacheKey: string, following: boolean): boolean {
+  const existing = followStatusCache.get(cacheKey)
+  if (existing !== undefined) return existing
+  publishFollowStatus(cacheKey, following)
+  return following
 }
 
 /** Test-only helpers for account-switch Follow cache coverage. */
 export const __followStatusCacheTestUtils = {
   clear() {
     followStatusCache.clear()
+    followStatusListeners.clear()
   },
   set(viewerId: string, designerId: string, following: boolean) {
-    followStatusCache.set(followStatusCacheKey(viewerId, designerId), following)
+    publishFollowStatus(followStatusCacheKey(viewerId, designerId), following)
   },
   get(viewerId: string, designerId: string): boolean | undefined {
     return followStatusCache.get(followStatusCacheKey(viewerId, designerId))
@@ -155,7 +191,12 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
+export function RunwayScreen({
+  onOpenCreate,
+  onOpenLooks,
+  openOwnProfile = false,
+  onOwnProfileConsumed,
+}: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const viewerUsername = user?.username ?? null
@@ -178,6 +219,17 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
   const [openOwnProfileEditing, setOpenOwnProfileEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (!openOwnProfile || !viewerId) return
+    // Show the designed profile first — edit opens from Edit Designer Card.
+    setOpenOwnProfileEditing(false)
+    setViewingDesigner({
+      user_id: viewerId,
+      username: viewerUsername || undefined,
+    })
+    onOwnProfileConsumed?.()
+  }, [openOwnProfile, onOwnProfileConsumed, viewerId, viewerUsername])
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -557,7 +609,10 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
 
   if (viewingDesigner) {
     return (
-      <section className={styles.screen} aria-label="Designer profile">
+      <section
+        className={`${styles.screen} ${styles.profileScreen}`}
+        aria-label="Designer profile"
+      >
         <FriendProfilePanel
           friend={viewingDesigner}
           startInEditMode={openOwnProfileEditing && viewingDesigner.user_id === viewerId}
@@ -623,7 +678,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               data-testid="runway-my-profile"
               onClick={() => {
                 setMenuOpen(false)
-                setOpenOwnProfileEditing(true)
+                setOpenOwnProfileEditing(false)
                 setViewingDesigner({
                   user_id: viewerId,
                   username: viewerUsername || undefined,
@@ -762,14 +817,21 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       <div className={styles.body}>
         {tab === 'friends' ? (
           <div className={styles.friendsWrap}>
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => setTab('discover')}
-            >
-              <ChevronLeft size={14} aria-hidden />
-              Back to feed
-            </button>
+            <header className={styles.friendsHeader}>
+              <button
+                type="button"
+                className={styles.friendsBack}
+                onClick={() => setTab('discover')}
+              >
+                <ChevronLeft size={16} aria-hidden />
+                Feed
+              </button>
+              <div className={styles.friendsTitleBlock}>
+                <p className={styles.friendsEyebrow}>FashionRise</p>
+                <h1 className={styles.friendsTitle}>Friends</h1>
+                <p className={styles.friendsLead}>Add people by username and keep your circle close.</p>
+              </div>
+            </header>
             <FriendsPanel
               state={friendsState}
               username={friendUsername}
@@ -780,6 +842,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               onAccept={(id) => void onAccept(id)}
               onRemove={(id, label) => void onRemove(id, label)}
               onRetry={() => void load()}
+              onOpenDesigner={(designer) => setViewingDesigner(designer)}
             />
           </div>
         ) : state.status === 'loading' ? (
@@ -1086,6 +1149,7 @@ function FriendsPanel({
   onAccept,
   onRemove,
   onRetry,
+  onOpenDesigner,
 }: {
   state: FriendsState
   username: string
@@ -1096,10 +1160,11 @@ function FriendsPanel({
   onAccept: (friendshipId: string) => void
   onRemove: (friendUserId: string, label: string) => void
   onRetry: () => void
+  /** Open the same full-screen designer profile used from Discover (not nested in Friends). */
+  onOpenDesigner: (designer: DesignerRef) => void
 }) {
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [viewingFriend, setViewingFriend] = useState<FriendUser | null>(null)
 
   // V2-0011: keep Add friend row visible when the soft keyboard opens.
   // Do NOT pad by visualViewport occlusion — that stacked with `--fr-vv-height`
@@ -1120,12 +1185,6 @@ function FriendsPanel({
     }
   }, [])
 
-  if (viewingFriend) {
-    return (
-      <FriendProfilePanel friend={viewingFriend} onBack={() => setViewingFriend(null)} />
-    )
-  }
-
   return (
     <div className={styles.friendsPanel}>
       <form
@@ -1138,6 +1197,9 @@ function FriendsPanel({
           Add friend by username
         </label>
         <div className={styles.addFriendRow}>
+          <span className={styles.addFriendAt} aria-hidden>
+            @
+          </span>
           <input
             ref={inputRef}
             id="runway-friend-username"
@@ -1151,7 +1213,7 @@ function FriendsPanel({
                 inputRef.current?.focus({ preventScroll: true })
               }, 50)
             }}
-            placeholder="e.g. yanivprbk"
+            placeholder="yanivprbk"
             autoComplete="username"
             autoCapitalize="none"
             autoCorrect="off"
@@ -1160,8 +1222,12 @@ function FriendsPanel({
             enterKeyHint="done"
             disabled={busy}
           />
-          <button type="submit" className={styles.primaryBtn} disabled={busy || !username.trim()}>
-            <UserPlus size={14} aria-hidden />
+          <button
+            type="submit"
+            className={styles.addFriendSubmit}
+            disabled={busy || !username.trim()}
+          >
+            <UserPlus size={15} aria-hidden />
             {busy ? 'Adding…' : 'Add'}
           </button>
         </div>
@@ -1195,30 +1261,43 @@ function FriendsPanel({
         <>
           {state.requests.length > 0 ? (
             <section className={styles.friendSection} aria-label="Friend requests">
-              <h2 className={styles.friendSectionTitle}>Requests</h2>
+              <div className={styles.friendSectionHead}>
+                <h2 className={styles.friendSectionTitle}>Requests</h2>
+                <span className={styles.friendSectionCount}>{state.requests.length}</span>
+              </div>
               <ul className={styles.friendList}>
-                {state.requests.map((row) => (
-                  <li key={row.id} className={styles.friendCard}>
-                    <div className={styles.friendText}>
-                      <strong>{row.friend.display_name || row.friend.username}</strong>
-                      <span>@{row.friend.username}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.primaryBtn}
-                      disabled={busy}
-                      onClick={() => onAccept(row.id)}
-                    >
-                      Accept
-                    </button>
-                  </li>
-                ))}
+                {state.requests.map((row) => {
+                  const label = row.friend.display_name || row.friend.username
+                  const initial = (label.trim()[0] || '?').toUpperCase()
+                  return (
+                    <li key={row.id} className={styles.friendCard}>
+                      <span className={styles.friendAvatar} aria-hidden>
+                        {initial}
+                      </span>
+                      <div className={styles.friendText}>
+                        <strong>{label}</strong>
+                        <span>@{row.friend.username}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.addFriendSubmit}
+                        disabled={busy}
+                        onClick={() => onAccept(row.id)}
+                      >
+                        Accept
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </section>
           ) : null}
 
           <section className={styles.friendSection} aria-label="Your friends">
-            <h2 className={styles.friendSectionTitle}>Your circle</h2>
+            <div className={styles.friendSectionHead}>
+              <h2 className={styles.friendSectionTitle}>Your circle</h2>
+              <span className={styles.friendSectionCount}>{state.friends.length}</span>
+            </div>
             {state.friends.length === 0 ? (
               <EmptyState
                 title="No friends yet"
@@ -1228,14 +1307,25 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.friends.map((row) => {
                   const label = row.friend.display_name || row.friend.username
+                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
                     <li key={row.id} className={styles.friendCard}>
                       <button
                         type="button"
                         className={styles.friendOpen}
                         data-testid={`friend-open-${row.friend.user_id}`}
-                        onClick={() => setViewingFriend(row.friend)}
+                        onClick={() =>
+                          onOpenDesigner({
+                            user_id: row.friend.user_id,
+                            username: row.friend.username,
+                            display_name: row.friend.display_name,
+                            avatar_url: row.friend.avatar_url,
+                          })
+                        }
                       >
+                        <span className={styles.friendAvatar} aria-hidden>
+                          {initial}
+                        </span>
                         <span className={styles.friendText}>
                           <strong>{label}</strong>
                           <span>@{row.friend.username}</span>
@@ -1243,7 +1333,7 @@ function FriendsPanel({
                       </button>
                       <button
                         type="button"
-                        className={styles.ghostBtn}
+                        className={styles.friendRemove}
                         disabled={busy}
                         data-testid={`friend-remove-${row.friend.user_id}`}
                         onClick={() => onRemove(row.friend.user_id, label)}
@@ -1259,6 +1349,44 @@ function FriendsPanel({
         </>
       ) : null}
     </div>
+  )
+}
+
+/** Profile photo on FashionRise look chips — falls back to initial when missing. */
+function DesignerAvatar({
+  userId,
+  label,
+  avatarUrl,
+}: {
+  userId: string
+  label: string
+  avatarUrl?: string | null
+}) {
+  const [broken, setBroken] = useState(false)
+  const initial = (label.trim()[0] || '·').toUpperCase()
+  // null = API says no photo; undefined = older payload — still try the avatar route.
+  const src =
+    avatarUrl === null
+      ? null
+      : profileAvatarSrc(userId, avatarUrl || `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`)
+
+  if (!src || broken) {
+    return (
+      <span className={styles.designerAvatar} aria-hidden data-testid="designer-avatar-fallback">
+        {initial}
+      </span>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className={styles.designerAvatarImg}
+      data-testid="designer-avatar-photo"
+      draggable={false}
+      onError={() => setBroken(true)}
+    />
   )
 }
 
@@ -1304,6 +1432,13 @@ function RunwayCard({
   const chatTitleId = useId()
   const chatInputId = useId()
   const designerLabel = item.username?.trim() || null
+  const designerAvatar = (
+    <DesignerAvatar
+      userId={item.user_id}
+      label={designerLabel || item.title || '·'}
+      avatarUrl={item.avatar_url}
+    />
+  )
 
   useEffect(() => {
     impressionSentRef.current = false
@@ -1320,24 +1455,38 @@ function RunwayCard({
     if (cached !== undefined) {
       setFollowingDesigner(cached)
       setFollowKnown(true)
-      return
     }
+
+    // Keep every card for this designer in sync after Follow/Unfollow on another look.
+    const unsubscribe = subscribeFollowStatus(cacheKey, (following) => {
+      setFollowingDesigner(following)
+      setFollowKnown(true)
+    })
+
+    if (cached !== undefined) {
+      return unsubscribe
+    }
+
+    const applyRow = (row: { following?: boolean }) => {
+      const next = applyFetchedFollowStatus(cacheKey, Boolean(row.following))
+      setFollowingDesigner(next)
+      setFollowKnown(true)
+    }
+
     const node = cardRef.current
     if (!node || typeof IntersectionObserver === 'undefined') {
       let cancelled = false
       void getFollowStatus(item.user_id)
         .then((row) => {
           if (cancelled) return
-          const next = Boolean(row.following)
-          followStatusCache.set(cacheKey, next)
-          setFollowingDesigner(next)
-          setFollowKnown(true)
+          applyRow(row)
         })
         .catch(() => {
           if (!cancelled) setFollowKnown(true)
         })
       return () => {
         cancelled = true
+        unsubscribe()
       }
     }
     let cancelled = false
@@ -1347,13 +1496,17 @@ function RunwayCard({
           return
         }
         observer.disconnect()
+        // Prefer session cache if another card already followed while we waited.
+        const latest = followStatusCache.get(cacheKey)
+        if (latest !== undefined) {
+          setFollowingDesigner(latest)
+          setFollowKnown(true)
+          return
+        }
         void getFollowStatus(item.user_id)
           .then((row) => {
             if (cancelled) return
-            const next = Boolean(row.following)
-            followStatusCache.set(cacheKey, next)
-            setFollowingDesigner(next)
-            setFollowKnown(true)
+            applyRow(row)
           })
           .catch(() => {
             if (!cancelled) setFollowKnown(true)
@@ -1365,6 +1518,7 @@ function RunwayCard({
     return () => {
       cancelled = true
       observer.disconnect()
+      unsubscribe()
     }
   }, [immersive, isOwn, item.user_id, viewerId])
 
@@ -1461,15 +1615,13 @@ function RunwayCard({
     setActionError(null)
     const prev = followingDesigner
     const cacheKey = followStatusCacheKey(viewerId, item.user_id)
-    setFollowingDesigner(!prev)
-    followStatusCache.set(cacheKey, !prev)
+    publishFollowStatus(cacheKey, !prev)
     try {
       if (prev) await unfollowCreator(item.user_id)
       else await followCreator(item.user_id)
       setFollowKnown(true)
     } catch (err) {
-      setFollowingDesigner(prev)
-      followStatusCache.set(cacheKey, prev)
+      publishFollowStatus(cacheKey, prev)
       setActionError(err instanceof ApiError ? err.message : 'Could not update follow.')
     } finally {
       setBusy(null)
@@ -1716,9 +1868,7 @@ function RunwayCard({
                       })
                     }
                   >
-                    <span className={styles.designerAvatar} aria-hidden>
-                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                    </span>
+                    {designerAvatar}
                     <span className={styles.designerChipText}>
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'View designer'}
@@ -1727,9 +1877,7 @@ function RunwayCard({
                   </button>
                 ) : (
                   <div className={styles.designerChip}>
-                    <span className={styles.designerAvatar} aria-hidden>
-                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                    </span>
+                    {designerAvatar}
                     <span className={styles.designerChipText}>
                       <strong>
                         {designerLabel ? `@${designerLabel}` : 'Designer'}
