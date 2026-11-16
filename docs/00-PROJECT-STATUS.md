@@ -11,7 +11,7 @@
 | Tip | FE **`d89bbf3a`** · `/var/www/fashionrise/releases/d89bbf3a-stars-mobbin-polish` |
 | Change | CapCut-style Stars sheet: FashionRise eyebrow, large balance hero, pack grid, gold Buy |
 | Preview | `/preview-stars/` removed after promote |
-| Series | FashionRise → Home → Friends → Profile → Stars **complete** |
+| Series | Social set complete · continuing studio pages: My Designs → Looks → Models → Fitting → Create |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/77dce926-profile-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Profile Mobbin redesign LIVE (2026-11-16 21:52 Asia/Jerusalem)

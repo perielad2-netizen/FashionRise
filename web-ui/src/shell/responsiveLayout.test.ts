@@ -105,7 +105,7 @@ describe('WEB-V3A My Designs layout contract', () => {
     const scroll = rule(libraryCss, '.scroll')
     expect(scroll).toContain('min-height: 0')
     expect(scroll).toContain('overflow-y: auto')
-    expect(rule(libraryCss, '.grid')).toContain('repeat(auto-fill, minmax(170px, 1fr))')
+    expect(rule(libraryCss, '.grid')).toContain('repeat(2, minmax(0, 1fr))')
     expect(rule(libraryCss, '.paper')).toContain('aspect-ratio: 3 / 4')
   })
 
