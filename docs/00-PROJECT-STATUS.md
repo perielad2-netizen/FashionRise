@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**FashionRise Social PR3 #353 merged** · PR4 #354 amend: erase unpublish + My Profile · **not deployed**.)
+**Last updated:** 2026-11-16 (**FashionRise Social PR1–PR4 merged on `main`** · tip **`b6e70054`** · Alembic **033** · **not deployed** · durable public-image cleanup is the pre-activation blocker.)
 
 **Phase:** FashionRise Social platform (PM-approved) in small PRs on top of native Android QA gate. Feature name is **FashionRise** (not “Runway 2.0”). Reuse existing gallery destination `runway`, friends, profiles, follow, and Stars ledger.
 
@@ -14,30 +14,103 @@
 | **PR1** | FashionRise naming + Home featured entry above Create · side menu after Create · Following feed tab · designer profile (follow, reputation, published looks) · keep publish/`destination:'runway'` | **Merged** — #349 → `main` @ `fac4940d` |
 | **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **Merged** — #352 → `main` @ `fad2ae3c` |
 | **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Merged** — #353 → `main` @ `02882f65` · Alembic **032** · **not deployed** |
-| **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent · erase removes public copy · My Profile entry | **PM review (amended)** — **#354** · Alembic **033** · **not deployed** |
+| **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent · erase removes public copy · My Profile entry | **Merged** — #354 → `main` @ **`b6e70054`** · tip `b9011701` · Alembic **033** · **not deployed** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** PM re-review Social **PR4 #354** after erase-unpublish + My Profile amend. PR3 `#353` remains **merged / not production-deployed**. Android QA stays stable; no store submission / live Stars awards from this track.
+**Exact next step:** Land **durable public My Models image cleanup** (retry queue; no silent orphans) as a focused pre-deploy PR, then PM-authorize a single Social production activation covering #349–#354. Until then: **no prod deploy**, **no live weekly Stars awards**, Android QA continues unaffected.
 
 ## Release roadmap (source of truth)
 
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (`fac4940d+`); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (`b6e70054+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **PR1–PR3 merged · PR4 #354 amended / PM review** | Competitions on `main` (not deployed) · profile/models erase+My Profile fix |
+| **FashionRise Social** | **PR1–PR4 merged on `main` · not deployed** | Merge tip **`b6e70054`** · Alembic **033** · durable public-image cleanup **blocks activation** |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards yet**.
 
-## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — PM REVIEW (AMENDED)
+## FashionRise Social — production readiness plan (PM review · do not deploy)
+
+Covers merged **#349 / #352 / #353 / #354** as one activation. **Separate PM authorization required before any production step.**
+
+### Safety defaults (unchanged until explicit PM OK)
+- No production deploy · no live weekly Stars awards · no Stars purchasing · no push activation · no Codemagic/iOS builds or store submissions · Android QA builds remain on current gate
+
+### Pre-activation blocker — durable public image cleanup (P0)
+| Item | Detail |
+|---|---|
+| Gap | Unpublish / permanent erase / account deletion unlink public My Model copies **post-commit, best-effort**, and **silently ignore** filesystem failures → orphans can stay publicly reachable |
+| Required | Durable retry (or equivalent) so a failed unlink cannot silently leave a public orphan |
+| Approach | Reuse `private_media_cleanup_queue` pattern: enqueue **public upload keys** (root = public uploads, not private croquis) in the same DB transaction that deletes the gallery row; extend retention sweeper with a safe public-key unlink path (fail → keep queued + `last_error` + attempts; success / already-absent → `processed_at`) |
+| Scope | Unpublish · permanent erase · account deletion only · never delete shared/unrelated gallery assets |
+| Gate | **Must merge + verify before Social prod activation** |
+
+### Migrations
+1. Backup DB
+2. `alembic upgrade head` through **033** on production (031 impressions → 032 competitions/streaks → 033 croquis gallery publish + consent purpose)
+3. Confirm `alembic current` = **033** before cutting traffic to new API
+
+### Deploy order
+1. **DB migrate to 033** (backward-compatible additive: nullable `gallery_items.croquis_id`, widened consent purpose check)
+2. **Backend API** to `b6e70054+` (gallery discover/following/impressions, competitions/streaks, profiles, personal-croquis publish/erase)
+3. **Frontend tip** pointing at the same Social tip (Discover / Following / Top / My Profile / My Models publish UI)
+4. Smoke against production API + FE tip **before** enabling competition settlement Stars
+
+### Existing production data compatibility
+- Additive migrations only; existing gallery looks / friends / profiles continue
+- Pre-033 rows: `croquis_id` NULL (looks/designs unchanged)
+- New consent purpose ignored until My Models publish is used
+- Competition/streak tables empty until first tick / first check-in — no backfill of past weeks required for “start clean”
+
+### Feature coherence (Discover · Following · rankings · profiles · My Models)
+| Surface | Behavior after activation |
+|---|---|
+| Discover | Fair 7-day ranking + impressions (#352) |
+| Following | Follow graph feed (#349) |
+| Worldwide Top | Global likes/ratings unchanged by weekly groups (#353) |
+| Profiles | Public stats + published looks; private inventory hidden; My Profile edit (#349/#354) |
+| My Models publish | Explicit consent → public copy → same Discover / Top / competition enrollment paths (#354) |
+| Erase / unpublish | Gallery row removed immediately; public bytes via durable cleanup (blocker above) |
+
+### Safe first-week competition initialization (no retroactive Stars)
+1. Deploy with **settlement Stars OFF** or competition tick **not** awarding until PM greenlight (keep status GET read-only; do not run settle cron that credits until authorized)
+2. On first authorized open: create **current** Sunday-UTC week only — do **not** invent historical weeks for prize catch-up on first boot
+3. If catch-up settle is enabled later: only settle weeks that existed with live contest participation after go-live; never credit pre-activation historical activity
+4. Enrollment remains publish/like/comment/rate going forward; worldwide Runway rankings stay global
+
+### Seven-day login streak — no repeat payouts
+- Same UTC day: `FOR UPDATE` + early return · `rewarded_this_checkin=false` · **0 Stars**
+- Reward only when `current_streak % 7 == 0` via `credit_payout_idempotent` with unique `payout_key` (`streak:{user}:{date}:cycle{n}`) · unique `star_payouts.payout_key` prevents double credit under concurrency
+- Verify in staging: double check-in same day · two parallel check-ins · seventh-day reward once only
+
+### Rollout / rollback
+| Step | Action |
+|---|---|
+| Rollout | Migrate 033 → BE → FE tip → smoke feeds/profile/My Models → (later) enable settlement Stars under separate PM OK |
+| FE rollback | `ln -sfn` prior tip under `/var/www/fashionrise/releases/…` · `nginx -t` · reload (Social UI absent / older tip) |
+| BE rollback | Redeploy prior API build; leave 033 in place if already applied (additive) — do **not** downgrade 033 if `croquis_public_share` consent rows exist |
+| Competition OFF | Disable settle/tick credit path; status GET stays read-only · no prize cron |
+| Data | Gallery rows for My Models can be unpublished via API; durable queue drains orphans |
+
+### Verification already on `main` (pre-deploy)
+- #354 local: BE `test_profile_models_publish` **5 passed** · FE `tsc` green · RunwayScreen **13** + AuthProvider **6**
+- #353 local: competitions/streak hardening suites previously green
+- GitHub Actions check runs: **none configured** on these branches
+
+### Next engineering action
+1. Focused PR: **durable public upload cleanup** (enqueue + sweeper retry) for unpublish / erase / account deletion  
+2. Staging migrate 033 + smoke Social surfaces  
+3. PM authorization for production activation (still separate from this docs plan)
+
+## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — MERGED / #354
 
 | Status | Detail |
 |---|---|
@@ -47,13 +120,13 @@
 | My Models | `POST/DELETE /personal-croquis/{id}/publish` · accepted generated still only · copies to public uploads · never private asset URLs · never auto-publish / fitting-room photos |
 | Erase P0 | Permanent My Model erase also removes owned FashionRise gallery row + public upload copy · repeated erase safe · cannot re-publish erased · private models unaffected |
 | Account delete | Captures croquis-linked public upload keys before user CASCADE · unlinks after commit |
-| Consent | New purpose `croquis_public_share` · explicit checkbox · Alembic **033** (unchanged) |
+| Consent | New purpose `croquis_public_share` · explicit checkbox · Alembic **033** |
 | Feeds | Published models enter existing Discover / worldwide / competition enrollment paths unchanged |
-| QA | BE `tests/test_profile_models_publish.py` **5 passed** · FE `tsc --noEmit` green · RunwayScreen **13 passed** (incl. My Profile empty edit) |
-| PR | **#354** · branch `cursor/web-fashionrise-profile-models-77c6` · **HOLD MERGE pending PM re-approval** |
+| QA | BE `tests/test_profile_models_publish.py` **5 passed** · FE `tsc --noEmit` green · RunwayScreen **13** + AuthProvider **6** (reconfirmed at merge) |
+| Merge | **#354** → `main` @ **`b6e70054`** · tip **`b9011701`** · Alembic **033** |
 | Constraints | No reward/group/streak changes · Android QA isolated · no iOS/store/push/purchase/prod deploy |
 | Production | **Not deployed** · no live Stars awards |
-| Next | **PM re-review / approve before merge** |
+| Next | Durable public-image cleanup PR → then PM-authorized Social activation |
 
 ## FashionRise Social PR3 — Weekly competitions + streak (2026-11-16) — MERGED / #353
 
