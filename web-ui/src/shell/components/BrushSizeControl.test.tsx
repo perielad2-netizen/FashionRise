@@ -48,4 +48,35 @@ describe('BrushSizeControl', () => {
     )
     expect(screen.getByTestId('brush-tip-preview').className).toMatch(/tipAirbrush/)
   })
+
+  it('paints the stroke strip with the brush color (readable size preview)', () => {
+    render(
+      <BrushSizeControl
+        tool="draw"
+        brushSize={12.5}
+        opacity={0.75}
+        tone="light"
+        brushColor="#c9a227"
+        onBrushSize={vi.fn()}
+      />,
+    )
+    const stroke = screen.getByTestId('brush-stroke-preview')
+    expect(stroke).toHaveStyle({ background: '#c9a227' })
+    expect(stroke.style.height).toBe('12.5px')
+  })
+
+  it('adds a contrast edge for near-white brush colors on the light sheet', () => {
+    render(
+      <BrushSizeControl
+        tool="draw"
+        brushSize={26}
+        opacity={1}
+        tone="light"
+        brushColor="#f8fafc"
+        onBrushSize={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('brush-tip-preview').className).toMatch(/tipContrast/)
+    expect(screen.getByTestId('brush-stroke-preview').className).toMatch(/strokeContrast/)
+  })
 })

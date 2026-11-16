@@ -26,16 +26,30 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Dark matte + faint checker so pale/white brush sizes stay readable. */
   background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.08), transparent 55%),
-    rgba(8, 12, 22, 0.55);
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    #121826;
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
 }
 
 .rootLight .tipWell,
 .rootLight .strokeWell {
-  border-color: rgba(0, 0, 0, 0.06);
-  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+  /* Same dark preview well on the light Brush sheet — size must read for cream/gold/white. */
+  border-color: rgba(0, 0, 0, 0.18);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
+    #1a2233;
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
 }
 
 .tip,
@@ -50,13 +64,12 @@
 
 .tipErase {
   background: transparent;
-  border: 2px solid #9ca3af;
+  border: 2px solid #d1d5db;
   box-shadow: none;
 }
 
 /* V2-0023: soft footprint for airbrush; grainy ring for charcoal. */
 .tipAirbrush {
-  background: radial-gradient(circle, rgba(248, 250, 252, 0.95) 0%, rgba(248, 250, 252, 0.2) 55%, transparent 72%);
   box-shadow: none;
 }
 
@@ -67,15 +80,30 @@
   filter: contrast(1.05);
 }
 
+/* Pale / near-white pigments need an edge so tip diameter stays obvious. */
+.tipContrast {
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.55),
+    0 0 0 2px rgba(248, 250, 252, 0.85);
+}
+
 .stroke,
 .strokeErase {
   width: 78%;
   border-radius: 999px;
   background: #f8fafc;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.strokeContrast {
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .strokeErase {
-  background: #9ca3af;
+  background: #cbd5e1;
+  box-shadow: none;
 }
 
 .row {
