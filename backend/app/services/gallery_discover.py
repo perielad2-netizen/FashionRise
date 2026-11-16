@@ -100,7 +100,13 @@ def diversify_select_page(
     max_per_creator: int = MAX_PER_CREATOR_DEFAULT,
     exclude_ids: Sequence[UUID] | None = None,
 ) -> list[DiscoverCandidate]:
-    """One Discover page: skip already-seen ids, cap creators on this page only."""
+    """One Discover page: prefer ≤N looks/creator, then fill leftover slots.
+
+    The soft cap stops one creator from dominating a full page when many
+    creators are available. If the page is still short (small catalog / few
+    creators), keep scoring order and fill remaining slots so looks are not
+    stranded behind a load-more that never fires.
+    """
     if limit <= 0:
         return []
     skip = set(exclude_ids or ())
@@ -118,7 +124,17 @@ def diversify_select_page(
         seen_ids.add(candidate.id)
         per_creator[candidate.user_id] = used + 1
         if len(out) >= limit:
-            break
+            return out
+
+    # Fill remaining slots from capped creators (still score-ordered).
+    if len(out) < limit:
+        for candidate, _score in scored:
+            if candidate.id in skip or candidate.id in seen_ids:
+                continue
+            out.append(candidate)
+            seen_ids.add(candidate.id)
+            if len(out) >= limit:
+                break
     return out
 
 

@@ -68,11 +68,26 @@ def test_diversify_limits_per_creator_and_skips_duplicates():
     scored = rank_discover_candidates([a1, a2, a3, b1], now=NOW)
     # Force a1 twice in scored list to prove de-dupe
     scored = [(a1, 99.0), (a1, 98.0), *scored]
-    picked = diversify_select(scored, limit=4, max_per_creator=2)
-    assert len(picked) == 3  # a1, a2, b1 — a3 blocked by cap; duplicate a1 skipped
+    # Soft cap prefers 2 from A; with limit=3 the page is already full after A,A,B.
+    picked = diversify_select(scored, limit=3, max_per_creator=2)
+    assert len(picked) == 3  # a1, a2, b1 — a3 not needed; duplicate a1 skipped
     assert sum(1 for c in picked if c.user_id == creator_a) == 2
     assert sum(1 for c in picked if c.user_id == creator_b) == 1
     assert len({c.id for c in picked}) == 3
+
+
+def test_diversify_fills_page_when_catalog_is_small():
+    """Do not strand leftover looks behind a soft creator cap on a short page."""
+    creator_a = uuid4()
+    creator_b = uuid4()
+    a1 = _cand(user_id=creator_a, likes=5, unique=5)
+    a2 = _cand(user_id=creator_a, likes=4, unique=5)
+    a3 = _cand(user_id=creator_a, likes=3, unique=5)
+    b1 = _cand(user_id=creator_b, likes=2, unique=5)
+    scored = rank_discover_candidates([a1, a2, a3, b1], now=NOW)
+    picked = diversify_select_page(scored, limit=10, max_per_creator=2)
+    assert {c.id for c in picked} == {a1.id, a2.id, a3.id, b1.id}
+    assert sum(1 for c in picked if c.user_id == creator_a) == 3
 
 
 def test_pagination_resets_creator_cap_and_excludes_seen():

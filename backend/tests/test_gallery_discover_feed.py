@@ -65,18 +65,10 @@ def test_discover_includes_older_publishes_and_records_impressions(client, db_se
     ids = [row["id"] for row in payload]
     assert fresh_a in ids or fresh_b in ids
     assert other in ids
-    # Creator diversification: at most 2 from author in the first page.
-    assert sum(1 for i in ids if i in {fresh_a, fresh_b, fresh_c}) <= 2
-
-    # Aged look stays in the pool — if deferred by the per-creator cap, load-more returns it.
-    more = client.get(
-        "/api/v1/gallery?sort=discover&limit=10",
-        headers=_auth(viewer),
-        params=[("exclude", i) for i in ids],
-    )
-    assert more.status_code == 200, more.text
-    pool = set(ids) | {row["id"] for row in more.json()}
-    assert fresh_c in pool
+    # Soft creator cap prefers diversity first, then fills the short page so
+    # leftover looks are not stranded when the client treats len < page as EOF.
+    assert fresh_c in ids
+    assert set(ids) >= {fresh_a, fresh_b, fresh_c, other}
     # FashionRise overlays need real author usernames (not a second N+1 profile round-trip).
     by_id = {row["id"]: row for row in payload}
     if other in by_id:
