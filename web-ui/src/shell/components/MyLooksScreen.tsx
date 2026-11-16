@@ -380,15 +380,15 @@ function LookDetailDialog({
               disabled={busy || downloadBusy || deleteBusy}
               onClick={() => onCreateRealDesign(look)}
             >
-              <FileText size={14} aria-hidden />
+              <FileText size={16} aria-hidden />
               Create Real Design
             </button>
           ) : null}
 
-          <div className={styles.actionRow}>
+          <div className={styles.actionIconRow} role="group" aria-label="Look actions">
             <button
               type="button"
-              className={styles.ghostBtn}
+              className={styles.actionIconBtn}
               disabled={
                 busy ||
                 downloadBusy ||
@@ -435,12 +435,14 @@ function LookDetailDialog({
                   })
               }}
             >
-              <Download size={14} aria-hidden />
-              {downloadBusy ? 'Saving…' : 'Download'}
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Download size={18} strokeWidth={1.75} />
+              </span>
+              <span>{downloadBusy ? 'Saving…' : 'Download'}</span>
             </button>
             <button
               type="button"
-              className={styles.ghostBtn}
+              className={styles.actionIconBtn}
               disabled={
                 busy ||
                 downloadBusy ||
@@ -461,15 +463,14 @@ function LookDetailDialog({
               }}
               data-testid="look-share"
             >
-              <Share2 size={14} aria-hidden />
-              Share
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Share2 size={18} strokeWidth={1.75} />
+              </span>
+              <span>Share</span>
             </button>
-          </div>
-
-          <div className={styles.actionRow}>
             <button
               type="button"
-              className={look.runway_item_id ? styles.actionOn : styles.primaryBtn}
+              className={look.runway_item_id ? styles.actionIconBtnOn : styles.actionIconBtn}
               disabled={busy || deleteBusy || look.is_archived}
               onClick={() => void toggleRunway()}
               data-testid="look-publish-runway"
@@ -481,40 +482,45 @@ function LookDetailDialog({
                     : 'Publish to FashionRise Runway'
               }
             >
-              <Star size={14} fill={look.runway_item_id ? 'currentColor' : 'none'} aria-hidden />
-              {look.runway_item_id ? 'On Runway' : 'Publish'}
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Star size={18} strokeWidth={1.75} fill={look.runway_item_id ? 'currentColor' : 'none'} />
+              </span>
+              <span>{look.runway_item_id ? 'On Runway' : 'Publish'}</span>
             </button>
             <button
               type="button"
-              className={look.is_favorite ? styles.actionOn : styles.ghostBtn}
+              className={look.is_favorite ? styles.actionIconBtnOn : styles.actionIconBtn}
               disabled={busy}
               aria-pressed={look.is_favorite}
               onClick={() => void patch({ is_favorite: !look.is_favorite })}
             >
-              <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} aria-hidden />
-              {look.is_favorite ? 'Favorited' : 'Favorite'}
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Heart size={18} strokeWidth={1.75} fill={look.is_favorite ? 'currentColor' : 'none'} />
+              </span>
+              <span>{look.is_favorite ? 'Favorited' : 'Favorite'}</span>
             </button>
-          </div>
-
-          <div className={styles.actionRow}>
             <button
               type="button"
-              className={styles.ghostBtn}
+              className={styles.actionIconBtn}
               disabled={busy || deleteBusy}
               onClick={() => void patch({ is_archived: !look.is_archived })}
             >
-              <Archive size={14} aria-hidden />
-              {look.is_archived ? 'Restore' : 'Archive'}
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Archive size={18} strokeWidth={1.75} />
+              </span>
+              <span>{look.is_archived ? 'Restore' : 'Archive'}</span>
             </button>
             <button
               type="button"
-              className={styles.deleteBtn}
+              className={styles.actionIconBtnDanger}
               disabled={busy || deleteBusy}
               aria-label={`Delete ${look.title}`}
               onClick={() => onAskDelete(look)}
             >
-              <Trash2 size={14} aria-hidden />
-              Delete
+              <span className={styles.actionIconGlyph} aria-hidden>
+                <Trash2 size={18} strokeWidth={1.75} />
+              </span>
+              <span>Delete</span>
             </button>
           </div>
         </div>

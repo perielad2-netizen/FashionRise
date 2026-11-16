@@ -495,7 +495,7 @@
   margin: 18px auto 0;
 }
 
-/* Detail dialog */
+/* Detail dialog — Mobbin image-first sheet (Character AI / Cosmos / Sora) */
 .overlay {
   position: fixed;
   inset: 0;
@@ -512,9 +512,10 @@
   /* Clear GlobalHeader (sibling above .body) so title/date are not clipped under it */
   padding: max(12px, calc(var(--fr-header-h) + env(safe-area-inset-top, 0px))) 12px
     max(12px, env(safe-area-inset-bottom, 0px));
-  background: rgba(4, 7, 14, 0.72);
-  backdrop-filter: blur(6px);
+  background: rgba(4, 6, 12, 0.78);
+  backdrop-filter: blur(10px);
   box-sizing: border-box;
+  animation: looksRise 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dialog {
@@ -538,13 +539,19 @@
   margin: auto;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, #171f33 0%, #10182a 100%);
-  box-shadow: var(--fr-shadow);
+  border-radius: 22px;
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  background:
+    radial-gradient(720px 280px at 12% -10%, rgba(214, 51, 132, 0.22), transparent 55%),
+    linear-gradient(180deg, rgba(28, 18, 32, 0.98), rgba(10, 12, 22, 0.98));
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.5),
+    0 0 32px rgba(214, 51, 132, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
   flex: 0 1 auto;
   min-height: 0;
+  animation: looksCardRise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dialogHead {
@@ -552,21 +559,23 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(244, 114, 182, 0.14);
 }
 
 .dialogTitle {
   margin: 0;
   font-family: var(--fr-serif);
   font-size: 22px;
-  color: var(--fr-text);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
 }
 
 .dialogMeta {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--fr-muted);
+  color: rgba(245, 245, 247, 0.55);
 }
 
 .dialogBody {
@@ -605,19 +614,22 @@
 .sideLabel {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--fr-muted);
+  color: #f9a8d4;
 }
 
 .sideFrame {
   aspect-ratio: 3 / 4;
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
-  background: #f7f1ea;
+  background: linear-gradient(180deg, #1a2236, #121a2c);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.32);
   display: grid;
   place-items: center;
+  color: rgba(245, 245, 247, 0.55);
+  font-size: 13px;
 }
 
 .sideFrame img {
@@ -630,8 +642,9 @@
 .notes {
   margin: 0;
   font-size: 13px;
-  color: var(--fr-muted);
+  color: rgba(245, 245, 247, 0.62);
   line-height: 1.45;
+  text-align: center;
 }
 
 .runwayCheck {
@@ -665,27 +678,113 @@
 
 .renameInput {
   flex: 1 1 180px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(7, 10, 20, 0.5);
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 12, 22, 0.72);
   color: var(--fr-text);
   font-size: 14px;
 }
 
 .dialogActions {
   display: grid;
-  gap: 8px;
-  padding: 10px 16px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 12px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid rgba(244, 114, 182, 0.14);
   /* Keep actions reachable while the image/body scrolls. */
   flex-shrink: 0;
-  background: linear-gradient(180deg, #141c30 0%, #10182a 100%);
+  background: linear-gradient(180deg, rgba(22, 16, 28, 0.96), rgba(10, 12, 22, 0.98));
 }
 
 .actionFull {
   width: 100%;
+  min-height: 46px;
+  font-size: 14px;
+  box-shadow:
+    0 10px 24px rgba(214, 51, 132, 0.35),
+    0 0 18px rgba(214, 51, 132, 0.22);
+}
+
+.actionIconRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 6px;
+  min-width: 0;
+}
+
+.actionIconBtn,
+.actionIconBtnOn,
+.actionIconBtnDanger {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.actionIconGlyph {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.actionIconBtnOn .actionIconGlyph {
+  border-color: rgba(244, 114, 182, 0.65);
+  background: linear-gradient(145deg, rgba(214, 51, 132, 0.42), rgba(244, 114, 182, 0.18));
+  color: #ffe4f1;
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.28),
+    0 0 16px rgba(214, 51, 132, 0.35);
+}
+
+.actionIconBtnDanger {
+  color: #fda4af;
+}
+
+.actionIconBtnDanger .actionIconGlyph {
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecdd3;
+}
+
+.actionIconBtn:hover:not(:disabled) .actionIconGlyph,
+.actionIconBtnDanger:hover:not(:disabled) .actionIconGlyph {
+  transform: translateY(-1px);
+  border-color: rgba(244, 114, 182, 0.4);
+}
+
+.actionIconBtn:disabled,
+.actionIconBtnOn:disabled,
+.actionIconBtnDanger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.actionIconBtn:focus-visible .actionIconGlyph,
+.actionIconBtnOn:focus-visible .actionIconGlyph,
+.actionIconBtnDanger:focus-visible .actionIconGlyph {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .actionRow {
@@ -723,7 +822,7 @@
 
   .dialog {
     width: 100%;
-    border-radius: 16px;
+    border-radius: 20px 20px 16px 16px;
     max-height: calc(100vh - var(--fr-header-h) - 16px);
     max-height: calc(
       100dvh - var(--fr-header-h) - 16px - env(safe-area-inset-top, 0px) -
@@ -736,16 +835,16 @@
   }
 
   .dialogHead {
-    padding: 10px 12px;
+    padding: 12px 14px 10px;
   }
 
   .dialogTitle {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .dialogBody {
-    padding: 10px 12px;
-    gap: 10px;
+    padding: 10px 14px;
+    gap: 12px;
   }
 
   .sideSwitch {
@@ -763,13 +862,18 @@
   /* Cap look preview height so action rows stay on-screen without enlarging the shell. */
   .sideFrame {
     aspect-ratio: auto;
-    height: min(42svh, 360px);
-    max-height: min(42svh, 360px);
+    height: min(44svh, 380px);
+    max-height: min(44svh, 380px);
   }
 
   .dialogActions {
-    padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
-    gap: 6px;
+    padding: 10px 14px max(12px, env(safe-area-inset-bottom, 0px));
+    gap: 12px;
+  }
+
+  .actionIconGlyph {
+    width: 46px;
+    height: 46px;
   }
 
   .grid {
