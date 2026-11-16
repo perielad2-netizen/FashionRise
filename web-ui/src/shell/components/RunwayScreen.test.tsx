@@ -821,7 +821,7 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
   })
 
-  it('opens a read-only friend profile from a friend row and keeps Remove', async () => {
+  it('opens the full designer profile from a friend row (not nested in Friends chrome)', async () => {
     listFriends.mockResolvedValue([
       {
         id: 'fs-1',
@@ -887,10 +887,15 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
     expect(await screen.findByTestId('friend-look-g-public')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-follow-btn')).toBeInTheDocument()
+    // Full-screen profile — Friends manage chrome must not remain around it.
+    expect(screen.queryByRole('heading', { name: 'Friends' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Add people by username/i)).not.toBeInTheDocument()
     expect(screen.queryByText('12')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('friend-profile-back'))
     expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Friends' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('friend-remove-yaniv'))
     await waitFor(() => expect(removeFriend).toHaveBeenCalledWith('yaniv'))

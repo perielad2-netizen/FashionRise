@@ -3,9 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**designer profile premium #371 LIVE** · BE+FE **`11d1b685`** · Alembic **035** · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**friends → full designer profile hotfix** · tip pending · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. Designer profile premium redesign (#371) deployed after avatar-storage corrections. Stars weekly/streak rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. #371 designer profile live; friends-list open now routes to the same full-screen Designer Card (not nested/clipped in Manage Friends). Stars weekly/streak rewards remain **OFF**.
+
+## Friends → full designer profile hotfix (2026-11-16)
+
+| Item | Detail |
+|---|---|
+| Bug | Opening a friend from Manage Friends nested `FriendProfilePanel` inside Friends chrome — Collection clipped / felt locked |
+| Fix | Friend row uses the same `viewingDesigner` full-screen path as Discover |
+| Branch | `cursor/web-friends-profile-full-77c6` |
+| Verify | RunwayScreen Vitest · `tsc -b` |
+| Gates | Rewards OFF · no BE/Alembic change |
 
 ## Designer profile premium #371 — PRODUCTION LIVE (2026-11-16)
 

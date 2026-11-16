@@ -45,7 +45,6 @@ import {
   listFriends,
   removeFriend,
   requestFriendByUsername,
-  type FriendUser,
   type Friendship,
 } from '@/services/friendsApi'
 import { ApiError } from '@/services/api/client'
@@ -843,6 +842,7 @@ export function RunwayScreen({
               onAccept={(id) => void onAccept(id)}
               onRemove={(id, label) => void onRemove(id, label)}
               onRetry={() => void load()}
+              onOpenDesigner={(designer) => setViewingDesigner(designer)}
             />
           </div>
         ) : state.status === 'loading' ? (
@@ -1149,6 +1149,7 @@ function FriendsPanel({
   onAccept,
   onRemove,
   onRetry,
+  onOpenDesigner,
 }: {
   state: FriendsState
   username: string
@@ -1159,10 +1160,11 @@ function FriendsPanel({
   onAccept: (friendshipId: string) => void
   onRemove: (friendUserId: string, label: string) => void
   onRetry: () => void
+  /** Open the same full-screen designer profile used from Discover (not nested in Friends). */
+  onOpenDesigner: (designer: DesignerRef) => void
 }) {
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [viewingFriend, setViewingFriend] = useState<FriendUser | null>(null)
 
   // V2-0011: keep Add friend row visible when the soft keyboard opens.
   // Do NOT pad by visualViewport occlusion — that stacked with `--fr-vv-height`
@@ -1182,12 +1184,6 @@ function FriendsPanel({
       vv.removeEventListener('scroll', sync)
     }
   }, [])
-
-  if (viewingFriend) {
-    return (
-      <FriendProfilePanel friend={viewingFriend} onBack={() => setViewingFriend(null)} />
-    )
-  }
 
   return (
     <div className={styles.friendsPanel}>
@@ -1318,7 +1314,14 @@ function FriendsPanel({
                         type="button"
                         className={styles.friendOpen}
                         data-testid={`friend-open-${row.friend.user_id}`}
-                        onClick={() => setViewingFriend(row.friend)}
+                        onClick={() =>
+                          onOpenDesigner({
+                            user_id: row.friend.user_id,
+                            username: row.friend.username,
+                            display_name: row.friend.display_name,
+                            avatar_url: row.friend.avatar_url,
+                          })
+                        }
                       >
                         <span className={styles.friendAvatar} aria-hidden>
                           {initial}
