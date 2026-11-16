@@ -108,6 +108,18 @@ class Settings(BaseSettings):
     my_croquis_source_retention_days: int = 7
     my_croquis_accepted_source_purge_hours: int = 24
     my_croquis_cleanup_batch_size: int = 50
+    # FashionRise Social — Stars reward safety gates (fail closed until PM launch).
+    # Weekly settlement may still open/lock weeks; awards + Stars credit require BOTH
+    # the enable flag and an explicit Sunday UTC launch week boundary.
+    fashionrise_weekly_rewards_enabled: bool = False
+    # ISO date YYYY-MM-DD of the first Sunday UTC week_start that may receive prizes.
+    # Empty = fail closed (no weekly Stars) even if the enable flag is flipped early.
+    fashionrise_weekly_rewards_launch_week_start: str = ""
+    # Login streak may still record visits; Stars credit requires this flag
+    # AND a valid fashionrise_streak_rewards_start_date (fail closed if missing).
+    fashionrise_streak_rewards_enabled: bool = False
+    # ISO date YYYY-MM-DD — first UTC calendar day that counts toward streak Stars.
+    fashionrise_streak_rewards_start_date: str = ""
     # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
     techpack_ai_draft_enabled: bool = False
     # Create Real Design AI — fail closed without spend ceiling + (for professional) allowlist.

@@ -99,9 +99,13 @@ async def _ai_worker_loop(stop: asyncio.Event, poll_interval: float, batch_size:
 
 
 async def _competition_tick_loop(stop: asyncio.Event, interval_seconds: float) -> None:
-    """Settle previous weekly competitions without weekly app releases or manual ops."""
+    """Settle previous weekly competitions + retry public My Models cleanup.
+
+    Weekly Stars awards remain gated by FASHIONRISE_WEEKLY_REWARDS_* (fail closed).
+    """
     from app.db.session import SessionLocal
     from app.services.competition_awards import tick_competitions
+    from app.services.public_media_cleanup import process_public_cleanup_queue
 
     while not stop.is_set():
         db = SessionLocal()
@@ -118,6 +122,23 @@ async def _competition_tick_loop(stop: asyncio.Event, interval_seconds: float) -
             db.rollback()
         finally:
             db.close()
+
+        cleanup_db = SessionLocal()
+        try:
+            cleaned = process_public_cleanup_queue(cleanup_db, limit=50)
+            if cleaned.get("processed"):
+                _log.info(
+                    "public_cleanup_tick processed=%s removed=%s failed=%s",
+                    cleaned.get("processed"),
+                    cleaned.get("removed"),
+                    cleaned.get("failed"),
+                )
+        except Exception:
+            _log.exception("public cleanup tick failed")
+            cleanup_db.rollback()
+        finally:
+            cleanup_db.close()
+
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:

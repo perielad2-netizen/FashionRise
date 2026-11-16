@@ -31,6 +31,8 @@ export type CompetitionStatus = {
   award_categories: Array<{ id: string; label: string; stars: number }>
   runway_note: string
   publish_note: string
+  weekly_rewards_enabled?: boolean
+  weekly_rewards_launch_week_start?: string | null
 }
 
 export type StreakStatus = {
@@ -42,6 +44,10 @@ export type StreakStatus = {
   stars_awarded: number
   reward_every_days: number
   reward_stars: number
+  /** Server-authoritative; when false do not advertise active streak Stars. */
+  rewards_enabled?: boolean
+  /** Consecutive reward-eligible UTC days (post activation boundary). */
+  reward_streak?: number
 }
 
 export type CompetitionAward = {

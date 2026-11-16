@@ -656,14 +656,13 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
 
     # Always detach public FashionRise copy if present (including repeat erase).
     _removed, public_key = pcp.remove_owned_croquis_gallery_entry(
-        db, croquis_id=row.id, owner_id=user.id
+        db, croquis_id=row.id, owner_id=user.id, reason="permanent_erase"
     )
 
     now = _utcnow()
     if row.erase_requested_at is not None:
         db.commit()
-        if public_key:
-            pcp.unlink_public_upload_keys([public_key])
+        pcp.finish_public_model_unlinks(db, [public_key] if public_key else None)
         db.refresh(row)
         return row
 
@@ -718,8 +717,7 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
 
     db.add(row)
     db.commit()
-    if public_key:
-        pcp.unlink_public_upload_keys([public_key])
+    pcp.finish_public_model_unlinks(db, [public_key] if public_key else None)
     db.refresh(row)
     return row
 

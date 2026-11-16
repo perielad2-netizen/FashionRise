@@ -174,7 +174,38 @@ def credit_payout_idempotent(
     payout_key: str,
     reason: str,
 ) -> bool:
-    """Credit Stars once per payout_key. Returns True when newly credited."""
+    """Credit Stars once per payout_key. Returns True when newly credited.
+
+    Server-authoritative Social reward gates fail closed here — not only in the
+    scheduler — so retries/restarts cannot credit when disabled.
+    """
+    from app.services.fashionrise_reward_gates import (
+        competition_payout_key_week_start,
+        streak_day_is_reward_eligible,
+        streak_rewards_enabled,
+        week_eligible_for_weekly_rewards,
+        weekly_rewards_enabled,
+    )
+
+    if reason.startswith("competition_"):
+        if not weekly_rewards_enabled():
+            return False
+        # Respect launch boundary on the actual credit path (not only settle()).
+        week_start = competition_payout_key_week_start(payout_key)
+        if week_start is None or not week_eligible_for_weekly_rewards(week_start):
+            return False
+    if reason == "login_streak":
+        if not streak_rewards_enabled():
+            return False
+        # Fail closed without a valid activation boundary (checked via streak path too).
+        from app.services.fashionrise_reward_gates import parse_streak_rewards_start_date
+        from app.services.login_streak import utc_today
+
+        if parse_streak_rewards_start_date() is None:
+            return False
+        if not streak_day_is_reward_eligible(utc_today()):
+            return False
+
     existing = db.scalar(select(StarPayout).where(StarPayout.payout_key == payout_key))
     if existing is not None:
         return False
@@ -203,6 +234,11 @@ def settle_group_awards(
     week_start: datetime,
     group: CompetitionGroup,
 ) -> list[CompetitionAward]:
+    from app.services.fashionrise_reward_gates import week_eligible_for_weekly_rewards
+
+    if not week_eligible_for_weekly_rewards(week_start):
+        return []
+
     week_end = competition_week_end(week_start)
     picks = select_group_winners(
         db, week_start=week_start, week_end=week_end, group_id=group.id

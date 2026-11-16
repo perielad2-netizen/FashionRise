@@ -103,7 +103,18 @@ def build_competition_status(
                 for d in designers[:10]
             ]
 
+    from app.services.fashionrise_reward_gates import (
+        parse_weekly_rewards_launch_week_start,
+        week_eligible_for_weekly_rewards,
+        weekly_rewards_enabled,
+    )
+
     stars_by_id = {cid: stars for cid, stars in AWARD_DEFS}
+    launch = parse_weekly_rewards_launch_week_start()
+    rewards_live = week_eligible_for_weekly_rewards(week_start)
+    publish_note = "Publish anytime. Designs compete in the week they are published."
+    if not weekly_rewards_enabled() or not rewards_live:
+        publish_note += " Weekly Star prizes are not active yet."
     return {
         "week_start": week_start.isoformat(),
         "week_end": week_end.isoformat(),
@@ -120,7 +131,9 @@ def build_competition_status(
             for cid, _ in AWARD_DEFS
         ],
         "runway_note": "Worldwide Runway Top 10/20/50 stays global — groups affect weekly prizes only.",
-        "publish_note": "Publish anytime. Designs compete in the week they are published.",
+        "publish_note": publish_note,
+        "weekly_rewards_enabled": rewards_live,
+        "weekly_rewards_launch_week_start": launch.date().isoformat() if launch else None,
     }
 
 

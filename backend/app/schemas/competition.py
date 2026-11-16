@@ -44,6 +44,8 @@ class CompetitionStatusRead(BaseModel):
     award_categories: list[AwardCategoryRead] = Field(default_factory=list)
     runway_note: str
     publish_note: str
+    weekly_rewards_enabled: bool = False
+    weekly_rewards_launch_week_start: str | None = None
 
 
 class CompetitionAwardRead(BaseModel):
@@ -67,3 +69,5 @@ class StreakStatusRead(BaseModel):
     stars_awarded: int = 0
     reward_every_days: int = 7
     reward_stars: int = 10
+    rewards_enabled: bool = False
+    reward_streak: int = 0

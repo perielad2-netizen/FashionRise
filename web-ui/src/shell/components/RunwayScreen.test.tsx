@@ -61,7 +61,9 @@ vi.mock('@/services/competitionsApi', () => ({
     top_designers: [],
     award_categories: [{ id: 'top_design', label: 'Top Design', stars: 50 }],
     runway_note: 'Worldwide Runway stays global',
-    publish_note: 'Publish anytime',
+    publish_note: 'Publish anytime. Weekly Star prizes are not active yet.',
+    weekly_rewards_enabled: false,
+    weekly_rewards_launch_week_start: null,
   })),
   fetchCompetitionAwards: vi.fn(async () => []),
   fetchStreakStatus: vi.fn(async () => ({
@@ -73,6 +75,7 @@ vi.mock('@/services/competitionsApi', () => ({
     stars_awarded: 0,
     reward_every_days: 7,
     reward_stars: 10,
+    rewards_enabled: false,
   })),
   postStreakCheckIn: vi.fn(async () => ({
     current_streak: 1,
@@ -83,6 +86,7 @@ vi.mock('@/services/competitionsApi', () => ({
     stars_awarded: 0,
     reward_every_days: 7,
     reward_stars: 10,
+    rewards_enabled: false,
   })),
 }))
 

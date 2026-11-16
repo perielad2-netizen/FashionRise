@@ -29,43 +29,74 @@ def gallery_item_for_croquis(db: Session, croquis_id: uuid.UUID) -> GalleryItem 
     return db.scalar(select(GalleryItem).where(GalleryItem.croquis_id == croquis_id))
 
 
-def unlink_public_upload_keys(keys: list[str] | tuple[str, ...] | set[str]) -> None:
-    """Best-effort remove of public FashionRise copies (never touches private croquis root)."""
-    if not keys:
-        return
-    storage = LocalStorageBackend()
-    for key in keys:
-        if not key:
-            continue
-        try:
-            storage.delete_file(key=key)
-        except OSError:
-            pass
-
-
 def remove_owned_croquis_gallery_entry(
     db: Session,
     *,
     croquis_id: uuid.UUID,
     owner_id: uuid.UUID,
+    reason: str = "unpublish",
 ) -> tuple[bool, str | None]:
     """Delete this owner's FashionRise gallery row for a My Model (no commit).
 
-    Returns ``(removed, public_storage_key)``. ``removed`` is False when already
-    unpublished or not owned. Does not touch unrelated gallery entries.
+    Enqueues durable public cleanup for the owned FashionRise-model copy **before**
+    deleting the gallery row (same transaction). Unmappable/unsafe keys are
+    quarantined (fail-closed) — never silently discarded. Returns
+    ``(removed, public_storage_key)``. Does not touch unrelated gallery entries.
     """
+    from app.services import public_media_cleanup as pmc
+
     item = gallery_item_for_croquis(db, croquis_id)
     if item is None or item.user_id != owner_id:
         return False, None
     storage = LocalStorageBackend()
     key = storage.key_from_public_url(item.image_url)
+    queued_key: str | None = None
+    if key:
+        queued = pmc.enqueue_public_model_cleanup(
+            db,
+            owner_id=owner_id,
+            storage_key=key,
+            reason=reason,
+            croquis_id=croquis_id,
+            gallery_item_id=item.id,
+            source_url=item.image_url,
+        )
+        if queued is not None:
+            queued_key = queued.storage_key
+        else:
+            pmc.quarantine_unmappable_public_cleanup(
+                db,
+                owner_id=owner_id,
+                reason=reason,
+                croquis_id=croquis_id,
+                gallery_item_id=item.id,
+                source_url=item.image_url,
+                detail="unsafe_public_key_rejected",
+            )
+    else:
+        # Had a gallery row but URL could not be mapped — do not pretend cleanup is done.
+        pmc.quarantine_unmappable_public_cleanup(
+            db,
+            owner_id=owner_id,
+            reason=reason,
+            croquis_id=croquis_id,
+            gallery_item_id=item.id,
+            source_url=item.image_url,
+            detail="unmappable_public_image_url",
+        )
     db.delete(item)
     db.flush()
-    return True, key
+    return True, queued_key
 
 
-def public_croquis_gallery_keys_for_owner(db: Session, owner_id: uuid.UUID) -> list[str]:
-    """Public upload keys for My Model → FashionRise copies owned by ``owner_id``."""
+def enqueue_owner_public_model_cleanups(db: Session, owner_id: uuid.UUID) -> list[str]:
+    """Enqueue durable cleanup for all owned My Model public copies (no commit).
+
+    Call before account CASCADE so cleanup rows survive user deletion.
+    Unmappable URLs are quarantined rather than silently skipped.
+    """
+    from app.services import public_media_cleanup as pmc
+
     storage = LocalStorageBackend()
     rows = db.scalars(
         select(GalleryItem).where(
@@ -77,8 +108,51 @@ def public_croquis_gallery_keys_for_owner(db: Session, owner_id: uuid.UUID) -> l
     for row in rows:
         key = storage.key_from_public_url(row.image_url)
         if key:
-            keys.append(key)
+            queued = pmc.enqueue_public_model_cleanup(
+                db,
+                owner_id=owner_id,
+                storage_key=key,
+                reason="account_deletion",
+                croquis_id=row.croquis_id,
+                gallery_item_id=row.id,
+                source_url=row.image_url,
+            )
+            if queued is not None:
+                keys.append(queued.storage_key)
+            else:
+                pmc.quarantine_unmappable_public_cleanup(
+                    db,
+                    owner_id=owner_id,
+                    reason="account_deletion",
+                    croquis_id=row.croquis_id,
+                    gallery_item_id=row.id,
+                    source_url=row.image_url,
+                    detail="unsafe_public_key_rejected",
+                )
+        else:
+            pmc.quarantine_unmappable_public_cleanup(
+                db,
+                owner_id=owner_id,
+                reason="account_deletion",
+                croquis_id=row.croquis_id,
+                gallery_item_id=row.id,
+                source_url=row.image_url,
+                detail="unmappable_public_image_url",
+            )
     return keys
+
+
+def finish_public_model_unlinks(db: Session, keys: list[str] | None) -> None:
+    """Immediate post-commit attempt; failures remain queued for the sweeper.
+
+    Uses the caller's session (do not open a separate engine — tests and prod
+    share this path).
+    """
+    if not keys:
+        return
+    from app.services import public_media_cleanup as pmc
+
+    pmc.attempt_public_cleanup_now(db, storage_keys=keys)
 
 
 def _record_public_share_consent(
@@ -210,11 +284,10 @@ def publish_personal_croquis(
 def unpublish_personal_croquis(db: Session, user: User, croquis_id: uuid.UUID) -> PersonalCroquis:
     croquis = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
     removed, key = remove_owned_croquis_gallery_entry(
-        db, croquis_id=croquis.id, owner_id=user.id
+        db, croquis_id=croquis.id, owner_id=user.id, reason="unpublish"
     )
     if not removed:
         raise NotFoundError("Personal model is not on FashionRise")
     db.commit()
-    if key:
-        unlink_public_upload_keys([key])
+    finish_public_model_unlinks(db, [key] if key else None)
     return croquis

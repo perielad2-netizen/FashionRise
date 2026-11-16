@@ -61,6 +61,7 @@ vi.mock('@/services/competitionsApi', () => ({
     stars_awarded: 0,
     reward_every_days: 7,
     reward_stars: 10,
+    rewards_enabled: false,
   })),
 }))
 
