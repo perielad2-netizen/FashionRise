@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Preview — My Looks Look Details Mobbin polish (2026-11-16 23:45 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-look-details-mobbin-77c6` |
+| Preview | https://fashionrise.app/preview-looks-detail/ |
+| Change | Image-first Look Details sheet, circular action icons, pink-glass Create Real Design CTA |
+| Prod | Unchanged until approve |
+
 ## Deployed — Open design resumes after draft conflict LIVE (2026-11-16 23:42 Asia/Jerusalem)
 
 | Field | Value |
