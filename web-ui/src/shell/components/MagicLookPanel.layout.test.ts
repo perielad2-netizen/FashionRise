@@ -57,16 +57,23 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(css).not.toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*object-fit: cover/s)
   })
 
-  it('native shell look overlay fills edge-to-edge (no dead top band)', () => {
+  it('native shell look overlay fills edge-to-edge and clears GlobalHeader', () => {
     expect(css).toContain('html.fr-native-shell')
     expect(css).toContain('place-items: stretch')
-    // Overlay itself is unpadded; panel paints under the status bar.
+    // Overlay itself is unpadded; panel clears status bar + app header.
     expect(css).toMatch(
       /html\.fr-native-shell\) \.overlay \{[^}]*padding:\s*0/s,
     )
     expect(css).toMatch(
-      /html\.fr-native-shell\) \.panel \{[^}]*padding-top:\s*max\(10px,\s*env\(safe-area-inset-top/s,
+      /html\.fr-native-shell\) \.panel \{[^}]*padding-top:\s*max\(\s*10px,\s*calc\(var\(--fr-header-h\)\s*\+\s*env\(safe-area-inset-top/s,
     )
+  })
+
+  it('stacks Magics overlay above WorkspaceHeader More (z-index ≥ 90)', () => {
+    const overlay = rule(css, '.overlay')
+    const match = overlay.match(/z-index:\s*(\d+)/)
+    expect(match).toBeTruthy()
+    expect(Number(match![1])).toBeGreaterThanOrEqual(90)
   })
 
   it('compacts at representative phone widths (320–430) without horizontal overflow', () => {

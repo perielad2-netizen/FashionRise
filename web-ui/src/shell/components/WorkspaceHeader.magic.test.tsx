@@ -84,6 +84,27 @@ describe('WorkspaceHeader Magic recovery', () => {
     expect(screen.queryByRole('button', { name: /^More$/i })).toBeNull()
   })
 
+  it('hides the More menu while Magic results stay open (not only while busy)', () => {
+    // Android Create: after Magic finishes, moreWrap (z-index 46) sat above the
+    // results overlay and showed a stray ⋯ on the BACK Ready tab.
+    render(
+      <WorkspaceHeader
+        canUndo={false}
+        canRedo={false}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onMagic={vi.fn()}
+        magicEnabled
+        magicPanelOpen
+        saveStatus="idle"
+        saveStatusLabel="Ready"
+        saveError={null}
+      />,
+    )
+    expect(screen.queryByTestId('workspace-more')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^More$/i })).toBeNull()
+  })
+
   it('does not expose raw sketch export actions in More', () => {
     render(
       <WorkspaceHeader
