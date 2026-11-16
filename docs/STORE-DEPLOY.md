@@ -48,6 +48,7 @@ npm run cap:ios           # opens Xcode (macOS only)
 |------|----------------------------------|
 | Config | `/codemagic.yaml` |
 | Workflow | `fashionrise-android-play-internal` (UI: **FashionRise Android (Play AAB)**) |
+| Instance | **`linux_x2`** (Android AAB; iOS workflows remain `mac_mini_m2`) |
 | Working dir | `web-ui` |
 | Package / applicationId | `app.fashionrise.studio` |
 | targetSdk / compileSdk | **36** (`web-ui/android/variables.gradle`) |

@@ -3,6 +3,13 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Codemagic Android → linux_x2 (2026-11-16 Asia/Jerusalem)
+
+| Item | Value |
+| --- | --- |
+| Change | `fashionrise-android-play-internal` `instance_type`: `mac_mini_m2` → **`linux_x2`** |
+| Unchanged | Android signing, env group, AAB scripts/artifacts; iOS stays `mac_mini_m2` |
+| Build | Manual start only — **not** auto-triggered |
 
 ## Deployed — profile lightbox + GlobalHeader non-feed (2026-11-16 19:33 Asia/Jerusalem)
 
