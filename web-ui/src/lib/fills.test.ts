@@ -8,6 +8,7 @@ import {
   FASHION_PALETTE,
   fabricStyle,
   gradientStyleFromPreset,
+  isKnownFabricId,
   MAX_FILL_CONTOUR_VALUES,
   parseFillOp,
   solidStyle,
@@ -148,15 +149,18 @@ describe('fills schema', () => {
       'white-silk',
       'black-cotton',
       'brown-corduroy',
+      'black-leather',
+      'brown-leather',
       'blush-chiffon',
-      'charcoal-wool',
       'gold-glitter',
-      'blue-velvet',
       'wedding-lace',
       'offwhite-satin',
       'stockings',
       'stitch-jeans',
     ])
+    expect(FABRIC_PRESETS.some((f) => f.id === 'blue-velvet')).toBe(false)
+    expect(isKnownFabricId('blue-velvet')).toBe(true)
+    expect(isKnownFabricId('charcoal-wool')).toBe(true)
     expect(fabricStyle('lace')).toBeNull()
     expect(fabricStyle('blue-denim')).toEqual({
       kind: 'fabric',

@@ -10,6 +10,7 @@ import {
   clampUploadedFabricScale,
   fabricPatternScale,
   fabricStyle,
+  findFabricPreset,
   gradientPreviewCss,
   type FillStyle,
   type GradientFillStyle,
@@ -81,6 +82,7 @@ export function ColorAndMaterialsPanel({
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [gradientDesignerOpen, setGradientDesignerOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const scaleBlockRef = useRef<HTMLDivElement>(null)
   const nameFieldId = useId()
   const aiPromptId = useId()
   const aiNameId = useId()
@@ -89,7 +91,7 @@ export function ColorAndMaterialsPanel({
     fillStyle.kind === 'fabric' || fillStyle.kind === 'uploaded-fabric'
   const activeFabricPreview =
     fillStyle.kind === 'fabric'
-      ? FABRIC_PRESETS.find((f) => f.id === fillStyle.fabricId)?.preview ?? '#3f3340'
+      ? findFabricPreset(fillStyle.fabricId)?.preview ?? '#3f3340'
       : fillStyle.kind === 'uploaded-fabric' && previews[fillStyle.assetId]
         ? `url(${previews[fillStyle.assetId]}) center / cover`
         : '#3f3340'
@@ -296,10 +298,22 @@ export function ColorAndMaterialsPanel({
     }
   }
 
+  const selectedFabricKey =
+    fillStyle.kind === 'fabric'
+      ? fillStyle.fabricId
+      : fillStyle.kind === 'uploaded-fabric'
+        ? fillStyle.assetId
+        : null
+
   const selectBuiltin = (fabricId: string) => {
     const style = fabricStyle(fabricId, scale)
     if (style) onFillStyle(style)
   }
+
+  useEffect(() => {
+    if (!selectedFabricKey) return
+    scaleBlockRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedFabricKey])
 
   return (
     <div className={styles.stack} aria-label="Colors and materials">
@@ -440,9 +454,48 @@ export function ColorAndMaterialsPanel({
               </button>
             </div>
             <p className={styles.note}>
-              Pick a fabric, set pattern scale, then Fill a closed outline.
+              Tap a fabric to choose it and set pattern scale, then Fill a closed outline.
               {libraryBusy ? ' Loading your fabrics…' : ''}
             </p>
+            {patternScaleActive ? (
+              <div
+                ref={scaleBlockRef}
+                className={styles.scaleBlock}
+                data-testid="fabric-scale-block"
+              >
+                <div className={styles.scalePreviewRow}>
+                  <div
+                    className={styles.scalePreview}
+                    style={{
+                      background: activeFabricPreview,
+                      backgroundSize: `${Math.round(48 * scale)}px`,
+                      backgroundRepeat: 'repeat',
+                      backgroundPosition: 'center',
+                    }}
+                    aria-hidden
+                    data-testid="fabric-scale-preview"
+                  />
+                  <div className={styles.scaleControls}>
+                    <label className={styles.scaleRow}>
+                      <span>Pattern scale</span>
+                      <input
+                        type="range"
+                        min={UPLOADED_FABRIC_SCALE_MIN}
+                        max={UPLOADED_FABRIC_SCALE_MAX}
+                        step={0.05}
+                        value={scale}
+                        aria-label="Fabric pattern scale"
+                        onChange={(e) => onScaleChange(Number(e.target.value))}
+                      />
+                      <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
+                    </label>
+                    <p className={styles.scaleHint}>
+                      Drag to zoom the repeat · left = denser · right = larger tiles
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <input
               ref={fileInputRef}
               type="file"
@@ -509,65 +562,6 @@ export function ColorAndMaterialsPanel({
               <p className={styles.note}>
                 Create with AI or upload a JPG/PNG/WebP — new fabrics appear here with the starters.
               </p>
-            ) : null}
-
-            {patternScaleActive ? (
-              <div className={styles.scaleBlock} data-testid="fabric-scale-block">
-                <div className={styles.scalePreviewRow}>
-                  <div
-                    className={styles.scalePreview}
-                    style={{
-                      background: activeFabricPreview,
-                      backgroundSize: `${Math.round(48 * scale)}px`,
-                      backgroundRepeat: 'repeat',
-                      backgroundPosition: 'center',
-                    }}
-                    aria-hidden
-                    data-testid="fabric-scale-preview"
-                  />
-                  <div className={styles.scaleControls}>
-                    <div className={styles.scalePresets} role="group" aria-label="Pattern scale presets">
-                      <button
-                        type="button"
-                        className={scale <= 0.6 ? styles.scalePresetActive : styles.scalePreset}
-                        onClick={() => onScaleChange(0.5)}
-                      >
-                        Fine
-                      </button>
-                      <button
-                        type="button"
-                        className={scale > 0.6 && scale < 1.5 ? styles.scalePresetActive : styles.scalePreset}
-                        onClick={() => onScaleChange(1)}
-                      >
-                        Medium
-                      </button>
-                      <button
-                        type="button"
-                        className={scale >= 1.5 ? styles.scalePresetActive : styles.scalePreset}
-                        onClick={() => onScaleChange(2)}
-                      >
-                        Coarse
-                      </button>
-                    </div>
-                    <label className={styles.scaleRow}>
-                      <span>Scale</span>
-                      <input
-                        type="range"
-                        min={UPLOADED_FABRIC_SCALE_MIN}
-                        max={UPLOADED_FABRIC_SCALE_MAX}
-                        step={0.05}
-                        value={scale}
-                        aria-label="Fabric pattern scale"
-                        onChange={(e) => onScaleChange(Number(e.target.value))}
-                      />
-                      <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
-                    </label>
-                  </div>
-                </div>
-                <p className={styles.scaleHint}>
-                  Live preview · Fine = denser repeats · Coarse = larger pattern tiles
-                </p>
-              </div>
             ) : null}
           </section>
         ) : null}
