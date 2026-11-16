@@ -279,6 +279,8 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
 
   return (
     <div className={styles.panel} data-testid="friend-profile-panel">
+      <p className={styles.eyebrow}>FashionRise</p>
+
       <section className={`${styles.hero} ${heroTone}`} aria-label="Designer card">
         {coverUrl ? (
           <div
@@ -314,6 +316,33 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
             </p>
           ) : null}
 
+          {state.status === 'ready' ? (
+            <ul className={styles.stats} aria-label="Public stats">
+              <li>
+                <strong data-testid="friend-published-count">{state.looks.length}</strong>
+                <span>Published</span>
+              </li>
+              {state.profile ? (
+                <>
+                  <li>
+                    <strong data-testid="designer-followers">{state.profile.followers_count}</strong>
+                    <span>Followers</span>
+                  </li>
+                  <li>
+                    <strong data-testid="designer-likes">{state.profile.likes_received_count}</strong>
+                    <span>Likes</span>
+                  </li>
+                  <li>
+                    <strong data-testid="designer-reputation">
+                      {Math.round(state.profile.reputation_score)}
+                    </strong>
+                    <span>Reputation</span>
+                  </li>
+                </>
+              ) : null}
+            </ul>
+          ) : null}
+
           <div className={styles.heroActions}>
             {!isSelf && viewerId ? (
               <button
@@ -347,33 +376,6 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
               </button>
             ) : null}
           </div>
-
-          {state.status === 'ready' ? (
-            <ul className={styles.stats} aria-label="Public stats">
-              <li>
-                <strong data-testid="friend-published-count">{state.looks.length}</strong>
-                <span>Published</span>
-              </li>
-              {state.profile ? (
-                <>
-                  <li>
-                    <strong data-testid="designer-followers">{state.profile.followers_count}</strong>
-                    <span>Followers</span>
-                  </li>
-                  <li>
-                    <strong data-testid="designer-likes">{state.profile.likes_received_count}</strong>
-                    <span>Likes</span>
-                  </li>
-                  <li>
-                    <strong data-testid="designer-reputation">
-                      {Math.round(state.profile.reputation_score)}
-                    </strong>
-                    <span>Reputation</span>
-                  </li>
-                </>
-              ) : null}
-            </ul>
-          ) : null}
         </div>
       </section>
 
@@ -398,13 +400,16 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
       {state.status === 'ready' ? (
         <section className={styles.collection} aria-label="Published FashionRise looks">
           <div className={styles.collectionHead}>
-            <h2 className={styles.collectionTitle}>Collection</h2>
-            <span className={styles.collectionMeta}>{state.looks.length} looks</span>
+            <h2 className={styles.collectionTitle}>Looks</h2>
+            <span className={styles.collectionMeta}>{state.looks.length} published</span>
           </div>
           {state.looks.length === 0 ? (
-            <p className={styles.emptyLooks} data-testid="friend-looks-empty">
-              No published FashionRise looks yet.
-            </p>
+            <div className={styles.emptyLooksCard} data-testid="friend-looks-empty">
+              <p className={styles.emptyLooksTitle}>No looks yet</p>
+              <p className={styles.emptyLooks}>
+                No published FashionRise looks yet.
+              </p>
+            </div>
           ) : (
             <ul className={styles.looksGrid}>
               {state.looks.map((item) => (

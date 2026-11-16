@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Friends Mobbin redesign LIVE (2026-11-16 21:45 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#382** merged → `main` @ **`f2121f17`** |
+| Tip | FE **`f2121f17`** · `/var/www/fashionrise/releases/f2121f17-friends-mobbin-polish` |
+| Change | Responsive Friends manage: hero card, stacked Add form, avatar circle rows, empty invite state |
+| Preview | `/preview-friends/` removed after promote |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/305dbe2e-home-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Home Mobbin redesign LIVE (2026-11-16 21:34 Asia/Jerusalem)
 
 | Field | Value |
