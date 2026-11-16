@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+
+## Deployed — profile lightbox + GlobalHeader non-feed (2026-11-16 19:33 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#373** merged → `main` @ **`3efcbd87`** |
+| FE tip | **`1f8ea2f0`** → `/var/www/fashionrise/releases/1f8ea2f0-profile-header-nav` · public `/version.json` |
+| BE tip | unchanged (`43ab55dd`) |
+| Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 **Last updated:** 2026-11-16 (**Discover all-published #366 LIVE** · BE **`43ab55dd`** · FE **`c1fed241`** · discover **8/8** · weekly/streak Stars rewards remain **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. Discover endless feed restored (#366 on `main` + BE tip). Designer profile #371 + friends full-profile #372 FE tip remain live. Rewards remain **OFF**.
