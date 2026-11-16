@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**#359** MERGED @ **`73f13af3`** · repo Alembic head **035** · read-only prod preflight **COMPLETE** · **PROD NO-GO** pending fresh backup + separate migrate/deploy authorize · prod still Alembic **030** / BE `df93307a` / FE `e9bbc42c` · reward flags unset→defaults **FALSE**.)
+**Last updated:** 2026-11-16 (**#360** MERGED @ **`fc75fe46`** · fresh prod DB backup **COMPLETE** · repo Alembic **035** · prod still **030** / BE `df93307a` / FE `e9bbc42c` · Social **NOT DEPLOYED** · migrate/deploy still **NO-GO** · reward flags unset→defaults **FALSE**.)
 
-**Phase:** FashionRise Social **on `main` through #358/#359; read-only production preflight done; no mutations**. Final migrate/deploy still requires **separate PM authorization**.
+**Phase:** FashionRise Social **on `main`; RO preflight + authorized prod DB backup done**. Migrate/deploy still requires **separate PM authorization**.
 
 ## FashionRise Social — scope & progress
 
@@ -20,13 +20,14 @@
 | **Docs status** | #356 merge + VPS staging-isolation STOP | **Merged** — #357 → `main` @ **`29e426eb`** |
 | **035 fix** | Gallery check allows croquis-only My Models rows · **non-destructive downgrade** (refuse if croquis-only rows exist) | **Merged** — #358 → `main` @ **`e3809250`** · tip `4badbb8e` · Alembic **035** · **not deployed** |
 | **Docs #358** | Merge status + NO-GO handoff | **Merged** — #359 → `main` @ **`73f13af3`** · tip `0c643d32` |
-| **Prod preflight** | Read-only VPS release preflight (no mutations) | **COMPLETE 2026-11-16** · verdict **NO-GO** until fresh DB backup + migrate/deploy authorize |
+| **Prod preflight** | Read-only VPS release preflight (no mutations) | **COMPLETE 2026-11-16** · [#360](https://github.com/perielad2-netizen/FashionRise/pull/360) → `main` @ **`fc75fe46`** |
+| **Prod DB backup** | One authorized `pg_dump -Fc` of `fashionrise_beta` (no migrate/deploy) | **COMPLETE 2026-11-16** · archive readable · **not** a restore drill · migrate still **NO-GO** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** After PM reviews preflight — authorize **fresh production `pg_dump` of `fashionrise_beta`** (not yet run), then separately authorize migrate **030→035** + BE/FE deploy at **`e3809250`** (or newer main) with reward flags explicitly **FALSE** and launch boundaries **empty**. **No VPS mutations until that authorize.**
+**Exact next step:** **Separate PM authorization** for production migrate **030→035** + matching BE/FE deploy (reward flags explicitly **FALSE**, launch boundaries **empty**, Fitting Room gates unchanged). Fresh backup is done. **No further VPS mutations until that authorize.**
 
 ## Release roadmap (source of truth)
 
@@ -37,7 +38,7 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **#349–#359 merged · disposable PASS · RO preflight COMPLETE · NOT DEPLOYED** | Main **`73f13af3`** · repo Alembic **035** · prod **030** |
+| **FashionRise Social** | **#349–#360 merged · disposable PASS · RO preflight + DB backup COMPLETE · NOT DEPLOYED** | Main **`fc75fe46`** · repo Alembic **035** · prod **030** |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
@@ -62,6 +63,26 @@
 | Competition / streak | Explicit `tick_competitions` ×2 + streak check-in · **0** `star_payouts` · streak `rewards_enabled=false` · `stars_awarded=0` |
 | Disposable cleanup | Prior social DBs dropped · 035 path test DB may remain local-only · **no VPS touch** |
 | Verdict | Disposable Social stack **validated**. **Production remains NO-GO** — #358 now merged; still needs separate PM prod authorize. |
+
+## FashionRise Social — authorized production DB backup (2026-11-16) — migrate still NO-GO
+
+Authorized scope: merge docs **#360** + **one** complete `fashionrise_beta` custom-format dump + non-destructive archive verification. **No** Alembic change, deploy, restart, `.env` edit, restore, or cron change.
+
+| Item | Result |
+|---|---|
+| #360 merge | **`fc75fe46`** · tip `4147da97` |
+| Target | Local peer `postgres` → DB **`fashionrise_beta` only** · Alembic **030** before/after |
+| Method | `pg_dump -Fc` (did **not** run unmodified `deploy/backup_postgres.sh` — wrong default DB/path/format) |
+| Destination (host-only) | `/var/backups/fashionrise/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump` · dir **0700** · file **0600** root:root |
+| Completed (UTC) | **2026-11-16T13:00:02Z** · duration ~7s · `pg_dump` exit **0** |
+| Size / checksum | **180,501,856** bytes · SHA-256 **`198ecc92211a2a91aa6d0c6686dcc6afa4c85cf066d5c030ac79786ac630bd83`** |
+| PostgreSQL | **16.15** (Ubuntu 16.15-0ubuntu0.24.04.1) |
+| `pg_restore --list` | exit **0** · TOC has `alembic_version`, `users`, `gallery_items`, `personal_croquis`, `user_consent_events` · **42** TABLE DATA entries · Social tables absent (expected at 030) |
+| Restore drill | **NOT performed** — list verifies readability only |
+| Post-backup prod | Alembic still **030** · `/health` **200** · `fashionrise-api`/`postgresql`/`nginx` **active** · BE **`df93307a`** · FE **`e9bbc42c`** unchanged |
+| Data handling | Backup **stays on VPS** · not copied to GitHub/agent · no credentials in docs |
+| Remaining blockers | No isolated staging · large tip jump · must set reward flags FALSE on deploy · **no verified restore drill** |
+| Next | Separate PM authorize migrate **030→035** + BE/FE deploy |
 
 ## FashionRise Social — read-only production preflight (2026-11-16) — NO-GO
 
@@ -88,10 +109,10 @@ Authorized scope: merge docs **#359** + **read-only** VPS inspection only. **No*
 | Verdict | **NO-GO for migrate/deploy.** Preflight complete. Blockers: **no fresh pre-change DB backup**, no restore drill, no isolated staging, reward flags must be set explicitly FALSE on deploy, large code jump `df93307a`→`e3809250+`. |
 
 ### Recommended production sequence (only after separate PM OK)
-1. Fresh `pg_dump` of `fashionrise_beta` (custom + gzip) to a dated path; record size + `gzip -t` / `pg_restore -l`
+1. ~~Fresh `pg_dump -Fc` of `fashionrise_beta`~~ **DONE** — `…/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump`
 2. Snapshot/preserve current BE SHA `df93307a` + FE symlink `e9bbc42c` (+ prior FE dirs)
 3. Brief quiet window → `alembic upgrade head` (**030→035**) → confirm `alembic current=035`
-4. Deploy BE @ `e3809250`/`73f13af3+` with **explicit** `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`, `FASHIONRISE_STREAK_REWARDS_ENABLED=false`, empty launch boundaries; **keep** Fitting Room gates unchanged
+4. Deploy BE @ `e3809250`/`fc75fe46+` with **explicit** `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`, `FASHIONRISE_STREAK_REWARDS_ENABLED=false`, empty launch boundaries; **keep** Fitting Room gates unchanged
 5. Deploy matching FE Social tip; `nginx -t` + reload only as needed for FE symlink
 6. Smoke Social + cleanup queue + confirm **zero** weekly/streak payouts + Fitting Room/Studio/auth OK
 
@@ -136,9 +157,9 @@ Authorized scope: merge docs **#359** + **read-only** VPS inspection only. **No*
 | Disposable validation | Isolated local Social E2E **PASS** · Alembic-path 034↔035 **PASS** |
 | Read-only prod preflight | **COMPLETE** — baseline matches prior report · migrations compatible · **no mutations** |
 | Weekly / streak rewards | Prod flags **UNSET** · code defaults **FALSE** · must set explicitly on deploy · disposable **0** payouts |
-| Production backup | Newest full dump **~113h old** (2026-11-11) · integrity OK · **fresh dump required before migrate** · restore drill **not verified** |
-| Remaining blockers | Fresh backup · no staging isolate · large BE tip jump · explicit reward env lines |
-| Verdict | **NO-GO for migrate/deploy.** Preflight OK for planning. **Separate PM authorize** for backup, then migrate/deploy. |
+| Production backup | **Fresh `-Fc` dump COMPLETE** (2026-11-16T13:00:02Z) · `pg_restore --list` OK · **restore drill not verified** |
+| Remaining blockers | No staging isolate · large BE tip jump · explicit reward env lines · no restore drill |
+| Verdict | **NO-GO for migrate/deploy.** Backup gate cleared. **Separate PM authorize** migrate/deploy only. |
 
 ### Exact proposed production rollout order (only after separate PM OK)
 1. Read-only preflight + verify backup tooling (`deploy/backup_postgres.sh` / `pg_dump` of `fashionrise_beta`)
@@ -2589,7 +2610,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action (FashionRise Social):** PM decision on preflight — if proceeding, authorize **fresh prod DB backup first**, then a **separate** migrate **030→035** + BE/FE deploy authorize. Until then: **no VPS mutations**.
+1. **Exact next action (FashionRise Social):** Separate **PM migrate/deploy authorization** (030→035 + BE/FE) — fresh backup already complete. Until then: **no VPS mutations**.
 2. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
 3. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
 4. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
