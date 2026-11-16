@@ -58,9 +58,9 @@
 .immersiveExit {
   position: absolute;
   z-index: 40;
-  /* Inside the look frame — nudged left toward the image edge. */
+  /* Inside the look frame — inset from the left edge (not flush left). */
   top: calc(22px + env(safe-area-inset-top, 0px));
-  left: calc(4px + env(safe-area-inset-left, 0px));
+  left: calc(14px + env(safe-area-inset-left, 0px));
   pointer-events: none;
 }
 
