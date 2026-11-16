@@ -327,7 +327,7 @@ describe('My Designs navigation and library', () => {
     expect(within(nav).getByRole('button', { name: 'Home' })).not.toBeDisabled()
     expect(within(nav).queryByRole('button', { name: 'Design Book' })).toBeNull()
     expect(within(nav).queryByRole('button', { name: 'Discover' })).toBeNull()
-    expect(within(nav).getByRole('button', { name: 'Runway' })).not.toBeDisabled()
+    expect(within(nav).getByRole('button', { name: 'FashionRise' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
@@ -337,9 +337,9 @@ describe('My Designs navigation and library', () => {
     renderAt('/studio')
     await ready()
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
-    fireEvent.click(within(nav).getByRole('button', { name: 'Runway' }))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
-    expect(within(nav).getByRole('button', { name: 'Runway' })).toHaveAttribute(
+    fireEvent.click(within(nav).getByRole('button', { name: 'FashionRise' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'FashionRise' })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -350,7 +350,10 @@ describe('My Designs navigation and library', () => {
     await ready()
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
     fireEvent.click(within(nav).getByRole('button', { name: 'Home' }))
-    expect(await screen.findByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /Sketch it\. See it come to life\./i }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('home-open-fashionrise')).toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
     expect(await screen.findByRole('heading', { name: 'New Design' })).toBeInTheDocument()

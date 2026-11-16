@@ -34,12 +34,6 @@ const DESTINATIONS: Array<{
     icon: Images,
   },
   {
-    id: 'runway',
-    label: 'Runway',
-    hint: 'FashionRise Runway — share, like, and score looks.',
-    icon: Star,
-  },
-  {
     id: 'croquis',
     label: 'My Models',
     hint: 'Personal croquis for try-on and sketching.',
@@ -82,15 +76,26 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
             Turn your fashion ideas into stunning AI creations — or jump back into saved designs,
             looks, and models.
           </p>
-          <button
-            type="button"
-            className={styles.primaryCta}
-            onClick={() => onNavigate('create')}
-            data-testid="home-start-creating"
-          >
-            <Sparkles size={18} aria-hidden />
-            Start creating
-          </button>
+          <div className={styles.heroCtas}>
+            <button
+              type="button"
+              className={styles.featuredCta}
+              onClick={() => onNavigate('runway')}
+              data-testid="home-open-fashionrise"
+            >
+              <Star size={18} aria-hidden />
+              FashionRise
+            </button>
+            <button
+              type="button"
+              className={styles.primaryCta}
+              onClick={() => onNavigate('create')}
+              data-testid="home-start-creating"
+            >
+              <Sparkles size={18} aria-hidden />
+              Start creating
+            </button>
+          </div>
         </div>
       </header>
 

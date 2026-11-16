@@ -57,7 +57,7 @@ import {
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
-import { FriendProfilePanel } from '@/shell/components/FriendProfilePanel'
+import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -68,25 +68,31 @@ type Props = {
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; circle: GalleryItem[]; top10: GalleryItem[] }
+  | {
+      status: 'ready'
+      circle: GalleryItem[]
+      following: GalleryItem[]
+      top10: GalleryItem[]
+    }
 
 type FriendsState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
 
-type TabId = 'feed' | 'top' | 'friends'
-type BrowseSheet = 'top10' | 'circle'
+type TabId = 'feed' | 'following' | 'top' | 'friends'
+type BrowseSheet = 'top10' | 'circle' | 'following'
 type TopLimit = 10 | 20 | 50
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
   { id: 'feed', label: 'Feed', hint: 'Looks from you and your friends only' },
+  { id: 'following', label: 'Following', hint: 'Looks from designers you follow' },
   { id: 'top', label: 'Top', hint: 'Worldwide top liked and rated looks' },
   { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
-const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
+const SCORE_HINT = 'Looks earn FashionRise scores from likes + ratings (1–10).'
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
@@ -112,6 +118,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [pushLocked, setPushLocked] = useState(false)
   const [pushNotice, setPushNotice] = useState<string | null>(null)
   const [pushNeedsGesture, setPushNeedsGesture] = useState(false)
+  const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -276,12 +283,18 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       if (tab === 'top') {
         const top10 = await listGallery({ sort: 'top10', limit: topLimit, signal })
         if (signal?.aborted) return
-        setState({ status: 'ready', circle: [], top10 })
+        setState({ status: 'ready', circle: [], following: [], top10 })
+        return
+      }
+      if (tab === 'following') {
+        const following = await listGallery({ sort: 'following', limit: 48, signal })
+        if (signal?.aborted) return
+        setState({ status: 'ready', circle: [], following, top10: [] })
         return
       }
       const circle = await listGallery({ sort: 'circle', limit: 48, signal })
       if (signal?.aborted) return
-      setState({ status: 'ready', circle, top10: [] })
+      setState({ status: 'ready', circle, following: [], top10: [] })
     } catch (err) {
       if (signal?.aborted) return
       const message =
@@ -289,7 +302,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Could not load FashionRise Runway'
+            : 'Could not load FashionRise'
       setState({ status: 'error', message })
     }
   }, [tab, topLimit])
@@ -373,10 +386,22 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       return {
         status: 'ready',
         circle: rewrite(prev.circle),
+        following: rewrite(prev.following),
         top10: rewrite(prev.top10),
       }
     })
   }, [])
+
+  if (viewingDesigner) {
+    return (
+      <section className={styles.screen} aria-label="Designer profile">
+        <FriendProfilePanel
+          friend={viewingDesigner}
+          onBack={() => setViewingDesigner(null)}
+        />
+      </section>
+    )
+  }
 
   return (
     <section
@@ -386,16 +411,18 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     >
       <header className={styles.head}>
         <div className={styles.titleBlock}>
-          <p className={styles.eyebrow}>FashionRise</p>
+          <p className={styles.eyebrow}>Social fashion</p>
           <h1 id="runway-title" className={styles.title}>
-            Runway
+            FashionRise
           </h1>
           <p className={styles.subtitle}>
             {tab === 'top'
               ? `Worldwide rankings of the top fashion looks, based on likes and ratings. ${SCORE_HINT}`
-              : tab === 'feed'
-                ? `Your friends circle feed — looks from you and people you follow. ${SCORE_HINT}`
-                : 'Add friends and manage your private circle.'}
+              : tab === 'following'
+                ? `Designers you follow — new looks as they publish. ${SCORE_HINT}`
+                : tab === 'feed'
+                  ? `Your friends circle feed — looks from you and your friends. ${SCORE_HINT}`
+                  : 'Add friends and manage your private circle.'}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -406,12 +433,18 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             <Sparkles size={16} aria-hidden />
             Start creating
           </button>
-          {tab === 'feed' || tab === 'top' ? (
+          {tab === 'feed' || tab === 'following' || tab === 'top' ? (
             <button
               type="button"
               className={styles.refreshBtn}
               onClick={() => void load()}
-              aria-label={tab === 'top' ? 'Refresh Top rankings' : 'Refresh feed'}
+              aria-label={
+                tab === 'top'
+                  ? 'Refresh Top rankings'
+                  : tab === 'following'
+                    ? 'Refresh Following feed'
+                    : 'Refresh feed'
+              }
             >
               <RefreshCw size={14} aria-hidden />
               Refresh
@@ -452,7 +485,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         />
       </div>
 
-      <div className={styles.tabs} role="tablist" aria-label="Runway views">
+      <div className={styles.tabs} role="tablist" aria-label="FashionRise views">
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -466,6 +499,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           >
             {item.id === 'friends' ? <Users size={14} aria-hidden /> : null}
             {item.id === 'feed' ? <Users size={14} aria-hidden /> : null}
+            {item.id === 'following' ? <UserPlus size={14} aria-hidden /> : null}
             {item.id === 'top' ? <Crown size={14} aria-hidden /> : null}
             {item.label}
           </button>
@@ -487,7 +521,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           />
         ) : state.status === 'loading' ? (
           <p className={styles.status} role="status">
-            Loading Runway…
+            Loading FashionRise…
           </p>
         ) : state.status === 'error' ? (
           <EmptyState
@@ -566,11 +600,61 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       viewerId={viewerId}
                       viewerUsername={viewerUsername}
                       onItemChange={patchItem}
+                      onOpenDesigner={(designer) => setViewingDesigner(designer)}
                     />
                   ))}
                 </ul>
               )}
             </div>
+          </div>
+        ) : tab === 'following' ? (
+          <div className={styles.feedHub}>
+            <div className={styles.rankBoardHead}>
+              <h2 className={styles.sectionTitle}>
+                <UserPlus size={18} aria-hidden />
+                Following
+              </h2>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => setBrowseSheet('following')}
+                data-testid="runway-open-following"
+              >
+                Open full feed
+              </button>
+            </div>
+
+            {state.following.length === 0 ? (
+              <EmptyState
+                title="No follows yet"
+                body="Follow designers from their FashionRise profiles to fill this feed."
+                actions={
+                  <div className={styles.feedHubHints}>
+                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('top')}>
+                      Browse Top
+                    </button>
+                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('feed')}>
+                      Friends feed
+                    </button>
+                  </div>
+                }
+              />
+            ) : (
+              <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Following feed">
+                {state.following.map((item) => (
+                  <RunwayCard
+                    key={item.id}
+                    item={item}
+                    layout="stack"
+                    isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                    viewerId={viewerId}
+                    viewerUsername={viewerUsername}
+                    onItemChange={patchItem}
+                    onOpenDesigner={(designer) => setViewingDesigner(designer)}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
         ) : (
           <div className={styles.feedHub}>
@@ -605,7 +689,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                 }
               />
             ) : (
-              <ul className={styles.rankList} aria-label="Friends feed">
+              <ul className={`${styles.rankList} ${styles.feedSnap}`} aria-label="Friends feed">
                 {state.circle.map((item) => (
                   <RunwayCard
                     key={item.id}
@@ -615,6 +699,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                     viewerId={viewerId}
                     viewerUsername={viewerUsername}
                     onItemChange={patchItem}
+                    onOpenDesigner={(designer) => setViewingDesigner(designer)}
                   />
                 ))}
               </ul>
@@ -626,7 +711,13 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       {browseSheet && state.status === 'ready' ? (
         <RunwayBrowseSheet
           kind={browseSheet}
-          items={browseSheet === 'top10' ? state.top10 : state.circle}
+          items={
+            browseSheet === 'top10'
+              ? state.top10
+              : browseSheet === 'following'
+                ? state.following
+                : state.circle
+          }
           viewerId={viewerId}
           viewerUsername={viewerUsername}
           onItemChange={patchItem}
@@ -635,6 +726,10 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           onOpenFriends={() => {
             setBrowseSheet(null)
             setTab('friends')
+          }}
+          onOpenDesigner={(designer) => {
+            setBrowseSheet(null)
+            setViewingDesigner(designer)
           }}
         />
       ) : null}
@@ -651,6 +746,7 @@ function RunwayBrowseSheet({
   onClose,
   onOpenLooks,
   onOpenFriends,
+  onOpenDesigner,
 }: {
   kind: BrowseSheet
   items: GalleryItem[]
@@ -660,13 +756,21 @@ function RunwayBrowseSheet({
   onClose: () => void
   onOpenLooks: () => void
   onOpenFriends: () => void
+  onOpenDesigner: (designer: DesignerRef) => void
 }) {
   const titleId = useId()
   const isTop10 = kind === 'top10'
-  const title = isTop10 ? 'Top rankings worldwide' : 'My circle'
+  const isFollowing = kind === 'following'
+  const title = isTop10
+    ? 'Top rankings worldwide'
+    : isFollowing
+      ? 'Following'
+      : 'My circle'
   const hint = isTop10
     ? 'Most liked public looks across FashionRise — scroll to see the full board.'
-    : 'Only your looks and your friends’ published looks — scroll down to see more.'
+    : isFollowing
+      ? 'Looks from designers you follow — scroll down to see more.'
+      : 'Only your looks and your friends’ published looks — scroll down to see more.'
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -708,7 +812,13 @@ function RunwayBrowseSheet({
           </button>
           <div className={styles.sheetTitleBlock}>
             <h2 id={titleId} className={styles.sheetTitle}>
-              {isTop10 ? <Globe2 size={18} aria-hidden /> : <Users size={18} aria-hidden />}
+              {isTop10 ? (
+                <Globe2 size={18} aria-hidden />
+              ) : isFollowing ? (
+                <UserPlus size={18} aria-hidden />
+              ) : (
+                <Users size={18} aria-hidden />
+              )}
               {title}
             </h2>
             <p className={styles.sheetHint}>{hint}</p>
@@ -718,18 +828,26 @@ function RunwayBrowseSheet({
         <div className={styles.sheetBody}>
           {items.length === 0 ? (
             <EmptyState
-              title={isTop10 ? 'No Top rankings yet' : 'Your circle is quiet'}
+              title={
+                isTop10
+                  ? 'No Top rankings yet'
+                  : isFollowing
+                    ? 'No follows yet'
+                    : 'Your circle is quiet'
+              }
               body={
                 isTop10
                   ? 'Publish a look from My Looks to appear on the worldwide board.'
-                  : 'Publish a look from My Looks, or add friends so their Runway posts show up here.'
+                  : isFollowing
+                    ? 'Follow designers from their FashionRise profiles to fill this feed.'
+                    : 'Publish a look from My Looks, or add friends so their FashionRise posts show up here.'
               }
               actions={
                 <>
                   <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
                     Go to My Looks
                   </button>
-                  {!isTop10 ? (
+                  {!isTop10 && !isFollowing ? (
                     <button type="button" className={styles.ghostBtn} onClick={onOpenFriends}>
                       Add friends
                     </button>
@@ -740,7 +858,9 @@ function RunwayBrowseSheet({
           ) : (
             <ul
               className={styles.sheetList}
-              aria-label={isTop10 ? 'Top rankings worldwide' : 'Circle feed'}
+              aria-label={
+                isTop10 ? 'Top rankings worldwide' : isFollowing ? 'Following feed' : 'Circle feed'
+              }
             >
               {items.map((item, index) => (
                 <RunwayCard
@@ -752,6 +872,7 @@ function RunwayBrowseSheet({
                   viewerId={viewerId}
                   viewerUsername={viewerUsername}
                   onItemChange={onItemChange}
+                  onOpenDesigner={onOpenDesigner}
                 />
               ))}
             </ul>
@@ -958,6 +1079,7 @@ function RunwayCard({
   viewerId,
   viewerUsername,
   onItemChange,
+  onOpenDesigner,
 }: {
   item: GalleryItem
   rank?: number
@@ -967,6 +1089,7 @@ function RunwayCard({
   viewerId: string | null
   viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
+  onOpenDesigner?: (designer: DesignerRef) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
@@ -1162,6 +1285,16 @@ function RunwayCard({
       </div>
       <div className={styles.cardBody}>
         <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
+        {onOpenDesigner && !isOwn ? (
+          <button
+            type="button"
+            className={styles.designerLink}
+            data-testid={`runway-open-designer-${item.user_id}`}
+            onClick={() => onOpenDesigner({ user_id: item.user_id })}
+          >
+            View designer
+          </button>
+        ) : null}
         {ranked ? (
           <div className={styles.rankStats} aria-label="Look stats">
             <span>
@@ -1269,7 +1402,7 @@ function RunwayCard({
               >
                 <header className={styles.chatHead}>
                   <div className={styles.chatHeadText}>
-                    <p className={styles.chatEyebrow}>Runway chat</p>
+                    <p className={styles.chatEyebrow}>FashionRise chat</p>
                     <h3 id={chatTitleId} className={styles.chatTitle}>
                       {item.title || 'Untitled look'}
                     </h3>

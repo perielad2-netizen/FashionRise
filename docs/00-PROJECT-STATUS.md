@@ -3,25 +3,47 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Studio fabrics leather + scale-on-select tip LIVE** — `e9bbc42c`.)
+**Last updated:** 2026-11-16 (**FashionRise Social PR1 merged** · fabrics tip `e9bbc42c` still LIVE.)
 
-**Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
+**Phase:** FashionRise Social platform (PM-approved) in small PRs on top of native Android QA gate. Feature name is **FashionRise** (not “Runway 2.0”). Reuse existing gallery destination `runway`, friends, profiles, follow, and Stars ledger.
+
+## FashionRise Social — scope & progress
+
+| PR | Scope | Status |
+|---|---|---|
+| **PR1** | FashionRise naming + Home featured entry above Create · side menu after Create · Following feed tab · designer profile (follow, reputation, published looks) · keep publish/`destination:'runway'` | **Merged** — #349 |
+| **PR2** | Fair discovery ranking (exposure, engagement rate, diversification, anti-self-vote) | Next |
+| **PR3** | Weekly automated awards (50/20 Stars) + daily login streak (7→10 Stars) | After PR2 |
+
+**Tracked (later):** users create/edit designer profiles · eligible My Models publish with explicit consent.
+
+**Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions.
+
+**Exact next step:** FashionRise Social **PR2 Fair Discovery** for PM review. Android QA stays stable; no store submission from this track.
 
 ## Release roadmap (source of truth)
 
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (`5bf9f879+`); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (`f710af8d+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select |
+| **FashionRise Social** | **PR1 merged · PR2 next** | Fair Discovery next; awards/streaks in PR3. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no weekly Stars awards / login streak in PR2**.
 
-**Exact next step:** Hard-refresh Studio → Fabrics · confirm black/brown leather · no blue velvet · scale appears on tap (preview + slider).
+## FashionRise Social PR1 — feed / profiles / nav (2026-11-16) — MERGED / #349
+
+| Status | Detail |
+|---|---|
+| Product | FashionRise social surface (not Runway 2.0) |
+| FE | Home featured FashionRise above Create · nav FashionRise after Create · Following tab (`sort=following`) · designer profile follow + stats |
+| Reuse | Existing `/gallery`, `/profiles/{id}/follow*`, Friends circle, publish consent |
+| Merge | **#349** → `main` (PM approved) |
 
 ## Studio fabrics — leather + scale-on-select (2026-11-16) — tip LIVE / #351
 
@@ -30,7 +52,7 @@
 | Change | Add **black leather** + **brown leather** · remove **blue velvet** (and charcoal wool) · keep 12 · scale panel on select under Create/Upload · preview + slider only (no Fine/Medium/Coarse) |
 | Staples | Blue denim · White silk · Black cotton · Brown corduroy · Black leather · Brown leather · Blush chiffon |
 | Kept AI | Gold glitter · White lace · Offwhite satin · Stockings · Stitch jeans |
-| PR | [#351](https://github.com/perielad2-netizen/FashionRise/pull/351) `cursor/web-fabric-leather-scale-ux-77c6` @ **`e9bbc42c`** (awaiting merge) |
+| Merge | **#351** → `main` @ **`f710af8d`** |
 | Production FE tip | **`e9bbc42c`** → `/var/www/fashionrise/releases/e9bbc42c-leather-scale-ux` · prior `5bf9f879-fabric-scale-12` |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/5bf9f879-fabric-scale-12 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 

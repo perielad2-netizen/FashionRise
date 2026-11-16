@@ -12,7 +12,7 @@ export type PublicProfile = {
   avatar_url: string | null
   cover_url: string | null
   style_tags: unknown[]
-  /** Prefer counting published Runway looks from listUserGallery instead of this field. */
+  /** Prefer counting published FashionRise looks from listUserGallery instead of this field. */
   published_count: number
   followers_count: number
   likes_received_count: number
@@ -26,12 +26,41 @@ export type PublicProfile = {
   designs_count?: number
 }
 
+export type FollowStatus = {
+  user_id: string
+  following: boolean
+}
+
 export async function getPublicProfile(
   userId: string,
   signal?: AbortSignal,
 ): Promise<PublicProfile> {
   return apiRequest<PublicProfile>(`/profiles/${encodeURIComponent(userId)}`, {
     method: 'GET',
+    signal,
+  })
+}
+
+export async function getFollowStatus(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<FollowStatus> {
+  return apiRequest<FollowStatus>(
+    `/profiles/${encodeURIComponent(userId)}/follow-status`,
+    { method: 'GET', signal },
+  )
+}
+
+export async function followCreator(userId: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<void>(`/profiles/${encodeURIComponent(userId)}/follow`, {
+    method: 'POST',
+    signal,
+  })
+}
+
+export async function unfollowCreator(userId: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<void>(`/profiles/${encodeURIComponent(userId)}/follow`, {
+    method: 'DELETE',
     signal,
   })
 }

@@ -32,8 +32,15 @@ vi.mock('@/services/galleryApi', () => ({
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
 }))
 
+const getFollowStatus = vi.fn()
+const followCreator = vi.fn()
+const unfollowCreator = vi.fn()
+
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
+  getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
+  followCreator: (...args: unknown[]) => followCreator(...args),
+  unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
 }))
 
 vi.mock('@/services/friendsApi', () => ({
@@ -123,6 +130,9 @@ describe('RunwayScreen', () => {
     requestFriendByUsername.mockReset()
     listUserGallery.mockReset()
     getPublicProfile.mockReset()
+    getFollowStatus.mockReset()
+    followCreator.mockReset()
+    unfollowCreator.mockReset()
     removeFriend.mockReset()
     enableRunwayPush.mockReset()
     disableRunwayPush.mockReset()
@@ -141,6 +151,7 @@ describe('RunwayScreen', () => {
     listFriendRequests.mockResolvedValue([])
     listUserGallery.mockResolvedValue([])
     getPublicProfile.mockResolvedValue(null)
+    getFollowStatus.mockResolvedValue({ user_id: 'friend-1', following: false })
   })
 
   async function openCircleSheet() {
@@ -155,12 +166,32 @@ describe('RunwayScreen', () => {
     return screen.findByRole('dialog', { name: /Top rankings worldwide/i })
   }
 
+  it('loads Following tab from following sort', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'following') {
+        return [{ ...circleItem, id: 'follow-1', title: 'Followed designer look' }]
+      }
+      if (opts?.sort === 'top10') return [{ ...topItem }]
+      return [{ ...circleItem }]
+    })
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    fireEvent.click(await screen.findByTestId('runway-tab-following'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'following' }),
+      ),
+    )
+    expect(await screen.findByText('Followed designer look')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId(`runway-open-designer-${circleItem.user_id}`))
+    expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+  })
+
   it('keeps Feed and Top as separate pages', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
     )
@@ -283,7 +314,7 @@ describe('RunwayScreen', () => {
     const dialog = await screen.findByRole('dialog', { name: /Friend circle look/i })
     expect(within(dialog).getByText('Love this silhouette')).toBeInTheDocument()
     expect(within(dialog).getByText('@friendOne')).toBeInTheDocument()
-    expect(within(dialog).getByText(/Runway chat/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/FashionRise chat/i)).toBeInTheDocument()
 
     fireEvent.click(within(dialog).getByRole('button', { name: /Like comment/i }))
     await waitFor(() => expect(likeGalleryComment).toHaveBeenCalledWith('c1'))

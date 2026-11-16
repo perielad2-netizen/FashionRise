@@ -744,6 +744,34 @@
   white-space: nowrap;
 }
 
+.designerLink {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fr-pink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.designerLink:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.feedSnap {
+  scroll-snap-type: y proximity;
+  scroll-padding-block: 12px;
+}
+
+.feedSnap > li {
+  scroll-snap-align: start;
+}
+
 .cardMeta {
   margin: 0;
   display: flex;

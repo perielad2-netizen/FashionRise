@@ -3,15 +3,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FriendProfilePanel } from './FriendProfilePanel'
 
 const getPublicProfile = vi.fn()
+const getFollowStatus = vi.fn()
+const followCreator = vi.fn()
+const unfollowCreator = vi.fn()
 const listUserGallery = vi.fn()
 
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
+  getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
+  followCreator: (...args: unknown[]) => followCreator(...args),
+  unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
 }))
 
 vi.mock('@/services/galleryApi', () => ({
   listUserGallery: (...args: unknown[]) => listUserGallery(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
+}))
+
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: { id: 'viewer-1', username: 'viewer' },
+    isAuthenticated: true,
+    bootstrapping: false,
+  }),
 }))
 
 const friend = {
@@ -24,6 +38,9 @@ const friend = {
 describe('FriendProfilePanel (V2-0010)', () => {
   beforeEach(() => {
     getPublicProfile.mockReset()
+    getFollowStatus.mockReset()
+    followCreator.mockReset()
+    unfollowCreator.mockReset()
     listUserGallery.mockReset()
     getPublicProfile.mockResolvedValue({
       id: 'p1',
@@ -44,6 +61,7 @@ describe('FriendProfilePanel (V2-0010)', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     })
+    getFollowStatus.mockResolvedValue({ user_id: 'friend-1', following: false })
     listUserGallery.mockResolvedValue([
       {
         id: 'g1',
@@ -71,20 +89,33 @@ describe('FriendProfilePanel (V2-0010)', () => {
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
     expect(screen.getByTestId('friend-profile-bio')).toHaveTextContent(/Public runway creator/i)
     expect(screen.getByTestId('friend-published-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('designer-followers')).toHaveTextContent('3')
+    expect(screen.getByTestId('designer-likes')).toHaveTextContent('10')
+    expect(screen.getByTestId('designer-reputation')).toHaveTextContent('40')
     expect(screen.queryByText('99')).not.toBeInTheDocument()
     expect(screen.getByTestId('friend-look-g1')).toBeInTheDocument()
     expect(getPublicProfile).toHaveBeenCalledWith('friend-1', expect.any(AbortSignal))
     expect(listUserGallery).toHaveBeenCalledWith('friend-1', expect.any(AbortSignal))
+    expect(await screen.findByTestId('designer-follow-btn')).toHaveTextContent(/Follow/i)
 
     fireEvent.click(screen.getByTestId('friend-profile-back'))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('follows a designer from the profile', async () => {
+    followCreator.mockResolvedValue(undefined)
+    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    const btn = await screen.findByTestId('designer-follow-btn')
+    fireEvent.click(btn)
+    await waitFor(() => expect(followCreator).toHaveBeenCalledWith('friend-1'))
+    expect(btn).toHaveTextContent(/Following/i)
   })
 
   it('shows an empty state when the friend has no published looks', async () => {
     listUserGallery.mockResolvedValue([])
     render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
     expect(await screen.findByTestId('friend-looks-empty')).toHaveTextContent(
-      /No published Runway looks/i,
+      /No published FashionRise looks/i,
     )
     expect(screen.getByTestId('friend-published-count')).toHaveTextContent('0')
   })

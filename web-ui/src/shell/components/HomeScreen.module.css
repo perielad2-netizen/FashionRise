@@ -76,8 +76,38 @@
   color: var(--fr-muted);
 }
 
-.primaryCta {
+.heroCtas {
   margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.featuredCta {
+  min-height: 48px;
+  padding: 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(249, 168, 212, 0.45);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(214, 51, 132, 0.28), rgba(212, 175, 155, 0.18));
+  color: var(--fr-text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  animation: homePulse 2.8s ease-in-out 700ms infinite;
+}
+
+.featuredCta:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 3px;
+}
+
+.primaryCta {
   min-height: 48px;
   padding: 0 22px;
   display: inline-flex;
@@ -92,7 +122,6 @@
   font-weight: 700;
   cursor: pointer;
   box-shadow: var(--fr-glow);
-  animation: homePulse 2.8s ease-in-out 700ms infinite;
 }
 
 .primaryCta:focus-visible {
@@ -214,6 +243,12 @@
     max-width: none;
   }
 
+  .heroCtas {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .featuredCta,
   .primaryCta {
     width: 100%;
   }
@@ -233,6 +268,7 @@
 @media (prefers-reduced-motion: reduce) {
   .copy,
   .destinations,
+  .featuredCta,
   .primaryCta {
     animation: none;
   }
