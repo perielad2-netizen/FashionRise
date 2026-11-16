@@ -22,14 +22,14 @@
   right: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* Left inset clears the shell immersive nav exit control. */
+  gap: 0;
+  /* Thin top strip only — look flows edge-to-edge beneath. */
   padding:
-    calc(8px + env(safe-area-inset-top, 0px))
-    12px
+    calc(6px + env(safe-area-inset-top, 0px))
     10px
-    calc(52px + env(safe-area-inset-left, 0px));
-  background: linear-gradient(180deg, rgba(8, 10, 16, 0.82) 0%, rgba(8, 10, 16, 0.35) 70%, transparent 100%);
+    4px
+    calc(10px + env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, transparent 100%);
   pointer-events: none;
 }
 
@@ -42,16 +42,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-height: 32px;
 }
 
-.brand {
-  margin: 0;
-  font-family: var(--fr-serif);
-  font-size: 1.15rem;
+.modeLabel {
+  font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.02em;
-  color: #fff;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
 }
 
 .chromeActions {
@@ -61,17 +60,16 @@
 }
 
 .iconBtn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(12, 16, 28, 0.55);
+  border: 0;
+  background: rgba(0, 0, 0, 0.28);
   color: #fff;
   cursor: pointer;
-  backdrop-filter: blur(8px);
 }
 
 .iconBtn:focus-visible {
@@ -79,52 +77,51 @@
   outline-offset: 2px;
 }
 
-.modeRow {
+.menuSectionLabel {
+  margin: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.menuModeRow {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(12, 16, 28, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  overflow-x: auto;
-  scrollbar-width: none;
+  padding: 4px 4px 8px;
 }
 
-.modeRow::-webkit-scrollbar {
-  display: none;
-}
-
-.modeBtn,
-.modeActive {
-  flex: 1 0 auto;
-  min-height: 30px;
-  padding: 0 12px;
+.menuModeBtn,
+.menuModeActive {
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-  white-space: nowrap;
-  color: rgba(255, 255, 255, 0.72);
-  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.modeActive {
+.menuModeActive {
   color: #fff;
   background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
 }
 
-.modeBtn:focus-visible,
-.modeActive:focus-visible {
+.menuModeBtn:focus-visible,
+.menuModeActive:focus-visible {
   outline: 2px solid #f9a8d4;
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .menuPanel {
   position: absolute;
   z-index: 8;
-  top: calc(52px + env(safe-area-inset-top, 0px));
+  top: calc(40px + env(safe-area-inset-top, 0px));
   right: 10px;
   width: min(280px, calc(100% - 20px));
   display: grid;
@@ -233,8 +230,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 22%),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.28) 38%, transparent 58%);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, transparent 16%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.2) 34%, transparent 52%);
   pointer-events: none;
 }
 
@@ -244,12 +241,12 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding:
-    calc(88px + env(safe-area-inset-top, 0px))
-    12px
-    calc(22px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px))
-    14px;
+    calc(40px + env(safe-area-inset-top, 0px))
+    6px
+    calc(14px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px))
+    12px;
   pointer-events: none;
 }
 
@@ -261,15 +258,23 @@
   flex: 1;
   min-width: 0;
   display: grid;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.designerRow {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding-right: 8px;
+  min-width: 0;
 }
 
 .designerChip {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   max-width: 100%;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -279,90 +284,144 @@
 }
 
 .designerAvatar {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   background: rgba(214, 51, 132, 0.55);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .designerChipText {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
 .designerChipText strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 
 .designerChipText span {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.88);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
+.followChip,
+.followChipOn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.followChipOn {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.followChip:disabled,
+.followChipOn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* Reels/TikTok-scale rail: glyph + count, no heavy tiles. */
 .immersiveActions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   flex: 0 0 auto;
+  width: 40px;
+  padding-bottom: 2px;
 }
 
 .immersiveActions .likeBtn,
 .immersiveActions .likeBtnOn,
 .immersiveActions .commentBtn,
 .immersiveActions .commentBtnOn,
-.immersiveActions .followBtn,
-.immersiveActions .followBtnOn,
 .immersiveActions .statChip {
+  display: inline-flex;
   flex-direction: column;
-  min-width: 48px;
-  min-height: 48px;
-  padding: 8px 6px;
-  border-radius: 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   font-size: 11px;
-  background: rgba(10, 12, 20, 0.42);
-  border-color: rgba(255, 255, 255, 0.18);
+  font-weight: 700;
+  line-height: 1.1;
+  background: transparent;
   color: #fff;
-  backdrop-filter: blur(8px);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.immersiveActions .likeBtnOn,
+.immersiveActions .commentBtnOn {
+  color: #fecdd3;
 }
 
 .immersiveScore {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  min-width: 48px;
-  padding: 8px 6px;
-  border-radius: 16px;
-  background: rgba(10, 12, 20, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #fff;
-  backdrop-filter: blur(8px);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.immersiveScore .scoreLabelText {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .immersiveScore .scoreSelect {
-  width: 100%;
-  min-height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 36px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(0, 0, 0, 0.35);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
+  text-align: center;
 }
 
 .followBtn,

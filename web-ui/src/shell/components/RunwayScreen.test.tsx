@@ -318,6 +318,11 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId('runway-more-menu'))
   }
 
+  async function selectFeedTab(tabId: 'discover' | 'feed' | 'following' | 'top') {
+    await openMoreMenu()
+    fireEvent.click(await screen.findByTestId(`runway-tab-${tabId}`))
+  }
+
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
@@ -356,13 +361,13 @@ describe('RunwayScreen', () => {
   })
 
   async function openCircleSheet() {
-    fireEvent.click(await screen.findByTestId('runway-tab-feed'))
+    await selectFeedTab('feed')
     fireEvent.click(await screen.findByTestId('runway-open-circle'))
     return screen.findByRole('list', { name: 'Circle feed' })
   }
 
   async function openTop10Sheet() {
-    fireEvent.click(await screen.findByTestId('runway-tab-top'))
+    await selectFeedTab('top')
     fireEvent.click(await screen.findByTestId('runway-open-top10'))
     return screen.findByRole('dialog', { name: /Top rankings worldwide/i })
   }
@@ -376,7 +381,7 @@ describe('RunwayScreen', () => {
       return [{ ...circleItem }]
     })
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    fireEvent.click(await screen.findByTestId('runway-tab-following'))
+    await selectFeedTab('following')
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(
         expect.objectContaining({ sort: 'following' }),
@@ -473,6 +478,7 @@ describe('RunwayScreen', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
     expect(screen.queryByText(/Social fashion/i)).toBeNull()
     expect(screen.queryByText(/Fair Discover/i)).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Discover' })).toBeNull()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
@@ -491,20 +497,22 @@ describe('RunwayScreen', () => {
     await openMoreMenu()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('menuitem', { name: /Start creating/i })).toBeInTheDocument()
+    expect(screen.getByTestId('runway-tab-discover')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('runway-more-menu'))
 
-    fireEvent.click(screen.getByTestId('runway-tab-feed'))
+    await selectFeedTab('feed')
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
     )
     expect(await screen.findByText('Friend circle look')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByTestId('runway-tab-top'))
+    await selectFeedTab('top')
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(
         expect.objectContaining({ sort: 'top10', limit: 10 }),
       ),
     )
+    await openMoreMenu()
     expect(await screen.findByTestId('runway-top-limit')).toBeInTheDocument()
     expect(screen.getByTestId('runway-top-10')).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByText('Worldwide hit')).toBeInTheDocument()
@@ -516,6 +524,7 @@ describe('RunwayScreen', () => {
         expect.objectContaining({ sort: 'top10', limit: 20 }),
       ),
     )
+    fireEvent.click(screen.getByTestId('runway-more-menu'))
 
     const topDialog = await openTop10Sheet()
     expect(within(topDialog).getByText('Worldwide hit')).toBeInTheDocument()

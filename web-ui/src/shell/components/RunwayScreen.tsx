@@ -562,20 +562,16 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       onPointerDown={onRunwayGestureForPush}
     >
       <header className={styles.chrome}>
+        <h1 id="runway-title" className={styles.srOnly}>
+          FashionRise
+        </h1>
         <div className={styles.chromeTop}>
-          <h1 id="runway-title" className={styles.brand}>
-            FashionRise
-          </h1>
+          <span className={styles.modeLabel} aria-live="polite">
+            {tab === 'friends'
+              ? 'Friends'
+              : TABS.find((item) => item.id === tab)?.label ?? 'Discover'}
+          </span>
           <div className={styles.chromeActions}>
-            <button
-              type="button"
-              className={styles.iconBtn}
-              aria-label={pushOn ? 'Push notifications on' : 'Push notifications off'}
-              title="Push notifications"
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              {pushOn ? <Bell size={16} aria-hidden /> : <BellOff size={16} aria-hidden />}
-            </button>
             <button
               type="button"
               className={styles.iconBtn}
@@ -588,55 +584,53 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             </button>
           </div>
         </div>
+      </header>
 
-        {tab !== 'friends' ? (
-          <div className={styles.modeRow} role="tablist" aria-label="FashionRise views">
+      {menuOpen ? (
+        <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
+          <p className={styles.menuSectionLabel}>Feed</p>
+          <div className={styles.menuModeRow} role="tablist" aria-label="FashionRise views">
             {TABS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 role="tab"
                 aria-selected={tab === item.id}
-                className={tab === item.id ? styles.modeActive : styles.modeBtn}
+                className={tab === item.id ? styles.menuModeActive : styles.menuModeBtn}
+                title={item.hint}
+                data-testid={`runway-tab-${item.id}`}
                 onClick={() => {
                   setMenuOpen(false)
                   setTab(item.id)
                 }}
-                title={item.hint}
-                data-testid={`runway-tab-${item.id}`}
               >
                 {item.label}
               </button>
             ))}
           </div>
-        ) : null}
-
-        {tab === 'top' ? (
-          <div
-            className={styles.topLimitRow}
-            role="tablist"
-            aria-label="Worldwide ranking size"
-            data-testid="runway-top-limit"
-          >
-            {TOP_LIMITS.map((limit) => (
-              <button
-                key={limit}
-                type="button"
-                role="tab"
-                aria-selected={topLimit === limit}
-                className={topLimit === limit ? styles.topLimitActive : styles.topLimitBtn}
-                data-testid={`runway-top-${limit}`}
-                onClick={() => setTopLimit(limit)}
-              >
-                Top {limit}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </header>
-
-      {menuOpen ? (
-        <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
+          {tab === 'top' ? (
+            <div
+              className={styles.menuModeRow}
+              role="tablist"
+              aria-label="Worldwide ranking size"
+              data-testid="runway-top-limit"
+            >
+              {TOP_LIMITS.map((limit) => (
+                <button
+                  key={limit}
+                  type="button"
+                  role="tab"
+                  aria-selected={topLimit === limit}
+                  className={topLimit === limit ? styles.menuModeActive : styles.menuModeBtn}
+                  data-testid={`runway-top-${limit}`}
+                  onClick={() => setTopLimit(limit)}
+                >
+                  Top {limit}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <p className={styles.menuSectionLabel}>Account</p>
           {viewerId ? (
             <button
               type="button"
@@ -1576,6 +1570,20 @@ function RunwayCard({
           ? styles.rankBadgeBronze
           : styles.rankBadge
 
+  const followControl =
+    immersive && !isOwn && viewerId ? (
+      <button
+        type="button"
+        className={followingDesigner ? styles.followChipOn : styles.followChip}
+        aria-pressed={followingDesigner}
+        disabled={busy === 'follow' || !followKnown}
+        data-testid={`runway-follow-${item.user_id}`}
+        onClick={() => void onToggleFollow()}
+      >
+        {followingDesigner ? 'Following' : 'Follow'}
+      </button>
+    ) : null
+
   const actionRail = (
     <div className={immersive ? styles.immersiveActions : styles.cardActions}>
       {canReact ? (
@@ -1587,20 +1595,24 @@ function RunwayCard({
           disabled={busy === 'like'}
           onClick={() => void onToggleLike()}
         >
-          <Heart size={immersive ? 22 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+          <Heart size={immersive ? 24 : 13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
           {formatCount(item.likes_count)}
         </button>
       ) : (
         <span className={styles.statChip} title="Others can like your look">
-          <Heart size={12} aria-hidden />
+          <Heart size={immersive ? 24 : 12} aria-hidden />
           {formatCount(item.likes_count)}
         </span>
       )}
       {canReact ? (
         <label className={immersive ? styles.immersiveScore : styles.scoreLabel}>
           <span className={styles.scoreLabelText}>
-            <Star size={immersive ? 18 : 12} aria-hidden />
-            {item.rating_average != null ? item.rating_average.toFixed(1) : 'Rate'}
+            <Star size={immersive ? 22 : 12} aria-hidden />
+            {item.rating_average != null
+              ? item.rating_average.toFixed(1)
+              : immersive
+                ? 'Rate'
+                : 'Score'}
           </span>
           <select
             className={styles.scoreSelect}
@@ -1621,9 +1633,9 @@ function RunwayCard({
         </label>
       ) : (
         <span className={styles.statChip} title="Others can score your look">
-          <Star size={12} aria-hidden />
+          <Star size={immersive ? 22 : 12} aria-hidden />
           {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
-          {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+          {!immersive && item.rating_count > 0 ? ` (${item.rating_count})` : ''}
         </span>
       )}
       {!compact ? (
@@ -1634,11 +1646,11 @@ function RunwayCard({
           aria-expanded={commentsOpen}
           onClick={openComments}
         >
-          <MessageCircle size={immersive ? 20 : 12} aria-hidden />
+          <MessageCircle size={immersive ? 24 : 12} aria-hidden />
           {comments ? comments.length : immersive ? '0' : 'Chat'}
         </button>
       ) : null}
-      {immersive && !isOwn && viewerId ? (
+      {!immersive && !isOwn && viewerId ? (
         <button
           type="button"
           className={followingDesigner ? styles.followBtnOn : styles.followBtn}
@@ -1686,43 +1698,46 @@ function RunwayCard({
           </div>
           <div className={styles.immersiveOverlay}>
             <div className={styles.immersiveMeta}>
-              {onOpenDesigner ? (
-                <button
-                  type="button"
-                  className={styles.designerChip}
-                  data-testid={`runway-open-designer-${item.user_id}`}
-                  onClick={() =>
-                    onOpenDesigner({
-                      user_id: item.user_id,
-                      username: item.username || undefined,
-                    })
-                  }
-                >
-                  <span className={styles.designerAvatar} aria-hidden>
-                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                  </span>
-                  <span className={styles.designerChipText}>
-                    <strong>
-                      {designerLabel ? `@${designerLabel}` : 'View designer'}
-                    </strong>
-                    <span>{item.title || 'Untitled look'}</span>
-                  </span>
-                </button>
-              ) : (
-                <div className={styles.designerChip}>
-                  <span className={styles.designerAvatar} aria-hidden>
-                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
-                  </span>
-                  <span className={styles.designerChipText}>
-                    <strong>
-                      {designerLabel ? `@${designerLabel}` : 'Designer'}
-                    </strong>
-                    <span>{item.title || 'Untitled look'}</span>
-                  </span>
-                </div>
-              )}
+              <div className={styles.designerRow}>
+                {onOpenDesigner ? (
+                  <button
+                    type="button"
+                    className={styles.designerChip}
+                    data-testid={`runway-open-designer-${item.user_id}`}
+                    onClick={() =>
+                      onOpenDesigner({
+                        user_id: item.user_id,
+                        username: item.username || undefined,
+                      })
+                    }
+                  >
+                    <span className={styles.designerAvatar} aria-hidden>
+                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
+                    </span>
+                    <span className={styles.designerChipText}>
+                      <strong>
+                        {designerLabel ? `@${designerLabel}` : 'View designer'}
+                      </strong>
+                      <span>{item.title || 'Untitled look'}</span>
+                    </span>
+                  </button>
+                ) : (
+                  <div className={styles.designerChip}>
+                    <span className={styles.designerAvatar} aria-hidden>
+                      {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
+                    </span>
+                    <span className={styles.designerChipText}>
+                      <strong>
+                        {designerLabel ? `@${designerLabel}` : 'Designer'}
+                      </strong>
+                      <span>{item.title || 'Untitled look'}</span>
+                    </span>
+                  </div>
+                )}
+                {followControl}
+              </div>
               {isOwn ? (
-                <p className={styles.ownHint}>Your look — likes & scores come from others</p>
+                <p className={styles.srOnly}>Your look — likes and scores come from others</p>
               ) : null}
               {actionError && !commentsOpen ? (
                 <p className={styles.cardError} role="alert">
