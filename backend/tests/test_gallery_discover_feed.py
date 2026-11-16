@@ -29,7 +29,7 @@ def _publish(client, db_session, tokens, label: str) -> str:
     return res.json()["runway_item_id"]
 
 
-def test_discover_excludes_older_than_seven_days_and_records_impressions(client, db_session):
+def test_discover_includes_older_publishes_and_records_impressions(client, db_session):
     viewer = register_with_invite(client, db_session, "disc_viewer@example.com", "discViewer")
     author = register_with_invite(client, db_session, "disc_author@example.com", "discAuthor")
     hog = register_with_invite(client, db_session, "disc_hog@example.com", "discHog")
@@ -39,7 +39,7 @@ def test_discover_excludes_older_than_seven_days_and_records_impressions(client,
     fresh_c = _publish(client, db_session, author, "fresh c")
     other = _publish(client, db_session, hog, "other creator")
 
-    # Age one look out of the 7-day window.
+    # Older than the former 7-day hard cut — still part of the endless Discover pool.
     stale_item = db_session.get(GalleryItem, uuid.UUID(fresh_c))
     assert stale_item is not None
     stale_item.created_at = datetime.now(timezone.utc) - timedelta(days=8)
@@ -63,11 +63,20 @@ def test_discover_excludes_older_than_seven_days_and_records_impressions(client,
     assert res.status_code == 200, res.text
     payload = res.json()
     ids = [row["id"] for row in payload]
-    assert fresh_c not in ids
     assert fresh_a in ids or fresh_b in ids
     assert other in ids
-    # Creator diversification: at most 2 from author in the page.
+    # Creator diversification: at most 2 from author in the first page.
     assert sum(1 for i in ids if i in {fresh_a, fresh_b, fresh_c}) <= 2
+
+    # Aged look stays in the pool — if deferred by the per-creator cap, load-more returns it.
+    more = client.get(
+        "/api/v1/gallery?sort=discover&limit=10",
+        headers=_auth(viewer),
+        params=[("exclude", i) for i in ids],
+    )
+    assert more.status_code == 200, more.text
+    pool = set(ids) | {row["id"] for row in more.json()}
+    assert fresh_c in pool
     # FashionRise overlays need real author usernames (not a second N+1 profile round-trip).
     by_id = {row["id"]: row for row in payload}
     if other in by_id:

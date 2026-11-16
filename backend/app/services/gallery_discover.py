@@ -1,9 +1,8 @@
 """FashionRise Fair Discovery ranking (Social PR2).
 
-Pure helpers — no DB. Eligibility is a rolling 7-day window. New designs get
-cold-start exposure; engagement relative to unique impressions raises rank;
-diversify_select_page caps per-creator slots **per page** so pagination stays
-fair without permanently excluding a creator after page 1.
+Pure helpers — no DB. Every public published look is eligible for the endless
+Discover stream. Ranking still prefers cold-start exposure, engagement quality,
+and recency — without hard-dropping older designs from the feed.
 """
 
 from __future__ import annotations
@@ -14,11 +13,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Sequence
 from uuid import UUID
 
-DISCOVER_WINDOW = timedelta(days=7)
+# Soft recency half-life used by discover_score (not a hard eligibility cut).
+RECENCY_HALF_LIFE_HOURS = 36.0
 NEW_EXPOSURE_TARGET = 25
 MAX_PER_CREATOR_DEFAULT = 2
-# Safety only — full 7-day eligible set is ranked; this is not a "newest N" cut.
+# Safety only — full eligible set is ranked; this is not a "newest N" cut.
 ELIGIBLE_HARD_CAP = 10_000
+# Kept for stratified candidate fetch day buckets when the pool is huge.
+DISCOVER_STRATIFY_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -38,17 +40,18 @@ def ensure_utc(value: datetime) -> datetime:
 
 
 def is_discover_eligible(created_at: datetime, *, now: datetime | None = None) -> bool:
+    """All published looks stay eligible; reject only clearly future-dated rows."""
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
     created = ensure_utc(created_at)
-    return created >= now_utc - DISCOVER_WINDOW
+    return created <= now_utc + timedelta(seconds=60)
 
 
 def discover_score(candidate: DiscoverCandidate, *, now: datetime | None = None) -> float:
-    """Higher is better. Ineligible items score -1."""
+    """Higher is better. Future-dated items score -1; age never hard-excludes."""
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
     created = ensure_utc(candidate.created_at)
     age = now_utc - created
-    if age > DISCOVER_WINDOW or age.total_seconds() < -60:
+    if age.total_seconds() < -60:
         return -1.0
 
     unique = max(0, int(candidate.unique_impressions_count or 0))
@@ -56,15 +59,15 @@ def discover_score(candidate: DiscoverCandidate, *, now: datetime | None = None)
         0, int(candidate.rating_count or 0)
     )
 
-    # Cold start: guarantee initial exposure opportunities for new publishes.
+    # Cold start: guarantee initial exposure opportunities for under-seen publishes.
     cold = max(0.0, 1.0 - (unique / float(NEW_EXPOSURE_TARGET)))
 
     # Engagement quality vs unique impressions (Laplace prior avoids /0 spikes).
     quality = engagement / float(unique + 10)
 
-    # Recency within the 7-day window (half-life ~36h).
+    # Soft recency (half-life ~36h) — older looks rank lower but remain in the pool.
     age_hours = max(0.0, age.total_seconds() / 3600.0)
-    recency = math.exp(-age_hours / 36.0)
+    recency = math.exp(-age_hours / RECENCY_HALF_LIFE_HOURS)
 
     return (2.4 * cold) + (3.2 * quality) + (1.1 * recency)
 
@@ -127,3 +130,7 @@ def diversify_select(
     max_per_creator: int = MAX_PER_CREATOR_DEFAULT,
 ) -> list[DiscoverCandidate]:
     return diversify_select_page(scored, limit=limit, max_per_creator=max_per_creator)
+
+
+# Back-compat for callers that still import DISCOVER_WINDOW (stratify span).
+DISCOVER_WINDOW = timedelta(days=DISCOVER_STRATIFY_DAYS)

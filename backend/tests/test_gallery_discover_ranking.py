@@ -36,12 +36,13 @@ def _cand(
     )
 
 
-def test_seven_day_eligibility_window():
+def test_all_ages_remain_eligible_with_soft_recency():
     fresh = _cand(age_hours=24)
     stale = _cand(age_hours=8 * 24)
     assert is_discover_eligible(fresh.created_at, now=NOW)
-    assert not is_discover_eligible(stale.created_at, now=NOW)
-    assert discover_score(stale, now=NOW) < 0
+    assert is_discover_eligible(stale.created_at, now=NOW)
+    assert discover_score(stale, now=NOW) >= 0
+    assert discover_score(fresh, now=NOW) > discover_score(stale, now=NOW)
 
 
 def test_new_designs_outrank_ignored_high_like_monopoly():

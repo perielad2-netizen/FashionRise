@@ -315,11 +315,11 @@ def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
     return list(db.scalars(q).all())
 
 
-def _discover_eligible_filter(cutoff: datetime):
+def _discover_eligible_filter():
+    """All public, moderated-ok publishes — no hard age cut (endless Discover)."""
     return (
         GalleryItem.visibility == "public",
         GalleryItem.moderation_status == "ok",
-        GalleryItem.created_at >= cutoff,
     )
 
 
@@ -337,16 +337,17 @@ def _discover_projection():
 def fetch_discover_candidate_rows(
     db: Session,
     *,
-    cutoff: datetime,
+    cutoff: datetime | None = None,
     now: datetime,
     hard_cap: int = ELIGIBLE_HARD_CAP,
 ):
-    """Bounded candidate set that spans the full 7-day window.
+    """Bounded candidate set over all public publishes.
 
     Under the cap: load every eligible row. Over the cap: take a fair per-day
-    quota (cold-start first) so older eligible days are not wiped by a newest flood.
+    quota across the recent stratify window (cold-start first), then backfill
+    older under-seen looks so the endless feed is not newest-only.
     """
-    filters = _discover_eligible_filter(cutoff)
+    filters = _discover_eligible_filter()
     total = int(
         db.scalar(select(func.count()).select_from(GalleryItem).where(*filters)) or 0
     )
@@ -359,13 +360,14 @@ def fetch_discover_candidate_rows(
             ).all()
         )
 
-    # Stratify across UTC day buckets inside the rolling window.
-    bucket_count = 7
-    per_bucket = max(1, hard_cap // bucket_count)
+    window_start = cutoff if cutoff is not None else (now - DISCOVER_WINDOW)
+    # Stratify across UTC day buckets inside the recent window.
+    bucket_count = max(1, int(DISCOVER_WINDOW.total_seconds() // 86400) or 7)
+    per_bucket = max(1, hard_cap // (bucket_count + 1))
     out: list = []
     seen: set[uuid.UUID] = set()
     for i in range(bucket_count):
-        start = cutoff + timedelta(days=i)
+        start = window_start + timedelta(days=i)
         end = min(start + timedelta(days=1), now + timedelta(seconds=1))
         bucket_rows = db.execute(
             select(*_discover_projection())
@@ -386,6 +388,25 @@ def fetch_discover_candidate_rows(
                 continue
             seen.add(row.id)
             out.append(row)
+
+    # Backfill older-than-window cold starts so legacy publishes stay discoverable.
+    remaining = hard_cap - len(out)
+    if remaining > 0:
+        older_rows = db.execute(
+            select(*_discover_projection())
+            .where(*filters, GalleryItem.created_at < window_start)
+            .order_by(
+                GalleryItem.unique_impressions_count.asc(),
+                (GalleryItem.likes_count + GalleryItem.rating_count).desc(),
+                GalleryItem.created_at.desc(),
+            )
+            .limit(remaining)
+        ).all()
+        for row in older_rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            out.append(row)
     return out
 
 
@@ -397,10 +418,9 @@ def list_discover_feed(
     exclude_ids: list[uuid.UUID] | None = None,
     now: datetime | None = None,
 ) -> list[GalleryItem]:
-    """Fair Discovery: full 7-day eligible pool, per-page creator diversity, optional exclude."""
+    """Fair Discovery: all public publishes, per-page creator diversity, optional exclude."""
     now_utc = now or datetime.now(timezone.utc)
-    cutoff = now_utc - DISCOVER_WINDOW
-    rank_rows = fetch_discover_candidate_rows(db, cutoff=cutoff, now=now_utc)
+    rank_rows = fetch_discover_candidate_rows(db, now=now_utc)
     candidates = [
         DiscoverCandidate(
             id=row.id,
@@ -414,26 +434,24 @@ def list_discover_feed(
     ]
     scored = rank_discover_candidates(candidates, now=now_utc)
     skip = list(exclude_ids or [])
-    # When exclude is provided (load-more), build the next diversified page from remaining.
-    # Offset still works for stable paging without exclude.
-    if skip:
-        page = diversify_select_page(scored, limit=limit, exclude_ids=skip)
-    else:
-        # Build a diversified stream page-by-page so creator caps reset each page.
-        stream: list[DiscoverCandidate] = []
+    # One API response = one diversified page (≤2 looks/creator). Load-more uses exclude=.
+    # Legacy offset paging skips prior full pages so caps reset per page, not mid-response.
+    if offset > 0 and not skip:
         seen: list[uuid.UUID] = []
-        need = offset + limit
+        consumed = 0
         guard = 0
-        while len(stream) < need and guard < need + 5:
+        while consumed < offset and guard < offset + 5:
             guard += 1
-            nxt = diversify_select_page(
-                scored, limit=limit, exclude_ids=seen
-            )
-            if not nxt:
+            chunk = diversify_select_page(scored, limit=limit, exclude_ids=seen)
+            if not chunk:
+                return []
+            take = min(len(chunk), offset - consumed)
+            seen.extend(c.id for c in chunk[:take])
+            consumed += take
+            if take < len(chunk):
                 break
-            stream.extend(nxt)
-            seen.extend(c.id for c in nxt)
-        page = stream[offset : offset + limit]
+        skip = seen
+    page = diversify_select_page(scored, limit=limit, exclude_ids=skip)
     if not page:
         return []
     page_ids = [c.id for c in page]
