@@ -70,3 +70,4 @@ class StreakStatusRead(BaseModel):
     reward_every_days: int = 7
     reward_stars: int = 10
     rewards_enabled: bool = False
+    reward_streak: int = 0

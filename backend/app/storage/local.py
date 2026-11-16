@@ -413,14 +413,35 @@ class LocalStorageBackend:
 
         Never touches private croquis / fabric / techpack roots. Typed outcome
         matches the private retention sweeper contract.
+
+        Symlink safety: the lexical candidate is inspected with ``is_symlink()``
+        **before** ``resolve()``, so a model-named symlink cannot delete its target.
         """
         try:
             safe = self.validate_fashionrise_model_public_key(key)
-            path = self._full_path(safe).resolve()
+            candidate = self._full_path(safe)
             root = self.public_upload_root()
-            path.relative_to(root)
         except ValueError:
             return CroquisUnlinkOutcome.UNSAFE
+
+        # Reject symlinks before resolve() — never follow into an unrelated target.
+        try:
+            if candidate.is_symlink():
+                return CroquisUnlinkOutcome.UNSAFE
+        except OSError:
+            return CroquisUnlinkOutcome.FAILED
+
+        if not candidate.exists():
+            return CroquisUnlinkOutcome.ALREADY_ABSENT
+        if not candidate.is_file() or candidate.is_symlink():
+            return CroquisUnlinkOutcome.UNSAFE
+
+        try:
+            path = candidate.resolve()
+            path.relative_to(root)
+        except (ValueError, OSError):
+            return CroquisUnlinkOutcome.UNSAFE
+
         # Refuse anything that resolves into a private sibling root.
         for private_root in (
             self.private_croquis_root(),
@@ -433,16 +454,12 @@ class LocalStorageBackend:
                 pass
             else:
                 return CroquisUnlinkOutcome.UNSAFE
-        if path.is_symlink():
-            return CroquisUnlinkOutcome.UNSAFE
-        if not path.exists():
-            return CroquisUnlinkOutcome.ALREADY_ABSENT
-        if not path.is_file():
-            return CroquisUnlinkOutcome.UNSAFE
+
         try:
-            path.unlink()
+            # Unlink the lexical candidate (non-symlink file), not a followed target.
+            candidate.unlink()
         except OSError:
             return CroquisUnlinkOutcome.FAILED
-        if path.exists():
+        if candidate.exists() or candidate.is_symlink():
             return CroquisUnlinkOutcome.FAILED
         return CroquisUnlinkOutcome.REMOVED

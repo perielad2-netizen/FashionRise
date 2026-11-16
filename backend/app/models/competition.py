@@ -186,11 +186,15 @@ class LoginStreak(Base):
         primary_key=True,
         nullable=False,
     )
+    # App-wide visit streak (continues even when Stars rewards are disabled).
     current_streak: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     last_checkin_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     lifetime_checkins: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    # Reward-eligible consecutive UTC days only (post activation boundary).
+    reward_streak: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_reward_checkin_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

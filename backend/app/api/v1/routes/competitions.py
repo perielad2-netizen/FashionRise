@@ -63,6 +63,7 @@ def get_streak(
         reward_every_days=STREAK_REWARD_DAYS,
         reward_stars=STREAK_REWARD_STARS,
         rewards_enabled=status.rewards_enabled,
+        reward_streak=status.reward_streak,
     )
 
 
@@ -83,4 +84,5 @@ def post_streak_checkin(
         reward_every_days=STREAK_REWARD_DAYS,
         reward_stars=STREAK_REWARD_STARS,
         rewards_enabled=status.rewards_enabled,
+        reward_streak=status.reward_streak,
     )

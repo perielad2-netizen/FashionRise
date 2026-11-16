@@ -39,7 +39,8 @@ def remove_owned_croquis_gallery_entry(
     """Delete this owner's FashionRise gallery row for a My Model (no commit).
 
     Enqueues durable public cleanup for the owned FashionRise-model copy **before**
-    deleting the gallery row (same transaction). Returns
+    deleting the gallery row (same transaction). Unmappable/unsafe keys are
+    quarantined (fail-closed) — never silently discarded. Returns
     ``(removed, public_storage_key)``. Does not touch unrelated gallery entries.
     """
     from app.services import public_media_cleanup as pmc
@@ -49,24 +50,50 @@ def remove_owned_croquis_gallery_entry(
         return False, None
     storage = LocalStorageBackend()
     key = storage.key_from_public_url(item.image_url)
+    queued_key: str | None = None
     if key:
-        pmc.enqueue_public_model_cleanup(
+        queued = pmc.enqueue_public_model_cleanup(
             db,
             owner_id=owner_id,
             storage_key=key,
             reason=reason,
             croquis_id=croquis_id,
             gallery_item_id=item.id,
+            source_url=item.image_url,
+        )
+        if queued is not None:
+            queued_key = queued.storage_key
+        else:
+            pmc.quarantine_unmappable_public_cleanup(
+                db,
+                owner_id=owner_id,
+                reason=reason,
+                croquis_id=croquis_id,
+                gallery_item_id=item.id,
+                source_url=item.image_url,
+                detail="unsafe_public_key_rejected",
+            )
+    else:
+        # Had a gallery row but URL could not be mapped — do not pretend cleanup is done.
+        pmc.quarantine_unmappable_public_cleanup(
+            db,
+            owner_id=owner_id,
+            reason=reason,
+            croquis_id=croquis_id,
+            gallery_item_id=item.id,
+            source_url=item.image_url,
+            detail="unmappable_public_image_url",
         )
     db.delete(item)
     db.flush()
-    return True, key
+    return True, queued_key
 
 
 def enqueue_owner_public_model_cleanups(db: Session, owner_id: uuid.UUID) -> list[str]:
     """Enqueue durable cleanup for all owned My Model public copies (no commit).
 
     Call before account CASCADE so cleanup rows survive user deletion.
+    Unmappable URLs are quarantined rather than silently skipped.
     """
     from app.services import public_media_cleanup as pmc
 
@@ -80,18 +107,38 @@ def enqueue_owner_public_model_cleanups(db: Session, owner_id: uuid.UUID) -> lis
     keys: list[str] = []
     for row in rows:
         key = storage.key_from_public_url(row.image_url)
-        if not key:
-            continue
-        queued = pmc.enqueue_public_model_cleanup(
-            db,
-            owner_id=owner_id,
-            storage_key=key,
-            reason="account_deletion",
-            croquis_id=row.croquis_id,
-            gallery_item_id=row.id,
-        )
-        if queued is not None:
-            keys.append(queued.storage_key)
+        if key:
+            queued = pmc.enqueue_public_model_cleanup(
+                db,
+                owner_id=owner_id,
+                storage_key=key,
+                reason="account_deletion",
+                croquis_id=row.croquis_id,
+                gallery_item_id=row.id,
+                source_url=row.image_url,
+            )
+            if queued is not None:
+                keys.append(queued.storage_key)
+            else:
+                pmc.quarantine_unmappable_public_cleanup(
+                    db,
+                    owner_id=owner_id,
+                    reason="account_deletion",
+                    croquis_id=row.croquis_id,
+                    gallery_item_id=row.id,
+                    source_url=row.image_url,
+                    detail="unsafe_public_key_rejected",
+                )
+        else:
+            pmc.quarantine_unmappable_public_cleanup(
+                db,
+                owner_id=owner_id,
+                reason="account_deletion",
+                croquis_id=row.croquis_id,
+                gallery_item_id=row.id,
+                source_url=row.image_url,
+                detail="unmappable_public_image_url",
+            )
     return keys
 
 

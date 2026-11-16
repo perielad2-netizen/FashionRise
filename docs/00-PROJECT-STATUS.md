@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**Social PR1–PR4 + docs #355 on `main`** · safety PR open · Alembic **034** · **not deployed** · reward flags default **FALSE**.)
+**Last updated:** 2026-11-16 (**Social PR1–PR4 + docs #355 on `main`** · safety PR **#356 amended** · Alembic **034** · **not deployed** · reward flags default **FALSE**.)
 
-**Phase:** FashionRise Social **production-safety hardening** (not a new product phase). Feature code #349–#354 is on `main`; activation still requires PM authorize after this safety PR.
+**Phase:** FashionRise Social **production-safety hardening** (not a new product phase). Feature code #349–#354 is on `main`; activation still requires PM authorize after safety PR #356.
 
 ## FashionRise Social — scope & progress
 
@@ -16,13 +16,13 @@
 | **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Merged** — #353 → `main` @ `02882f65` · Alembic **032** · **not deployed** |
 | **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent · erase removes public copy · My Profile entry | **Merged** — #354 → `main` @ **`b6e70054`** · tip `b9011701` · Alembic **033** · **not deployed** |
 | **Docs** | Social readiness plan after #354 | **Merged** — #355 → `main` @ **`82e93008`** |
-| **Safety** | Durable public My Models cleanup + explicit Stars reward gates (weekly + streak) | **PM review** — branch `cursor/web-fashionrise-prod-safety-77c6` · Alembic **034** · **do not merge/deploy until PM OK** |
+| **Safety** | Durable public My Models cleanup + explicit Stars reward gates (weekly + streak) · symlink/quarantine/streak-boundary amend | **PM re-review** — **#356** · Alembic **034** · **do not merge/deploy until PM OK** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** PM review **production-safety PR** (durable public cleanup + reward gates). Then **staging validation** (migrate 034, smoke Social surfaces, confirm flags stay FALSE). Then **separate PM production authorization**. Until then: **no prod deploy**, **no live Stars awards**, Android QA unaffected.
+**Exact next step:** PM re-approve **#356** (symlink safety · streak activation boundary · quarantine cleanup · weekly credit-path boundary). Then **staging validation** (migrate 034, smoke Social, flags FALSE). Then **separate PM production authorization**. Until then: **no prod deploy**, **no live Stars awards**, Android QA unaffected.
 
 ## Release roadmap (source of truth)
 
@@ -35,20 +35,22 @@
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
 | **FashionRise Social** | **PR1–PR4 + docs merged · safety PR open · not deployed** | Feature tip **`b6e70054`** · safety adds Alembic **034** + reward flags default FALSE |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards yet** · **do not auto-merge safety PR**.
 
-## FashionRise Social — production safety PR (2026-11-16) — PM REVIEW · NOT MERGED
+## FashionRise Social — production safety PR (2026-11-16) — #356 PM RE-REVIEW · NOT MERGED
 
 | Status | Detail |
 |---|---|
-| Public cleanup | `public_media_cleanup_queue` (Alembic **034**) · enqueue owned `fashionrise-model-*.png` keys in same txn as gallery delete · immediate post-commit attempt · FS failure keeps pending (`attempts`/`last_error`) · background tick retries · already-absent = success · unsafe keys rejected · no private croquis / shared deletes · account deletion retains queue rows (no user FK) |
-| Weekly Stars | `FASHIONRISE_WEEKLY_REWARDS_ENABLED` default **false** · requires `FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START` (Sunday UTC) · mid-week config snaps to **next** Sunday · guards `settle_group_awards` + `credit_payout_idempotent` · tick may open/lock weeks without awarding |
-| Streak Stars | `FASHIONRISE_STREAK_REWARDS_ENABLED` default **false** · visits still record streak · never credits 10★ while off · FE strip does not advertise +★ while disabled |
-| QA | BE cleanup+gates + publish + competition hardening **24 passed** · FE `tsc` green · Runway/Auth **19 passed** |
+| Public cleanup | `public_media_cleanup_queue` (Alembic **034**) · enqueue owned `fashionrise-model-*.png` keys in same txn as gallery delete · immediate post-commit attempt · FS failure keeps pending · tick retries · already-absent = success |
+| Symlink safety | Lexical `is_symlink()` **before** `resolve()` · model-named symlink cannot delete target |
+| Quarantine | Unmappable/unsafe URL/key → `status=quarantined` + `source_url_sha256` provenance · never silent discard · never treated as successful file cleanup |
+| Weekly Stars | `FASHIONRISE_WEEKLY_REWARDS_ENABLED` default **false** · requires launch Sunday · mid-week snaps next Sunday · `settle_group_awards` **and** `credit_payout_idempotent` enforce boundary (direct pre-launch payout blocked) |
+| Streak Stars | App streak continues always · separate `reward_streak` counts only post-`FASHIONRISE_STREAK_REWARDS_START_DATE` while enabled · missing start date fail-closed · FE does not advertise +★ while disabled |
+| QA | BE cleanup/gates/publish **23 passed** · competition hardening green · FE `tsc` + Runway/Auth smoke green |
 | Production | **Not deployed** · flags remain FALSE · no live Stars |
-| Next | PM review → staging migrate **034** + smoke → separate PM prod authorize |
+| Next | PM re-approve #356 → staging migrate **034** + smoke → separate PM prod authorize |
 
 ## FashionRise Social — production readiness plan (do not deploy)
 

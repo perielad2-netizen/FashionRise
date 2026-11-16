@@ -1,11 +1,12 @@
-"""Public My Models cleanup queue (durable unlink retries).
+"""Public My Models cleanup queue + streak reward-eligible columns.
 
 Revision ID: 034
 Revises: 033
 Create Date: 2026-11-16
 
-Reward safety gates are config-only (no schema). This migration only adds the
-public cleanup queue used by unpublish / erase / account deletion.
+Reward enable flags remain config-only. This migration adds:
+- ``public_media_cleanup_queue`` (durable / quarantine public unlink)
+- ``login_streaks.reward_streak`` + ``last_reward_checkin_date``
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ def upgrade() -> None:
         sa.Column("gallery_item_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("storage_key", sa.String(length=512), nullable=False),
         sa.Column("reason", sa.String(length=64), nullable=False),
+        sa.Column("status", sa.String(length=32), server_default="pending", nullable=False),
+        sa.Column("source_url_sha256", sa.String(length=64), nullable=True),
         sa.Column(
             "enqueued_at",
             sa.DateTime(timezone=True),
@@ -54,11 +57,22 @@ def upgrade() -> None:
     op.create_index(
         "ix_public_media_cleanup_queue_pending",
         "public_media_cleanup_queue",
-        ["processed_at", "enqueued_at"],
+        ["status", "processed_at", "enqueued_at"],
+    )
+
+    op.add_column(
+        "login_streaks",
+        sa.Column("reward_streak", sa.Integer(), server_default="0", nullable=False),
+    )
+    op.add_column(
+        "login_streaks",
+        sa.Column("last_reward_checkin_date", sa.Date(), nullable=True),
     )
 
 
 def downgrade() -> None:
+    op.drop_column("login_streaks", "last_reward_checkin_date")
+    op.drop_column("login_streaks", "reward_streak")
     op.drop_index("ix_public_media_cleanup_queue_pending", table_name="public_media_cleanup_queue")
     op.drop_index(
         "ix_public_media_cleanup_queue_storage_key", table_name="public_media_cleanup_queue"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -15,9 +16,22 @@ from app.storage.local import LocalStorageBackend
 
 logger = logging.getLogger(__name__)
 
+STATUS_PENDING = "pending"
+STATUS_DONE = "done"
+STATUS_QUARANTINED = "quarantined"
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def _url_sha256(url: str | None) -> str | None:
+    if not url or not isinstance(url, str):
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def enqueue_public_model_cleanup(
@@ -28,11 +42,12 @@ def enqueue_public_model_cleanup(
     reason: str,
     croquis_id: uuid.UUID | None = None,
     gallery_item_id: uuid.UUID | None = None,
+    source_url: str | None = None,
 ) -> PublicMediaCleanupQueue | None:
     """Queue a public model key for durable unlink (same transaction as caller).
 
     Validates the key shape before enqueue. Idempotent for a pending identical key.
-    Returns None when the key is rejected as unsafe (nothing queued).
+    Returns None when the key is rejected as unsafe — callers should quarantine.
     """
     storage = LocalStorageBackend()
     try:
@@ -48,6 +63,7 @@ def enqueue_public_model_cleanup(
     existing = db.scalar(
         select(PublicMediaCleanupQueue).where(
             PublicMediaCleanupQueue.storage_key == safe,
+            PublicMediaCleanupQueue.status == STATUS_PENDING,
             PublicMediaCleanupQueue.processed_at.is_(None),
         )
     )
@@ -61,9 +77,62 @@ def enqueue_public_model_cleanup(
         gallery_item_id=gallery_item_id,
         storage_key=safe,
         reason=reason,
+        status=STATUS_PENDING,
+        source_url_sha256=_url_sha256(source_url),
     )
     db.add(row)
     db.flush()
+    return row
+
+
+def quarantine_unmappable_public_cleanup(
+    db: Session,
+    *,
+    owner_id: uuid.UUID,
+    reason: str,
+    croquis_id: uuid.UUID | None = None,
+    gallery_item_id: uuid.UUID | None = None,
+    source_url: str | None = None,
+    detail: str = "unmappable_or_unsafe_public_key",
+) -> PublicMediaCleanupQueue:
+    """Fail-closed provenance when a public URL/key cannot be safely mapped.
+
+    Never deletes files. Does not mark durable file cleanup as successful.
+    """
+    # Stable placeholder key — not a deletable public path.
+    placeholder = f"quarantine:{gallery_item_id or croquis_id or owner_id}"
+    existing = db.scalar(
+        select(PublicMediaCleanupQueue).where(
+            PublicMediaCleanupQueue.storage_key == placeholder,
+            PublicMediaCleanupQueue.status == STATUS_QUARANTINED,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    now = _utcnow()
+    row = PublicMediaCleanupQueue(
+        id=uuid.uuid4(),
+        owner_id=owner_id,
+        croquis_id=croquis_id,
+        gallery_item_id=gallery_item_id,
+        storage_key=placeholder,
+        reason=reason,
+        status=STATUS_QUARANTINED,
+        source_url_sha256=_url_sha256(source_url),
+        enqueued_at=now,
+        processed_at=now,
+        attempts=0,
+        last_error=detail,
+    )
+    db.add(row)
+    db.flush()
+    logger.warning(
+        "public_cleanup_quarantined owner_id=%s gallery_item_id=%s reason=%s",
+        owner_id,
+        gallery_item_id,
+        reason,
+    )
     return row
 
 
@@ -76,10 +145,14 @@ def attempt_public_cleanup_now(
     """Process pending public cleanup rows (immediate post-commit + sweeper).
 
     Already-absent files count as success. Failures stay queued with attempts/error.
+    Quarantined rows are never treated as successful file deletion.
     """
     q = (
         select(PublicMediaCleanupQueue)
-        .where(PublicMediaCleanupQueue.processed_at.is_(None))
+        .where(
+            PublicMediaCleanupQueue.status == STATUS_PENDING,
+            PublicMediaCleanupQueue.processed_at.is_(None),
+        )
         .order_by(PublicMediaCleanupQueue.enqueued_at.asc())
         .limit(max(1, min(int(limit), 500)))
     )
@@ -98,6 +171,8 @@ def attempt_public_cleanup_now(
         outcome = storage.delete_public_fashionrise_model_file(key=item.storage_key)
         if outcome is CroquisUnlinkOutcome.UNSAFE:
             item.last_error = "unsafe_storage_key"
+            item.status = STATUS_QUARANTINED
+            item.processed_at = now
             unsafe += 1
             failed += 1
             db.add(item)
@@ -108,6 +183,7 @@ def attempt_public_cleanup_now(
             db.add(item)
             continue
         item.processed_at = now
+        item.status = STATUS_DONE
         item.last_error = None
         db.add(item)
         if outcome is CroquisUnlinkOutcome.REMOVED:

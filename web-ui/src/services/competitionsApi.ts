@@ -46,6 +46,8 @@ export type StreakStatus = {
   reward_stars: number
   /** Server-authoritative; when false do not advertise active streak Stars. */
   rewards_enabled?: boolean
+  /** Consecutive reward-eligible UTC days (post activation boundary). */
+  reward_streak?: number
 }
 
 export type CompetitionAward = {
