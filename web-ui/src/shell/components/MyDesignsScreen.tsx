@@ -104,9 +104,17 @@ function SavedDesignCard({
   const backBadge = savedSnapshotHasBackInk(record.snapshot)
   return (
     <li className={styles.card}>
-      <div className={styles.previewWrap}>
-        <PreviewImage url={url} label={`Preview of ${title}`} />
-        {backBadge ? <span className={styles.backBadge}>Back</span> : null}
+      <div
+        className={styles.previewHit}
+        role="presentation"
+        onClick={() => {
+          if (!disabled) onOpen(record.id)
+        }}
+      >
+        <div className={styles.previewWrap}>
+          <PreviewImage url={url} label={`Preview of ${title}`} />
+          {backBadge ? <span className={styles.backBadge}>Back</span> : null}
+        </div>
       </div>
       <div className={styles.cardBody}>
         <h3 className={styles.cardTitle} title={title}>
@@ -294,7 +302,8 @@ export function MyDesignsScreen({
   return (
     <section className={styles.screen} aria-label="My Designs">
       <header className={styles.head}>
-        <div>
+        <div className={styles.brandBlock}>
+          <p className={styles.eyebrow}>FashionRise</p>
           <h1 className={styles.title}>My Designs</h1>
           <p className={styles.subtitle}>Private to your account. Only you can see these.</p>
         </div>
@@ -327,6 +336,7 @@ export function MyDesignsScreen({
             Studio working draft
           </h2>
           <div className={styles.workingCard}>
+            <div className={styles.workingGlow} aria-hidden />
             <PreviewImage url={workingUrl} label="Preview of your Studio working draft" />
             <div className={styles.cardBody}>
               <h3 className={styles.cardTitle}>Current sketch</h3>
@@ -372,10 +382,15 @@ export function MyDesignsScreen({
           ) : null}
 
           {state.status === 'ready' && designs.length === 0 && damaged.length === 0 ? (
-            <p className={styles.stateMsg}>
-              No saved designs yet. In Studio, choose <strong>Save design</strong> to keep a named
-              private copy of your sketch.
-            </p>
+            <div className={styles.emptyCard}>
+              <p className={styles.stateMsg}>
+                No saved designs yet. In Studio, choose <strong>Save design</strong> to keep a named
+                private copy of your sketch.
+              </p>
+              <button type="button" className={styles.openBtn} onClick={onBackToStudio}>
+                Start in Studio
+              </button>
+            </div>
           ) : null}
 
           {designs.length > 0 ? (
