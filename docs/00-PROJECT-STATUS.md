@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Runway weekly categories + thumb crop (2026-11-16 20:38 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Tip | **`5d076e1c`** → `/var/www/fashionrise/releases/5d076e1c-runway-cats-crop` · public `/version.json` |
+| Change | Always-visible weekly categories (Top Design / Designer / Community Champion / Supporter / Commenter / Rater); rank thumbs `object-fit: contain` (heads not cropped) |
+| Nginx | `/api/v1/competitions/{status,awards,streak,streak/check-in}` allowlisted · CompetitionStrip loads |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/28642b6a-runway-vs-fashionrise /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — FashionRise ≠ Runway split (2026-11-16 20:33 Asia/Jerusalem)
 
 | Field | Value |
@@ -49,7 +58,7 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**FashionRise ≠ Runway #377 LIVE** · FE **`28642b6a`** · prior FE `021c3cd1` · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**Runway categories + thumb crop LIVE** · FE **`5d076e1c`** · competitions nginx allowlisted · rewards **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
 
