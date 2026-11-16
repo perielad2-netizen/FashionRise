@@ -91,26 +91,37 @@
 
 .openBtn {
   border: 0;
-  background: linear-gradient(135deg, #f8e7b0 0%, #e8b86d 45%, #f0a3c2 100%);
-  color: #1a1014;
+  background: linear-gradient(135deg, var(--fr-pink, #d63384), var(--fr-pink-deep, #be185d));
+  color: #fff;
 }
 
 .openBtn:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.06);
 }
 
 .deleteBtn {
-  border: 1px solid rgba(248, 113, 113, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(245, 242, 240, 0.88);
+}
+
+.deleteBtn:hover {
+  border-color: rgba(248, 113, 113, 0.45);
   background: rgba(127, 29, 29, 0.28);
   color: #fecaca;
 }
 
 .cardActions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  align-items: center;
-  margin-top: 2px;
+  margin-top: 4px;
+}
+
+.cardActions .openBtn,
+.cardActions .deleteBtn {
+  width: 100%;
+  min-width: 0;
 }
 
 .ghostBtn:disabled,
@@ -474,9 +485,4 @@
     gap: 12px;
   }
 
-  .cardActions .openBtn,
-  .cardActions .deleteBtn {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
 }
