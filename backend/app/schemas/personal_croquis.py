@@ -68,6 +68,14 @@ class PersonalCroquisVersionSummary(BaseModel):
     accepted_at: datetime | None = None
 
 
+class CroquisPublishRequest(BaseModel):
+    """Explicit public FashionRise publish consent for a personal model."""
+
+    public_share_attested: bool = False
+    notice_version: str = Field(min_length=1, max_length=64)
+    notice_text_hash: str = Field(min_length=64, max_length=64)
+
+
 class PersonalCroquisRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,6 +90,7 @@ class PersonalCroquisRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     latest_accepted_version: PersonalCroquisVersionSummary | None = None
+    fashionrise_item_id: uuid.UUID | None = None
 
 
 class PersonalCroquisVersionRead(BaseModel):
@@ -111,7 +120,7 @@ def consent_to_read(row) -> ConsentEventRead:
     )
 
 
-def croquis_to_read(row, *, latest=None) -> PersonalCroquisRead:
+def croquis_to_read(row, *, latest=None, fashionrise_item_id=None) -> PersonalCroquisRead:
     latest_summary = None
     if latest is not None:
         latest_summary = PersonalCroquisVersionSummary(
@@ -133,6 +142,7 @@ def croquis_to_read(row, *, latest=None) -> PersonalCroquisRead:
         created_at=row.created_at,
         updated_at=row.updated_at,
         latest_accepted_version=latest_summary,
+        fashionrise_item_id=fashionrise_item_id,
     )
 
 

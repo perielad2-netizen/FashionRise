@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**FashionRise Social PR3 #353** — final scoring amendment for PM approval; hold merge.)
+**Last updated:** 2026-11-16 (**FashionRise Social PR3 #353 merged** · PR4 profile + My Models publish open for PM review · **not deployed**.)
 
 **Phase:** FashionRise Social platform (PM-approved) in small PRs on top of native Android QA gate. Feature name is **FashionRise** (not “Runway 2.0”). Reuse existing gallery destination `runway`, friends, profiles, follow, and Stars ledger.
 
@@ -13,15 +13,14 @@
 |---|---|---|
 | **PR1** | FashionRise naming + Home featured entry above Create · side menu after Create · Following feed tab · designer profile (follow, reputation, published looks) · keep publish/`destination:'runway'` | **Merged** — #349 → `main` @ `fac4940d` |
 | **PR2** | Fair Discover feed (7-day eligibility, cold-start exposure, engagement/impressions, creator diversification) · preserve Following / Friends / Top | **Merged** — #352 → `main` @ `fad2ae3c` |
-| **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Final PM approval** — [#353](https://github.com/perielad2-netizen/FashionRise/pull/353) (hold merge) |
+| **PR3** | Automatic weekly competitions (Sun 00:00 UTC) · groups ≤50k · 50/20 Star awards · daily login streak (7→10) · worldwide Runway stays global | **Merged** — #353 → `main` @ `02882f65` · Alembic **032** · **not deployed** |
+| **PR4** | Editable designer profile · My Models → FashionRise publish with explicit likeness consent | **PM review** — branch `cursor/web-fashionrise-profile-models-77c6` · Alembic **033** |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
-**Tracked (later, not PR3):** users create/edit designer profiles · eligible My Models publish with explicit consent.
-
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Final PM approval of Social **PR3 #353** (design-score abuse closed). Android QA stays stable; no store submission / prod deploy from this track.
+**Exact next step:** PM review Social **PR4** (profile editor + My Models publish). PR3 remains **merged / not production-deployed**. Android QA stays stable; no store submission / live Stars awards from this track.
 
 ## Release roadmap (source of truth)
 
@@ -32,13 +31,27 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **PR1+PR2 merged · PR3 in review** | Weekly competitions + streak for PM; no prod deploy yet. |
+| **FashionRise Social** | **PR1–PR3 merged · PR4 in review** | Competitions on `main` (not deployed) · profile/models PR open |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no PR3 prod deploy until PM merge**.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · **no Social prod deploy / live Stars awards yet**.
 
-## FashionRise Social PR3 — Weekly competitions + streak (2026-11-16) — PM REVIEW / #353
+## FashionRise Social PR4 — Profile editor + My Models publish (2026-11-16) — PM REVIEW
+
+| Status | Detail |
+|---|---|
+| Profile | Self edit display name / bio / avatar via existing `PUT /profiles/me` + uploads · FriendProfilePanel editor when `isSelf` |
+| Privacy | Public `GET /profiles/{id}` never returns private design inventory (`designs_count=0`) · no email/account secrets |
+| My Models | `POST/DELETE /personal-croquis/{id}/publish` · accepted generated still only · copies to public uploads · never private asset URLs · never auto-publish / fitting-room photos |
+| Consent | New purpose `croquis_public_share` · explicit checkbox · Alembic **033** |
+| Feeds | Published models enter existing Discover / worldwide / competition enrollment paths unchanged |
+| QA | BE `tests/test_profile_models_publish.py` **3 passed** · FE `tsc --noEmit` green · Runway/AuthProvider smoke **18 passed** |
+| Constraints | No reward/group/streak changes · Android QA isolated · no iOS/store/push/purchase/prod deploy |
+| Production | **Not deployed** · no live Stars awards |
+| Next | **PM review before merge** |
+
+## FashionRise Social PR3 — Weekly competitions + streak (2026-11-16) — MERGED / #353
 
 | Status | Detail |
 |---|---|
@@ -55,9 +68,10 @@
 | API | `GET /competitions/status` · `GET /competitions/awards` · `GET|POST /competitions/streak*` · Alembic **032** (unchanged) |
 | FE | Competition strip · AuthProvider streak check-in |
 | QA | Design-score spam regression · threaded settle/check-in · prior award/streak suites green |
-| Deferred | Designer profile editor · My Models publish consent |
-| Constraints | No merge/deploy/store/push/Stars purchase · Android QA isolated |
-| Next | **Final PM approval of #353** — hold merge |
+| Merge | **`02882f65`** on `main` · local BE 19 + FE 18 focused checks green · no GitHub Actions checks configured on branch |
+| Production | **Not deployed** · no live competition settlement / Stars awards from this merge |
+| Constraints | No store/push/Stars purchase · Android QA isolated |
+| Next | Covered by **PR4** profile + My Models publish |
 
 ## FashionRise Social PR2 — Fair Discovery (2026-11-16) — MERGED / #352
 

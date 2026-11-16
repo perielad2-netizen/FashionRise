@@ -64,3 +64,26 @@ export async function unfollowCreator(userId: string, signal?: AbortSignal): Pro
     signal,
   })
 }
+
+export type ProfileUpdatePayload = {
+  display_name?: string
+  bio?: string | null
+  avatar_url?: string | null
+  cover_url?: string | null
+  style_tags?: string[]
+}
+
+export async function getMyProfile(signal?: AbortSignal): Promise<PublicProfile> {
+  return apiRequest<PublicProfile>('/profiles/me', { method: 'GET', signal })
+}
+
+export async function updateMyProfile(
+  payload: ProfileUpdatePayload,
+  signal?: AbortSignal,
+): Promise<PublicProfile> {
+  return apiRequest<PublicProfile>('/profiles/me', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    signal,
+  })
+}

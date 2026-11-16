@@ -14,12 +14,14 @@ from app.auth.dependencies import CurrentUser
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.db.session import get_db
+from app.schemas.gallery import GalleryRead
 from app.schemas.personal_croquis import (
     AdultsAttestationRead,
     AdultsAttestationRequest,
     AiConsentAcknowledgeRequest,
     ConsentAcknowledgeRequest,
     ConsentEventRead,
+    CroquisPublishRequest,
     GenerateVersionRequest,
     PersonalCroquisRead,
     PersonalCroquisVersionRead,
@@ -27,10 +29,22 @@ from app.schemas.personal_croquis import (
     croquis_to_read,
     version_to_read,
 )
+from app.services import gallery_service
 from app.services import personal_croquis_generate as pcg
+from app.services import personal_croquis_publish as pcp
 from app.services import personal_croquis_service as pcs
 
 router = APIRouter()
+
+
+def _croquis_read(db, user, row) -> PersonalCroquisRead:
+    latest = pcs.latest_accepted_version(db, user, row.id)
+    published = pcp.gallery_item_for_croquis(db, row.id)
+    return croquis_to_read(
+        row,
+        latest=latest,
+        fashionrise_item_id=published.id if published is not None else None,
+    )
 
 
 @router.post("/attestations/adults", response_model=AdultsAttestationRead)
@@ -138,11 +152,7 @@ def list_croquis(
 ) -> list[PersonalCroquisRead]:
     _ = request.url
     rows = pcs.list_personal_croquis(db, user)
-    out: list[PersonalCroquisRead] = []
-    for row in rows:
-        latest = pcs.latest_accepted_version(db, user, row.id)
-        out.append(croquis_to_read(row, latest=latest))
-    return out
+    return [_croquis_read(db, user, row) for row in rows]
 
 
 @router.get("/assets/{asset_id}/image")
@@ -175,8 +185,7 @@ def get_croquis(
 ) -> PersonalCroquisRead:
     _ = request.url
     row = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
-    latest = pcs.latest_accepted_version(db, user, row.id)
-    return croquis_to_read(row, latest=latest)
+    return _croquis_read(db, user, row)
 
 
 @router.post(
@@ -261,6 +270,41 @@ def reject_croquis_version(
     return version_to_read(row, failure_code=code, failure_message=msg)
 
 
+@router.post("/{croquis_id}/publish", response_model=GalleryRead)
+@limiter.limit("30/minute")
+def publish_croquis_to_fashionrise(
+    request: Request,
+    croquis_id: uuid.UUID,
+    body: CroquisPublishRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> GalleryRead:
+    """Publish an accepted My Model publicly — never auto; consent required."""
+    _ = request.url
+    item = pcp.publish_personal_croquis(
+        db,
+        user,
+        croquis_id,
+        public_share_attested=body.public_share_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
+    return gallery_service.to_gallery_read(item)
+
+
+@router.delete("/{croquis_id}/publish", response_model=PersonalCroquisRead)
+@limiter.limit("30/minute")
+def unpublish_croquis_from_fashionrise(
+    request: Request,
+    croquis_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisRead:
+    _ = request.url
+    row = pcp.unpublish_personal_croquis(db, user, croquis_id)
+    return _croquis_read(db, user, row)
+
+
 @router.post("/{croquis_id}/archive", response_model=PersonalCroquisRead)
 @limiter.limit("60/minute")
 def archive_croquis(
@@ -271,8 +315,7 @@ def archive_croquis(
 ) -> PersonalCroquisRead:
     _ = request.url
     row = pcs.archive_croquis(db, user, croquis_id)
-    latest = pcs.latest_accepted_version(db, user, row.id)
-    return croquis_to_read(row, latest=latest)
+    return _croquis_read(db, user, row)
 
 
 @router.delete("/{croquis_id}", response_model=PersonalCroquisRead)

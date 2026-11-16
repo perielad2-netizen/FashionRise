@@ -45,6 +45,8 @@ export type PersonalCroquisRead = {
   created_at: string
   updated_at: string
   latest_accepted_version: PersonalCroquisVersionSummary | null
+  /** Public FashionRise gallery item when published; private library otherwise. */
+  fashionrise_item_id?: string | null
 }
 
 /** Mirrors Stage A `PersonalCroquisVersionRead`. */
@@ -248,6 +250,40 @@ export async function erasePersonalCroquis(
   signal?: AbortSignal,
 ): Promise<PersonalCroquisRead> {
   return apiRequest<PersonalCroquisRead>(`${BASE}/${croquisId}`, {
+    method: 'DELETE',
+    signal,
+  })
+}
+
+export type CroquisPublishPayload = {
+  public_share_attested: true
+  notice_version: string
+  notice_text_hash: string
+}
+
+export type GalleryPublishResult = {
+  id: string
+  title: string
+  image_url: string | null
+}
+
+export async function publishPersonalCroquisToFashionRise(
+  croquisId: string,
+  payload: CroquisPublishPayload,
+  signal?: AbortSignal,
+): Promise<GalleryPublishResult> {
+  return apiRequest<GalleryPublishResult>(`${BASE}/${croquisId}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  })
+}
+
+export async function unpublishPersonalCroquisFromFashionRise(
+  croquisId: string,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisRead> {
+  return apiRequest<PersonalCroquisRead>(`${BASE}/${croquisId}/publish`, {
     method: 'DELETE',
     signal,
   })

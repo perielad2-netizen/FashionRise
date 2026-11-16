@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/me", response_model=ProfileRead)
 def get_my_profile(user: CurrentUser, db: Session = Depends(get_db)) -> ProfileRead:
-    return profile_service.build_profile_read(db, user.id)
+    return profile_service.build_profile_read(db, user.id, include_private_inventory=True)
 
 
 @router.put("/me", response_model=ProfileRead)
@@ -22,7 +22,7 @@ def update_my_profile(
     data: ProfileUpdate, user: CurrentUser, db: Session = Depends(get_db)
 ) -> ProfileRead:
     profile_service.update_own_profile(db, user, data)
-    return profile_service.build_profile_read(db, user.id)
+    return profile_service.build_profile_read(db, user.id, include_private_inventory=True)
 
 
 @router.get("/me/following-ids", response_model=list[uuid.UUID])
@@ -55,5 +55,12 @@ def unfollow_creator(user_id: uuid.UUID, user: CurrentUser, db: Session = Depend
 
 
 @router.get("/{user_id}", response_model=ProfileRead)
-def get_profile(user_id: uuid.UUID, db: Session = Depends(get_db)) -> ProfileRead:
-    return profile_service.build_profile_read(db, user_id)
+def get_profile(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
+) -> ProfileRead:
+    include_private = viewer is not None and viewer.id == user_id
+    return profile_service.build_profile_read(
+        db, user_id, include_private_inventory=include_private
+    )

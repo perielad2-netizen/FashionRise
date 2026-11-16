@@ -72,22 +72,34 @@ def _compute_reputation_score(
     return round(min(100.0, weighted), 1)
 
 
-def build_profile_read(db: Session, user_id: uuid.UUID) -> ProfileRead:
+def build_profile_read(
+    db: Session,
+    user_id: uuid.UUID,
+    *,
+    include_private_inventory: bool = False,
+) -> ProfileRead:
     profile = get_profile_for_user(db, user_id)
 
-    designs_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(GarmentDesign)
-            .where(GarmentDesign.user_id == user_id)
+    # Private garment inventory stays owner-only — public profiles never expose it.
+    designs_count = 0
+    if include_private_inventory:
+        designs_count = int(
+            db.scalar(
+                select(func.count())
+                .select_from(GarmentDesign)
+                .where(GarmentDesign.user_id == user_id)
+            )
+            or 0
         )
-        or 0
-    )
     published_count = int(
         db.scalar(
             select(func.count())
             .select_from(GalleryItem)
-            .where(GalleryItem.user_id == user_id)
+            .where(
+                GalleryItem.user_id == user_id,
+                GalleryItem.visibility == "public",
+                GalleryItem.moderation_status == "ok",
+            )
         )
         or 0
     )
