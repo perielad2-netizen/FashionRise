@@ -280,6 +280,83 @@ def ensure_participant_if_eligible(
     return enroll_on_activity(db, user_id, now=now)
 
 
+def enroll_users_active_this_week(
+    db: Session,
+    *,
+    week_start: datetime,
+    week_end: datetime,
+    limit: int = 500,
+) -> int:
+    """Catch up people who engaged this week but missed sticky enroll (older clients).
+
+    Live boards call this so Top Design / Designer / Commenter reflect real FashionRise
+    activity instead of only the first couple of auto-enrolled accounts.
+    """
+    start = ensure_utc(week_start)
+    end = ensure_utc(week_end)
+    ids: set[uuid.UUID] = set()
+    for query in (
+        select(GalleryItem.user_id).where(
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
+            GalleryItem.created_at >= start,
+            GalleryItem.created_at < end,
+        ),
+        select(GalleryLike.user_id).where(
+            GalleryLike.created_at >= start,
+            GalleryLike.created_at < end,
+        ),
+        select(GalleryComment.user_id).where(
+            GalleryComment.moderation_status == "ok",
+            GalleryComment.created_at >= start,
+            GalleryComment.created_at < end,
+        ),
+        select(Rating.user_id).where(
+            Rating.created_at >= start,
+            Rating.created_at < end,
+        ),
+        # Owners of looks that received engagement this week — so their designs can rank.
+        select(GalleryItem.user_id)
+        .join(GalleryLike, GalleryLike.gallery_item_id == GalleryItem.id)
+        .where(
+            GalleryLike.created_at >= start,
+            GalleryLike.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
+        ),
+        select(GalleryItem.user_id)
+        .join(GalleryComment, GalleryComment.gallery_item_id == GalleryItem.id)
+        .where(
+            GalleryComment.created_at >= start,
+            GalleryComment.created_at < end,
+            GalleryComment.moderation_status == "ok",
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
+        ),
+        select(GalleryItem.user_id)
+        .join(Rating, Rating.gallery_item_id == GalleryItem.id)
+        .where(
+            Rating.created_at >= start,
+            Rating.created_at < end,
+            GalleryItem.visibility == "public",
+            GalleryItem.moderation_status == "ok",
+        ),
+    ):
+        ids.update(db.scalars(query.limit(limit)).all())
+        if len(ids) >= limit:
+            break
+    enrolled = 0
+    for user_id in list(ids)[:limit]:
+        before = get_membership(db, user_id, week_start=start)
+        if before is not None:
+            continue
+        if enroll_on_activity(db, user_id, now=start) is not None:
+            enrolled += 1
+    if enrolled:
+        db.commit()
+    return enrolled
+
+
 def required_group_count(participant_total: int) -> int:
     if participant_total <= 0:
         return 1
