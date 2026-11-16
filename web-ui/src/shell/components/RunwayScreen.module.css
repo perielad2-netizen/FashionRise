@@ -23,13 +23,13 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  /* Thin top strip only — look flows edge-to-edge beneath. */
+  /* Thin top strip — clear shell hamburger (immersiveExit) on the left. */
   padding:
-    calc(6px + env(safe-area-inset-top, 0px))
+    calc(8px + env(safe-area-inset-top, 0px))
     10px
     4px
-    calc(10px + env(safe-area-inset-left, 0px));
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, transparent 100%);
+    calc(52px + env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, transparent 100%);
   pointer-events: none;
 }
 
@@ -352,9 +352,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex: 0 0 auto;
-  width: 40px;
+  width: 36px;
   padding-bottom: 2px;
 }
 
@@ -413,14 +413,14 @@
 }
 
 .immersiveScore .scoreSelect {
-  width: 36px;
-  min-height: 22px;
+  width: 32px;
+  min-height: 18px;
   padding: 0;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(0, 0, 0, 0.35);
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.28);
   color: #fff;
-  font-size: 10px;
+  font-size: 9px;
   text-align: center;
 }
 
