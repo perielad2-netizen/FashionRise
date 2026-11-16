@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**reel chrome FE LIVE** · release `b7b96234-reel-chrome-365` · #365 · mode pills in ⋯ · Reels-scale actions · own-look hint removed.)
+**Last updated:** 2026-11-16 (**reel chrome FE LIVE** · release `40f68321-reel-chrome-365` · #365 · single algorithmic Discover feed · chrome inside look.)
 
 **Phase:** FashionRise Social **LIVE** with Reels chrome (#365 FE). Stars weekly/streak rewards remain **OFF**.
 
@@ -24,7 +24,7 @@
 | **Prod DB backup** | One authorized `pg_dump -Fc` of `fashionrise_beta` | **COMPLETE** · `…/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump` |
 | **Prod Social deploy** | Migrate **030→035** + BE/FE **`82e58571`** · rewards FALSE | **LIVE 2026-11-16** · smoke PASS · **0** Social star payouts |
 | **UX hotfix #363** | Immersive full-viewport Discover · gallery `username` · auto Discover page · Follow cache keyed by viewer+designer | **MERGED + DEPLOYED** → `main` @ **`1cac14f0`** · tip `6c293475` · FE `1cac14f0-immersive-363` · Alembic **035** unchanged |
-| **Reel chrome** | Remove overlaid mode pill bar (modes in ⋯ menu) · drop duplicate bell · thin mode label · Follow beside designer · Reels-scale actions · remove own-look hint | **FE DEPLOYED** · `b7b96234-reel-chrome-365` · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) open · rollback `1cac14f0-immersive-363` |
+| **Reel chrome** | Single algorithmic Discover feed · Following/Friends/Top as optional lists · full-bleed look · chrome inside image · Reels-scale actions | **FE DEPLOYED** · `40f68321-reel-chrome-365` · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) open · rollback `1cac14f0-immersive-363` |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
@@ -41,7 +41,7 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **LIVE** · #349–#363 merged · #365 FE tip · Alembic **035** · rewards OFF · Reels chrome | Prod BE **`1cac14f0`** · FE `b7b96234-reel-chrome-365` · rollback FE `1cac14f0-immersive-363` |
+| **FashionRise Social** | **LIVE** · #349–#363 merged · #365 FE tip · Alembic **035** · rewards OFF · Reels chrome | Prod BE **`1cac14f0`** · FE `40f68321-reel-chrome-365` · rollback FE `1cac14f0-immersive-363` |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
@@ -51,10 +51,10 @@
 
 | Item | Result |
 |---|---|
-| Tip | **`b7b96234`** · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) (open; FE tip deployed for QA) |
-| Frontend | `/var/www/fashionrise/releases/b7b96234-reel-chrome-365` · nginx symlink + reload · public `/version.json` sha `b7b96234` |
+| Tip | **`40f68321`** · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) (open; FE tip deployed for QA) |
+| Frontend | `/var/www/fashionrise/releases/40f68321-reel-chrome-365` · nginx symlink + reload · public `/version.json` sha `40f68321` |
 | Backend | Unchanged · still **`1cac14f0`** · Alembic **035** · rewards OFF |
-| UX | Mode pills only in ⋯ · no duplicate bell · Reels-scale actions · own-look hint removed |
+| UX | One algorithmic Discover feed (Reels-style) · Following/Friends/Top optional lists in ⋯ · full-bleed look · chrome inside image · username-only meta |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/1cac14f0-immersive-363 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | QA note | Hard-refresh / clear site data if SW serves prior tip |
 
