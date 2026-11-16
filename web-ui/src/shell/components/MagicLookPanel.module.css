@@ -1,9 +1,11 @@
 .overlay {
   /* #180 — fixed + safe-area so Android Chrome/Samsung toolbars cannot clip actions.
-     Also clear GlobalHeader so Magic title/copy is not clipped under the chrome. */
+     Also clear GlobalHeader so Magic title/copy is not clipped under the chrome.
+     z-index above WorkspaceHeader moreWrap (46) / immersive chrome; still under
+     shell drawers that intentionally sit on top of Studio modals when needed. */
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 90;
   display: grid;
   place-items: center;
   padding:
@@ -474,8 +476,11 @@
     height: 100%;
     border-radius: 0;
     width: 100%;
-    /* Paint under the status bar; keep title/actions clear of the notch. */
-    padding-top: max(10px, env(safe-area-inset-top, 0px));
+    /* Clear status bar + GlobalHeader so "Your Look" / dual copy is not clipped. */
+    padding-top: max(
+      10px,
+      calc(var(--fr-header-h) + env(safe-area-inset-top, 0px))
+    );
   }
 
   :global(html.fr-native-shell) .stage {

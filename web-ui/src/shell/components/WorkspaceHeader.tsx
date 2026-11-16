@@ -21,6 +21,8 @@ type Props = {
   onMagic: () => void
   magicEnabled?: boolean
   magicBusy?: boolean
+  /** True while the Magic result/progress dialog is open (busy or ready). */
+  magicPanelOpen?: boolean
   canRecoverLastMagic?: boolean
   onRecoverLastMagic?: () => void
   saveStatus: SaveStatus
@@ -40,6 +42,7 @@ export function WorkspaceHeader({
   onMagic,
   magicEnabled = false,
   magicBusy = false,
+  magicPanelOpen = false,
   canRecoverLastMagic = false,
   onRecoverLastMagic,
   saveStatus,
@@ -78,10 +81,10 @@ export function WorkspaceHeader({
   }, [menuOpen])
 
   useEffect(() => {
-    if (!magicBusy) return
+    if (!magicBusy && !magicPanelOpen) return
     setMenuOpen(false)
     setMagicSpendOpen(false)
-  }, [magicBusy])
+  }, [magicBusy, magicPanelOpen])
 
   const statusClass =
     saveStatus === 'error'
@@ -190,8 +193,8 @@ export function WorkspaceHeader({
         ) : null}
       </div>
 
-      {/* Hide More while Magic is creating — z-index sat above the Magic overlay. */}
-      {!magicBusy ? (
+      {/* Hide More while Magic dialog is open — moreWrap z-index sits above Magic overlay. */}
+      {!(magicBusy || magicPanelOpen) ? (
       <div className={styles.moreWrap} ref={menuRef} data-testid="workspace-more">
         <button
           type="button"
