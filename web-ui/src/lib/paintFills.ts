@@ -105,7 +105,8 @@ function makeFabricPattern(
   ctx: FillPaintContext,
   style: FabricFillStyle,
 ): CanvasPattern | string | null {
-  const scale = Number.isFinite(style.scale) ? style.scale : 1
+  const scale =
+    typeof style.scale === 'number' && Number.isFinite(style.scale) ? style.scale : 1
   const key = `${style.fabricId}:${scale.toFixed(3)}`
   const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
   if (preset?.tileUrl) {

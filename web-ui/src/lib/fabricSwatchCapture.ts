@@ -155,16 +155,18 @@ export async function captureFabricSwatchForMagic(
   if (!isGarmentScalePatternedFill(fill)) return null
 
   if (fill.style.kind === 'fabric') {
-    const scale = Number.isFinite(fill.style.scale) ? fill.style.scale : 1
-    const preset = FABRIC_PRESETS.find((p) => p.id === fill.style.fabricId)
+    const fabric = fill.style
+    const scale =
+      typeof fabric.scale === 'number' && Number.isFinite(fabric.scale) ? fabric.scale : 1
+    const preset = FABRIC_PRESETS.find((p) => p.id === fabric.fabricId)
     let tile: HTMLCanvasElement
     if (preset?.tileUrl) {
-      const img = getCachedDefaultFabricImage(fill.style.fabricId)
+      const img = getCachedDefaultFabricImage(fabric.fabricId)
       tile = img
         ? renderUploadedFabricTile(img, scale)
-        : scaleFabricCanvasTile(renderFabricTile(fill.style.fabricId), scale)
+        : scaleFabricCanvasTile(renderFabricTile(fabric.fabricId), scale)
     } else {
-      tile = scaleFabricCanvasTile(renderFabricTile(fill.style.fabricId), scale)
+      tile = scaleFabricCanvasTile(renderFabricTile(fabric.fabricId), scale)
     }
     if (!tile.width || !tile.height) return null
     const dataUrl = encodeSwatchDataUrl(tile)
@@ -172,9 +174,9 @@ export async function captureFabricSwatchForMagic(
     const approxBytes = Math.floor((dataUrl.length * 3) / 4)
     return {
       dataUrl,
-      label: `${fill.style.fabricId} repeating textile (exact Studio tile)`,
+      label: `${fabric.fabricId} repeating textile (exact Studio tile)`,
       kind: 'fabric',
-      fabricId: fill.style.fabricId,
+      fabricId: fabric.fabricId,
       byteLength: approxBytes,
     }
   }
