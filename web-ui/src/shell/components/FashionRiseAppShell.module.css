@@ -6,7 +6,7 @@
   min-height: 0;
   /* Floor bottom inset: Android 3-button / gesture bars often report safe-area 0
      in standalone PWA while still covering the last card actions. */
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+  padding: var(--fr-safe-top, env(safe-area-inset-top, 0px)) env(safe-area-inset-right, 0px)
     max(
       env(safe-area-inset-bottom, 0px),
       var(--fr-browser-chrome-bottom, 0px)
@@ -20,7 +20,8 @@
 .shellImmersive {
   position: relative;
   grid-template-rows: minmax(0, 1fr);
-  padding: 0;
+  /* Keep the look below the system status bar (Android overlay / zero safe-area). */
+  padding: var(--fr-safe-top, env(safe-area-inset-top, 0px)) 0 0;
   overflow: hidden;
   background: #0a0d14;
 }
@@ -58,8 +59,8 @@
 .immersiveExit {
   position: absolute;
   z-index: 40;
-  /* Inside the look frame — inset from the left edge (not flush left). */
-  top: calc(22px + env(safe-area-inset-top, 0px));
+  /* Inside the look frame — clear status bar + inset from the left edge. */
+  top: calc(14px + var(--fr-safe-top, env(safe-area-inset-top, 0px)));
   left: calc(14px + env(safe-area-inset-left, 0px));
   pointer-events: none;
 }

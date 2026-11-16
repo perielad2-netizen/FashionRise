@@ -90,11 +90,37 @@ export async function updateMyProfile(
 }
 
 /**
+ * When the API base is absolute (Capacitor native), relative `/api/...` and
+ * `/static/...` avatar paths must be rewritten onto the FashionRise origin —
+ * otherwise `<img>` resolves against `https://localhost` and breaks.
+ */
+function absolutizePublicAssetPath(path: string): string {
+  if (
+    path.startsWith('blob:') ||
+    path.startsWith('http://') ||
+    path.startsWith('https://') ||
+    path.startsWith('data:')
+  ) {
+    return path
+  }
+  try {
+    const apiBase = getApiBaseUrl()
+    if (!apiBase.startsWith('http')) return path
+    const origin = new URL(apiBase).origin
+    if (path.startsWith('/')) return `${origin}${path}`
+    return `${origin}/${path.replace(/^\/+/, '')}`
+  } catch {
+    return path
+  }
+}
+
+/**
  * Resolve an `<img src>` for a designer photo.
  *
  * - Legacy `/static/uploads/...` values stay as-is (do not rewrite to the private
  *   avatar route — that file may not exist there).
  * - New private-avatar uploads use `/api/v1/profiles/{id}/avatar`.
+ * - Absolute API bases (Android/iOS shells) get same-origin absolute URLs.
  */
 export function profileAvatarSrc(
   userId: string,
@@ -122,6 +148,8 @@ export function profileAvatarSrc(
     // Unknown relative marker from the new private-avatar flow.
     base = `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`
   }
+
+  base = absolutizePublicAssetPath(base)
 
   if (!cacheKey || base.startsWith('blob:')) return base
   const join = base.includes('?') ? '&' : '?'

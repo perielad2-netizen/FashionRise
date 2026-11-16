@@ -327,7 +327,7 @@ describe('My Designs navigation and library', () => {
     expect(within(nav).getByRole('button', { name: 'Home' })).not.toBeDisabled()
     expect(within(nav).queryByRole('button', { name: 'Design Book' })).toBeNull()
     expect(within(nav).queryByRole('button', { name: 'Discover' })).toBeNull()
-    expect(within(nav).getByRole('button', { name: 'FashionRise' })).not.toBeDisabled()
+    expect(within(nav).getByRole('button', { name: 'Runway' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
@@ -337,12 +337,15 @@ describe('My Designs navigation and library', () => {
     renderAt('/studio')
     await ready()
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
-    fireEvent.click(within(nav).getByRole('button', { name: 'FashionRise' }))
+    fireEvent.click(within(nav).getByRole('button', { name: 'Runway' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
-    expect(within(nav).getByRole('button', { name: 'FashionRise' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    // Immersive feed hides the nav drawer from the a11y tree; reopen to assert current.
+    fireEvent.click(screen.getByTestId('shell-nav-toggle'))
+    expect(
+      within(screen.getByRole('navigation', { name: 'FashionRise' })).getByRole('button', {
+        name: 'Runway',
+      }),
+    ).toHaveAttribute('aria-current', 'page')
   })
 
   it('opens Home from the sidebar and returns to Create', async () => {

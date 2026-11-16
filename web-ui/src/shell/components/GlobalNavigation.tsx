@@ -17,7 +17,7 @@ const BASE_ITEMS = [
   { id: 'create', label: 'Create', icon: Sparkles, destination: 'create' as NavDestination | null },
   {
     id: 'runway',
-    label: 'FashionRise',
+    label: 'Runway',
     icon: Star,
     destination: 'runway' as NavDestination | null,
   },

@@ -25,7 +25,7 @@
   gap: 0;
   /* Inside the look frame; ⋯ nudged left; clear shell hamburger (inset right). */
   padding:
-    calc(22px + env(safe-area-inset-top, 0px))
+    calc(22px + var(--fr-safe-top, env(safe-area-inset-top, 0px)))
     18px
     4px
     calc(58px + env(safe-area-inset-left, 0px));

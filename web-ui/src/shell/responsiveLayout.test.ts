@@ -16,7 +16,10 @@ import globalCss from '@/styles/global.css?raw'
 const SHORT_LANDSCAPE = '@media (min-width: 821px) and (max-height: 760px)'
 
 function rule(css: string, selector: string): string {
-  const start = css.indexOf(`${selector} {`)
+  // Prefer an exact selector match (avoid `.shellImmersive .body` when asking for `.body`).
+  const exact = new RegExp(`(?:^|\\n)${selector.replace(/\./g, '\\.')} \\{`)
+  const match = exact.exec(css)
+  const start = match ? match.index + (match[0].startsWith('\n') ? 1 : 0) : css.indexOf(`${selector} {`)
   expect(start, `${selector} rule`).toBeGreaterThanOrEqual(0)
   return css.slice(start, css.indexOf('}', start))
 }
@@ -56,9 +59,11 @@ describe('WEB-V2.3 responsive layout contract', () => {
   it('tracks the visible viewport and safe areas', () => {
     expect(globalCss).toContain('100dvh')
     expect(globalCss).toContain('--fr-vv-height')
-    expect(rule(appShellCss, '.shell')).toContain('env(safe-area-inset-top, 0px)')
+    expect(rule(appShellCss, '.shell')).toContain('--fr-safe-top')
     expect(rule(appShellCss, '.shell')).toContain('--fr-browser-chrome-bottom')
     expect(appShellCss).toContain('@media (display-mode: standalone)')
+    expect(tokensCss).toContain('--fr-safe-top')
+    expect(tokensCss).toContain('--fr-status-top-floor')
   })
 
   it('compacts chrome on short landscape viewports only', () => {
