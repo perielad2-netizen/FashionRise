@@ -33,6 +33,7 @@ import {
   syncNativePushAfterAuth,
 } from '@/services/native/nativePush'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
+import { postStreakCheckIn } from '@/services/competitionsApi'
 
 type AuthState = {
   user: User | null
@@ -184,6 +185,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     return () => {
       cancelled = true
+    }
+  }, [user?.id, bootstrapping])
+
+  // Daily login streak: authenticated foreground app visit (UTC calendar day).
+  // Server is idempotent; client skips repeat calls for the same UTC day.
+  // Not tied to token refresh or FashionRise navigation.
+  useEffect(() => {
+    if (!user?.id || bootstrapping) return
+    let cancelled = false
+    const lastDayKey = `fr_streak_day_${user.id}`
+
+    const utcToday = () => new Date().toISOString().slice(0, 10)
+
+    const maybeCheckIn = () => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      const today = utcToday()
+      try {
+        if (sessionStorage.getItem(lastDayKey) === today) return
+      } catch {
+        /* sessionStorage may be unavailable — still attempt once */
+      }
+      void postStreakCheckIn()
+        .then((status) => {
+          if (cancelled) return
+          try {
+            sessionStorage.setItem(lastDayKey, status.last_checkin_date || today)
+          } catch {
+            /* ignore */
+          }
+          if (status.rewarded_this_checkin) {
+            void fetchMe()
+              .then((me) => {
+                if (!cancelled) setUser(me)
+              })
+              .catch(() => {
+                /* keep session */
+              })
+          }
+        })
+        .catch(() => {
+          /* streak is best-effort */
+        })
+    }
+
+    maybeCheckIn()
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') maybeCheckIn()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [user?.id, bootstrapping])
 

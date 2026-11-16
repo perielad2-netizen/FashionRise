@@ -33,6 +33,14 @@ from app.models.star_cart import StarCart, StarCartItem
 from app.models.techpack_ai_artifact import TechpackAIArtifact
 from app.models.techpack_ai_run import TechpackAIRun
 from app.models.techpack_draft import TechpackDraft, TechpackExport
+from app.models.competition import (
+    CompetitionAward,
+    CompetitionGroup,
+    CompetitionGroupMember,
+    CompetitionWeek,
+    LoginStreak,
+    StarPayout,
+)
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow
@@ -43,6 +51,10 @@ __all__ = [
     "AIJob",
     "BodyMeasurementProfile",
     "ColorPalette",
+    "CompetitionAward",
+    "CompetitionGroup",
+    "CompetitionGroupMember",
+    "CompetitionWeek",
     "DesignExport",
     "DesignRevision",
     "FabricAsset",
@@ -53,6 +65,7 @@ __all__ = [
     "GalleryLike",
     "GarmentDesign",
     "GarmentTemplate",
+    "LoginStreak",
     "MagicLookMeta",
     "MaterialDefinition",
     "PersonalCroquis",
@@ -73,6 +86,7 @@ __all__ = [
     "RegistrationInvitation",
     "StarCart",
     "StarCartItem",
+    "StarPayout",
     "TechpackAIArtifact",
     "TechpackAIRun",
     "TechpackDraft",

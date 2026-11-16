@@ -59,6 +59,7 @@ import {
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
+import { CompetitionStrip } from '@/shell/components/CompetitionStrip'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -590,6 +591,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           </button>
         ))}
       </div>
+
+      <CompetitionStrip />
 
       <div className={styles.body}>
         {tab === 'friends' ? (
