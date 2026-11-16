@@ -3,23 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Preview — Studio Create glow icons + themed sheets (2026-11-16 23:20 Asia/Jerusalem)
+## Deployed — Studio Create glow icons + themed sheets LIVE (2026-11-16 23:35 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-studio-create-wow-77c6` |
-| Preview | https://fashionrise.app/preview-studio/ |
+| PR | **#392** merged → `main` @ **`256706e9`** |
+| Tip | FE **`256706e9`** · `/var/www/fashionrise/releases/256706e9-studio-create-wow` |
 | Change | Gradient/glow paint icons; Models · Brush · Materials dark pink-glass Create theme; dock tab glyphs |
-| Prod | Unchanged — tip remains Create Model LIVE until approve |
-
-## Preview — Studio Create paint tools wow (2026-11-16 23:05 Asia/Jerusalem)
-
-| Field | Value |
-| --- | --- |
-| Branch | `cursor/web-studio-create-wow-77c6` |
-| Preview | https://fashionrise.app/preview-studio/ |
-| Change | Premium pen/eraser/fill/eyedropper glyphs, glass pink tool rail, brush-kind icons, Studio atmosphere |
-| Prod | Unchanged — tip remains Create Model LIVE until approve |
+| Preview | `/preview-studio/` removed after promote |
+| Series | **Studio-page Mobbin polish loop complete** (FashionRise → Home → Friends → Profile → Stars → Designs → Looks → Models → Fitting → Create Model → **Create Studio**) |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/f5a0cccb-create-model-mobbin-polish /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Create Model wizard Mobbin polish LIVE (2026-11-16 23:00 Asia/Jerusalem)
 
