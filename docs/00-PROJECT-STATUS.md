@@ -3,20 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**designer profile premium #371** · conditional PM approval · shipping FE+BE · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**designer profile premium #371 LIVE** · BE+FE **`11d1b685`** · Alembic **035** · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. Designer profile premium redesign (#371) shipping after avatar-storage corrections. Stars weekly/streak rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. Designer profile premium redesign (#371) deployed after avatar-storage corrections. Stars weekly/streak rewards remain **OFF**.
 
-## Designer profile premium #371 — SHIPPING (2026-11-16)
+## Designer profile premium #371 — PRODUCTION LIVE (2026-11-16)
 
-| Item | Detail |
+| Item | Result |
 |---|---|
-| Scope | Luxury Designer Card profile · Edit sheet · Collection + look preview · look-chip profile photos · **legacy `/static/uploads` avatar URLs preserved** · **account delete unlinks private avatar only** |
-| Branch / PR | `cursor/web-designer-profile-premium-77c6` · [#371](https://github.com/perielad2-netizen/FashionRise/pull/371) |
-| Verify | Vitest profile/Runway/avatarSrc · pytest `test_profile_avatar` + account deletion · `tsc -b` · production `npm run build` |
-| Alembic | Remains **035** (no migration) |
-| Disabled gates | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · streak rewards OFF · Stars purchasing OFF · no Codemagic/push/store |
-| Next | Merge + coordinated BE/FE deploy · smoke My Profile / Edit / avatar / Follow / collection |
+| Merge | [#371](https://github.com/perielad2-netizen/FashionRise/pull/371) → `main` @ **`11d1b685`** (fast-forward) |
+| Scope | Luxury Designer Card · Edit sheet · Collection preview · look-chip photos · legacy `/static/uploads` avatars preserved · account-delete unlinks owner private avatar only |
+| Preserve | `/var/backups/fashionrise/pm-designer-profile-371-preserve-20261116T170531Z` · prior BE `1cac14f0` · FE `322ea225-avatar-crop` |
+| Alembic | Remains **035** · no migration |
+| Backend | Detached **`11d1b685`** @ `/opt/fashionrise/src` · `fashionrise-api` **active** · `/health` **200** · `/ready` database ok · OpenAPI `GalleryRead.avatar_url` present |
+| Frontend | `/var/www/fashionrise/releases/11d1b685-designer-profile-premium` · nginx symlink + reload · public `/version.json` sha `11d1b685` |
+| Reward flags | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · launch week `""` · streak rewards OFF · competition `weekly_rewards_enabled=false` |
+| Smoke | Discover **200** with `avatar_url` for NoaPeri · avatar JPEG **200**/54KB · public profile **200** · user gallery **200** · Fitting Room preflight **401** (auth) · designs/my **401** · Studio/home **200** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/322ea225-avatar-crop /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 1cac14f0 && systemctl restart fashionrise-api` |
+| Next | Hard-refresh Android QA on My Profile + Discover avatar chips. Keep rewards **OFF**. |
 
 ## FashionRise Social — scope & progress
 
@@ -41,7 +46,7 @@
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Review designer profile premium redesign PR (do **not** deploy until UI approved). Keep weekly/streak rewards **OFF**. Merge #365 when accepted.
+**Exact next step:** Hard-refresh Android QA on Designer Card + Discover avatar chips. Keep weekly/streak rewards **OFF**.
 
 ## Release roadmap (source of truth)
 
@@ -52,7 +57,7 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **LIVE** · #349–#363 merged · #365 FE tip · Alembic **035** · rewards OFF · Reels chrome | Prod BE **`1cac14f0`** · FE `1ba10665-reel-chrome-365` · rollback FE `1cac14f0-immersive-363` |
+| **FashionRise Social** | **LIVE** · #349–#363 + **#371 designer profile** · Alembic **035** · rewards OFF · Reels chrome | Prod BE+FE **`11d1b685`** · rollback FE `322ea225-avatar-crop` · rollback BE `1cac14f0` |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
