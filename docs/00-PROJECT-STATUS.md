@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**FashionRise Social LIVE** · prod BE/FE **`82e58571`** · Alembic **035** · weekly/streak rewards **FALSE** · backup retained · #361 merged @ **`82e58571`**.)
+**Last updated:** 2026-11-16 (**UX hotfix in review** · immersive Discover feed shell · Social still LIVE at prod BE/FE **`82e58571`** · Alembic **035** · weekly/streak rewards **FALSE**.)
 
-**Phase:** FashionRise Social **LIVE in production** (PM-authorized coordinated rollout). Stars weekly/streak rewards remain **OFF**. No purchasing/push/Codemagic.
+**Phase:** FashionRise Social **LIVE in production**. UX correction PR: entry screen → full-viewport Discover feed (Reels-style), not dashboard. Stars weekly/streak rewards remain **OFF**. No purchasing/push/Codemagic.
 
 ## FashionRise Social — scope & progress
 
@@ -23,12 +23,13 @@
 | **Prod preflight** | Read-only VPS release preflight (no mutations) | **COMPLETE 2026-11-16** · [#360](https://github.com/perielad2-netizen/FashionRise/pull/360) → `main` @ **`fc75fe46`** |
 | **Prod DB backup** | One authorized `pg_dump -Fc` of `fashionrise_beta` | **COMPLETE** · `…/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump` |
 | **Prod Social deploy** | Migrate **030→035** + BE/FE **`82e58571`** · rewards FALSE | **LIVE 2026-11-16** · smoke PASS · **0** Social star payouts |
+| **UX hotfix** | Immersive full-screen Discover feed (snap swipe · overlay like/rate/comment/follow · compact mode pills · Profile/Looks in menu) · no dashboard hero | **In review** · FE-only · backend unchanged · rewards stay OFF |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Monitor production Social quietly. Keep weekly/streak rewards **OFF** until a further PM OK. Continue Android QA on the current gate. No Codemagic/store/push/purchasing activation.
+**Exact next step:** Review/merge immersive FashionRise feed UX hotfix, then deploy FE only (rewards stay OFF). Continue Android QA on the current gate. No Codemagic/store/push/purchasing activation.
 
 ## Release roadmap (source of truth)
 

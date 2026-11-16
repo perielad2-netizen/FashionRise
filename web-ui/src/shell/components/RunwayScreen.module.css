@@ -1,17 +1,395 @@
 .screen {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px 18px;
-  border-radius: var(--fr-radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background:
-    radial-gradient(900px 360px at 8% -12%, rgba(214, 51, 132, 0.16), transparent 55%),
-    linear-gradient(180deg, #141c2e 0%, #0f1626 100%);
-  box-shadow: var(--fr-shadow);
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  background: #0a0d14;
+  box-shadow: none;
   overflow: hidden;
+}
+
+.chrome {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 10px;
+  background: linear-gradient(180deg, rgba(8, 10, 16, 0.82) 0%, rgba(8, 10, 16, 0.35) 70%, transparent 100%);
+  pointer-events: none;
+}
+
+.chrome > * {
+  pointer-events: auto;
+}
+
+.chromeTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.chromeActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 16, 28, 0.55);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.modeRow {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(12, 16, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.modeRow::-webkit-scrollbar {
+  display: none;
+}
+
+.modeBtn,
+.modeActive {
+  flex: 1 0 auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+}
+
+.modeActive {
+  color: #fff;
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+}
+
+.modeBtn:focus-visible,
+.modeActive:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.menuPanel {
+  position: absolute;
+  z-index: 8;
+  top: calc(52px + env(safe-area-inset-top, 0px));
+  right: 10px;
+  width: min(280px, calc(100% - 20px));
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 16, 26, 0.94);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+}
+
+.menuItem {
+  min-height: 40px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menuItem:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 1px;
+}
+
+.menuPush {
+  margin-top: 4px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.friendsWrap {
+  display: grid;
+  gap: 12px;
+  padding: 72px 14px 24px;
+}
+
+.loadMoreDock {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.loadMoreDock > * {
+  pointer-events: auto;
+}
+
+.immersiveFeed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  scroll-padding: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.immersiveCard {
+  position: relative;
+  height: 100%;
+  min-height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow: hidden;
+  background: #0a0d14;
+}
+
+.immersiveMedia {
+  position: absolute;
+  inset: 0;
+}
+
+.immersiveImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.immersiveShade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 22%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.28) 38%, transparent 58%);
+  pointer-events: none;
+}
+
+.immersiveOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding:
+    calc(88px + env(safe-area-inset-top, 0px))
+    12px
+    calc(22px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px))
+    14px;
+  pointer-events: none;
+}
+
+.immersiveOverlay > * {
+  pointer-events: auto;
+}
+
+.immersiveMeta {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.designerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.designerAvatar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(214, 51, 132, 0.55);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.designerChipText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.designerChipText strong {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designerChipText span {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.immersiveActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.immersiveActions .likeBtn,
+.immersiveActions .likeBtnOn,
+.immersiveActions .commentBtn,
+.immersiveActions .commentBtnOn,
+.immersiveActions .followBtn,
+.immersiveActions .followBtnOn,
+.immersiveActions .statChip {
+  flex-direction: column;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  font-size: 11px;
+  background: rgba(10, 12, 20, 0.42);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.immersiveScore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 48px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: rgba(10, 12, 20, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.immersiveScore .scoreSelect {
+  width: 100%;
+  min-height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 11px;
+}
+
+.followBtn,
+.followBtnOn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.followBtnOn {
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(190, 24, 93, 0.22);
+  color: #fecdd3;
+}
+
+.followBtn:disabled,
+.followBtnOn:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .head {
@@ -198,16 +576,11 @@
 }
 
 .body {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  /* End padding so Runway card footers (Chat / own-look notes) clear PWA chrome. */
-  padding-bottom: calc(
-    24px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px)
-  );
-  scroll-padding-bottom: calc(
-    24px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px)
-  );
+  overflow: hidden;
+  padding: 0;
 }
 
 .status {
@@ -218,9 +591,9 @@
 }
 
 .empty {
-  margin: 18px auto;
+  margin: 0 auto;
   max-width: 420px;
-  padding: 28px 18px;
+  padding: calc(96px + env(safe-area-inset-top, 0px)) 18px 28px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -764,12 +1137,13 @@
 }
 
 .feedSnap {
-  scroll-snap-type: y proximity;
-  scroll-padding-block: 12px;
+  scroll-snap-type: y mandatory;
+  scroll-padding-block: 0;
 }
 
 .feedSnap > li {
   scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .cardMeta {

@@ -221,6 +221,10 @@ describe('RunwayScreen', () => {
     }))
   })
 
+  async function openMoreMenu() {
+    fireEvent.click(await screen.findByTestId('runway-more-menu'))
+  }
+
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
@@ -236,6 +240,7 @@ describe('RunwayScreen', () => {
     })
     listUserGallery.mockResolvedValue([])
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     fireEvent.click(await screen.findByTestId('runway-my-profile'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
@@ -326,12 +331,14 @@ describe('RunwayScreen', () => {
     expect(recordGalleryImpressions).not.toHaveBeenCalled()
   })
 
-  it('defaults to Discover and keeps Feed/Top separate', async () => {
+  it('defaults to Discover immersive feed and keeps Friends/Top separate', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'FashionRise' })).toBeInTheDocument()
+    expect(screen.queryByText(/Social fashion/i)).toBeNull()
+    expect(screen.queryByText(/Fair Discover/i)).toBeNull()
     await waitFor(() =>
       expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'discover' })),
     )
@@ -344,8 +351,11 @@ describe('RunwayScreen', () => {
     expect(await screen.findByText('Discover look')).toBeInTheDocument()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
     expect(screen.queryByText('Worldwide hit')).toBeNull()
+
+    await openMoreMenu()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Start creating/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('runway-more-menu'))
 
     fireEvent.click(screen.getByTestId('runway-tab-feed'))
     await waitFor(() =>
@@ -382,9 +392,11 @@ describe('RunwayScreen', () => {
     const circle = await openCircleSheet()
     expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Start creating/i }))
     expect(onOpenCreate).toHaveBeenCalled()
-    fireEvent.click(screen.getAllByRole('button', { name: /My Looks/i })[0]!)
+    await openMoreMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /My Looks/i }))
     expect(onOpenLooks).toHaveBeenCalled()
   })
 
@@ -544,7 +556,8 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     listGallery.mockClear()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Friends/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
     expect(await screen.findByText('@yanivprbk')).toBeInTheDocument()
     expect(listGallery).not.toHaveBeenCalled()
     expect(listFriends).toHaveBeenCalled()
@@ -627,7 +640,8 @@ describe('RunwayScreen', () => {
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('tab', { name: /Friends/i }))
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
     expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
     expect(screen.getByTestId('friend-remove-yaniv')).toBeInTheDocument()
 
@@ -648,6 +662,7 @@ describe('RunwayScreen', () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await screen.findByTestId('runway-open-discover')
     await waitFor(() => expect(ensureDefaultRunwayPush).toHaveBeenCalled())
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText(/Push on — we’ll notify/i)).toBeInTheDocument()
@@ -657,6 +672,7 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'already' })
     runwayPushIsEnabled.mockResolvedValue(true)
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
@@ -668,6 +684,7 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: false, result: 'disabled' })
     runwayPushIsEnabled.mockResolvedValue(false)
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
     const toggle = await screen.findByTestId('runway-push-toggle')
     await waitFor(() => expect(toggle).toBeDisabled())
     expect(toggle).toHaveAttribute('aria-checked', 'false')

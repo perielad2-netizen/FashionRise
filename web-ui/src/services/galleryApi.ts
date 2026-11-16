@@ -27,6 +27,8 @@ export type GalleryItem = {
   updated_at: string
   liked_by_me?: boolean | null
   my_score?: number | null
+  /** Present when the API joins the author row. */
+  username?: string | null
 }
 
 export type GalleryRating = {
