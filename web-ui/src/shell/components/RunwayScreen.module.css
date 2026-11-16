@@ -173,9 +173,75 @@
 }
 
 .friendsWrap {
+  position: relative;
   display: grid;
-  gap: 12px;
-  padding: 72px 14px 24px;
+  gap: 22px;
+  padding: 68px 18px 36px;
+  min-height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(120% 70% at 12% -10%, rgba(236, 72, 153, 0.18), transparent 52%),
+    radial-gradient(90% 55% at 100% 8%, rgba(56, 189, 248, 0.1), transparent 48%),
+    linear-gradient(180deg, #101625 0%, #0a0d14 42%, #07090f 100%);
+}
+
+.friendsHeader {
+  display: grid;
+  gap: 14px;
+}
+
+.friendsBack {
+  width: fit-content;
+  min-height: 36px;
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.friendsBack:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.friendsTitleBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.friendsEyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f9a8d4;
+}
+
+.friendsTitle {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: clamp(1.85rem, 6vw, 2.35rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
+  line-height: 1.05;
+}
+
+.friendsLead {
+  margin: 0;
+  max-width: 28ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .immersiveFeed {
@@ -1570,8 +1636,8 @@
 
 .friendsPanel {
   display: grid;
-  gap: 16px;
-  padding-bottom: 8px;
+  gap: 22px;
+  padding-bottom: 12px;
   min-height: 0;
 }
 
@@ -1580,42 +1646,90 @@
   top: 0;
   z-index: 2;
   display: grid;
-  gap: 8px;
-  padding: 8px 0 10px;
-  background: linear-gradient(180deg, #141c2e 70%, rgba(20, 28, 46, 0.92) 100%);
+  gap: 10px;
+  padding: 0 0 4px;
+  background: transparent;
 }
 
 .addFriendLabel {
   font-size: 12px;
   font-weight: 650;
-  color: var(--fr-muted);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .addFriendRow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 0;
+  min-height: 48px;
+  padding: 4px 4px 4px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.addFriendAt {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .addFriendInput {
-  flex: 1 1 180px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--fr-text);
-  font-size: 13px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 15px;
+}
+
+.addFriendInput::placeholder {
+  color: rgba(255, 255, 255, 0.32);
 }
 
 .addFriendInput:focus-visible {
+  outline: none;
+}
+
+.addFriendRow:focus-within {
+  border-color: rgba(249, 168, 212, 0.55);
+  box-shadow: 0 0 0 3px rgba(249, 168, 212, 0.14);
+}
+
+.addFriendSubmit {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.addFriendSubmit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.addFriendSubmit:focus-visible {
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
 }
 
 .friendNotice {
   margin: 0;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(134, 239, 172, 0.28);
   background: rgba(20, 83, 45, 0.28);
@@ -1625,14 +1739,28 @@
 
 .friendSection {
   display: grid;
-  gap: 8px;
+  gap: 12px;
+}
+
+.friendSectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .friendSectionTitle {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--fr-text);
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+.friendSectionCount {
+  font-size: 12px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .friendList {
@@ -1640,9 +1768,10 @@
   margin: 0;
   padding: 0 0 12px;
   display: grid;
-  gap: 8px;
+  gap: 0;
   /* V2-0009: keep long friend lists scrollable inside the Runway body. */
   max-height: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .friendCard {
@@ -1650,10 +1779,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  padding: 12px 2px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  background: transparent;
+}
+
+.friendAvatar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgba(244, 114, 182, 0.95), rgba(190, 24, 93, 0.9));
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .friendOpen {
@@ -1662,6 +1806,7 @@
   min-height: 44px;
   display: flex;
   align-items: center;
+  gap: 12px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -1680,16 +1825,53 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .friendText strong {
-  font-size: 13px;
-  color: var(--fr-text);
+  font-size: 14px;
+  font-weight: 650;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .friendText span {
-  font-size: 11px;
-  color: var(--fr-muted);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.48);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friendRemove {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.friendRemove:hover,
+.friendRemove:focus-visible {
+  color: #fecdd3;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.friendRemove:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.friendRemove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .friendProfile {

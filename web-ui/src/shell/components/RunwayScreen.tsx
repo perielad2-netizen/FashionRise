@@ -795,14 +795,21 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       <div className={styles.body}>
         {tab === 'friends' ? (
           <div className={styles.friendsWrap}>
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => setTab('discover')}
-            >
-              <ChevronLeft size={14} aria-hidden />
-              Back to feed
-            </button>
+            <header className={styles.friendsHeader}>
+              <button
+                type="button"
+                className={styles.friendsBack}
+                onClick={() => setTab('discover')}
+              >
+                <ChevronLeft size={16} aria-hidden />
+                Feed
+              </button>
+              <div className={styles.friendsTitleBlock}>
+                <p className={styles.friendsEyebrow}>FashionRise</p>
+                <h1 className={styles.friendsTitle}>Friends</h1>
+                <p className={styles.friendsLead}>Add people by username and keep your circle close.</p>
+              </div>
+            </header>
             <FriendsPanel
               state={friendsState}
               username={friendUsername}
@@ -1171,6 +1178,9 @@ function FriendsPanel({
           Add friend by username
         </label>
         <div className={styles.addFriendRow}>
+          <span className={styles.addFriendAt} aria-hidden>
+            @
+          </span>
           <input
             ref={inputRef}
             id="runway-friend-username"
@@ -1184,7 +1194,7 @@ function FriendsPanel({
                 inputRef.current?.focus({ preventScroll: true })
               }, 50)
             }}
-            placeholder="e.g. yanivprbk"
+            placeholder="yanivprbk"
             autoComplete="username"
             autoCapitalize="none"
             autoCorrect="off"
@@ -1193,8 +1203,12 @@ function FriendsPanel({
             enterKeyHint="done"
             disabled={busy}
           />
-          <button type="submit" className={styles.primaryBtn} disabled={busy || !username.trim()}>
-            <UserPlus size={14} aria-hidden />
+          <button
+            type="submit"
+            className={styles.addFriendSubmit}
+            disabled={busy || !username.trim()}
+          >
+            <UserPlus size={15} aria-hidden />
             {busy ? 'Adding…' : 'Add'}
           </button>
         </div>
@@ -1228,30 +1242,43 @@ function FriendsPanel({
         <>
           {state.requests.length > 0 ? (
             <section className={styles.friendSection} aria-label="Friend requests">
-              <h2 className={styles.friendSectionTitle}>Requests</h2>
+              <div className={styles.friendSectionHead}>
+                <h2 className={styles.friendSectionTitle}>Requests</h2>
+                <span className={styles.friendSectionCount}>{state.requests.length}</span>
+              </div>
               <ul className={styles.friendList}>
-                {state.requests.map((row) => (
-                  <li key={row.id} className={styles.friendCard}>
-                    <div className={styles.friendText}>
-                      <strong>{row.friend.display_name || row.friend.username}</strong>
-                      <span>@{row.friend.username}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.primaryBtn}
-                      disabled={busy}
-                      onClick={() => onAccept(row.id)}
-                    >
-                      Accept
-                    </button>
-                  </li>
-                ))}
+                {state.requests.map((row) => {
+                  const label = row.friend.display_name || row.friend.username
+                  const initial = (label.trim()[0] || '?').toUpperCase()
+                  return (
+                    <li key={row.id} className={styles.friendCard}>
+                      <span className={styles.friendAvatar} aria-hidden>
+                        {initial}
+                      </span>
+                      <div className={styles.friendText}>
+                        <strong>{label}</strong>
+                        <span>@{row.friend.username}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.addFriendSubmit}
+                        disabled={busy}
+                        onClick={() => onAccept(row.id)}
+                      >
+                        Accept
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </section>
           ) : null}
 
           <section className={styles.friendSection} aria-label="Your friends">
-            <h2 className={styles.friendSectionTitle}>Your circle</h2>
+            <div className={styles.friendSectionHead}>
+              <h2 className={styles.friendSectionTitle}>Your circle</h2>
+              <span className={styles.friendSectionCount}>{state.friends.length}</span>
+            </div>
             {state.friends.length === 0 ? (
               <EmptyState
                 title="No friends yet"
@@ -1261,6 +1288,7 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.friends.map((row) => {
                   const label = row.friend.display_name || row.friend.username
+                  const initial = (label.trim()[0] || '?').toUpperCase()
                   return (
                     <li key={row.id} className={styles.friendCard}>
                       <button
@@ -1269,6 +1297,9 @@ function FriendsPanel({
                         data-testid={`friend-open-${row.friend.user_id}`}
                         onClick={() => setViewingFriend(row.friend)}
                       >
+                        <span className={styles.friendAvatar} aria-hidden>
+                          {initial}
+                        </span>
                         <span className={styles.friendText}>
                           <strong>{label}</strong>
                           <span>@{row.friend.username}</span>
@@ -1276,7 +1307,7 @@ function FriendsPanel({
                       </button>
                       <button
                         type="button"
-                        className={styles.ghostBtn}
+                        className={styles.friendRemove}
                         disabled={busy}
                         data-testid={`friend-remove-${row.friend.user_id}`}
                         onClick={() => onRemove(row.friend.user_id, label)}
