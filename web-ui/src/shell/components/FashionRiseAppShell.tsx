@@ -11,6 +11,8 @@ type Props = {
   onComingSoon?: (label: string) => void
   currentNav?: NavDestination
   onNavigate?: (destination: NavDestination) => void
+  /** FashionRise immersive feed: hide global header; full-bleed main; floating nav exit. */
+  immersive?: boolean
 }
 
 export function FashionRiseAppShell({
@@ -20,6 +22,7 @@ export function FashionRiseAppShell({
   onComingSoon,
   currentNav,
   onNavigate,
+  immersive = false,
 }: Props) {
   const [navOpen, setNavOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -45,27 +48,37 @@ export function FashionRiseAppShell({
     return () => document.removeEventListener('keydown', onKey)
   }, [navOpen, accountMenuOpen])
 
+  const menuToggle = (
+    <button
+      type="button"
+      className={immersive ? styles.immersiveMenuBtn : styles.menuBtn}
+      data-testid="shell-nav-toggle"
+      onClick={() => setNav(!navOpen)}
+      aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+      aria-expanded={navOpen}
+    >
+      {navOpen ? <X size={18} /> : <Menu size={18} />}
+    </button>
+  )
+
   return (
-    <div className={styles.shell} data-testid="fashionrise-app-shell">
-      <GlobalHeader
-        username={username}
-        onLogout={onLogout}
-        onComingSoon={onComingSoon}
-        accountMenuOpen={accountMenuOpen}
-        onAccountMenuOpenChange={setAccountMenu}
-        leading={
-          <button
-            type="button"
-            className={styles.menuBtn}
-            data-testid="shell-nav-toggle"
-            onClick={() => setNav(!navOpen)}
-            aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
-            aria-expanded={navOpen}
-          >
-            {navOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
-        }
-      />
+    <div
+      className={`${styles.shell} ${immersive ? styles.shellImmersive : ''}`}
+      data-testid="fashionrise-app-shell"
+      data-immersive={immersive ? 'true' : 'false'}
+    >
+      {immersive ? (
+        <div className={styles.immersiveExit}>{menuToggle}</div>
+      ) : (
+        <GlobalHeader
+          username={username}
+          onLogout={onLogout}
+          onComingSoon={onComingSoon}
+          accountMenuOpen={accountMenuOpen}
+          onAccountMenuOpenChange={setAccountMenu}
+          leading={menuToggle}
+        />
+      )}
       <div className={styles.body}>
         <div className={`${styles.navSlot} ${navOpen ? styles.navOpen : ''}`}>
           <GlobalNavigation
@@ -87,7 +100,7 @@ export function FashionRiseAppShell({
             onClick={() => setNav(false)}
           />
         ) : null}
-        <div className={styles.main}>{children}</div>
+        <div className={`${styles.main} ${immersive ? styles.mainImmersive : ''}`}>{children}</div>
       </div>
     </div>
   )

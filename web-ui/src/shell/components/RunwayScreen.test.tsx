@@ -193,13 +193,21 @@ describe('RunwayScreen', () => {
     ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'granted' })
     recordGalleryImpressions.mockResolvedValue({ recorded: 0 })
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
-      if (opts?.sort === 'top10') return [{ ...topItem }]
+      if (opts?.sort === 'top10') return [{ ...topItem, username: 'topstar' }]
       if (opts?.sort === 'discover') {
-        return [{ ...circleItem, id: 'discover-1', title: 'Discover look', user_id: 'creator-a' }]
+        return [
+          {
+            ...circleItem,
+            id: 'discover-1',
+            title: 'Discover look',
+            user_id: 'creator-a',
+            username: 'atelier_a',
+          },
+        ]
       }
-      if (opts?.sort === 'circle') return [{ ...circleItem }]
+      if (opts?.sort === 'circle') return [{ ...circleItem, username: 'friendone' }]
       if (opts?.sort === 'following') return []
-      return [{ ...circleItem }]
+      return [{ ...circleItem, username: 'friendone' }]
     })
     listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
@@ -294,7 +302,39 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
   })
 
-  it('loads more Discover results with exclude dedupe', async () => {
+  it('auto-loads more Discover results near the end with exclude dedupe', async () => {
+    const OriginalIO = globalThis.IntersectionObserver
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        cb: IntersectionObserverCallback
+        constructor(cb: IntersectionObserverCallback) {
+          this.cb = cb
+        }
+        observe(el: Element) {
+          if (el.getAttribute('data-testid') === 'runway-discover-load-more') {
+            this.cb(
+              [
+                {
+                  isIntersecting: true,
+                  intersectionRatio: 1,
+                  target: el,
+                } as IntersectionObserverEntry,
+              ],
+              this as unknown as IntersectionObserver,
+            )
+          }
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+        root = null
+        rootMargin = ''
+        thresholds = []
+      },
+    )
     listGallery.mockImplementation(async (opts?: { sort?: string; exclude?: string[] }) => {
       if (opts?.sort === 'discover' && (opts.exclude?.length ?? 0) > 0) {
         return [
@@ -303,6 +343,7 @@ describe('RunwayScreen', () => {
             id: 'discover-next',
             title: 'Discover page two',
             user_id: 'creator-b',
+            username: 'creator_b',
           },
         ]
       }
@@ -312,23 +353,31 @@ describe('RunwayScreen', () => {
           id: `discover-${i + 1}`,
           title: i === 0 ? 'Discover look' : `Discover filler ${i + 1}`,
           user_id: `creator-${i % 5}`,
+          username: `creator_${i % 5}`,
         }))
       }
       return []
     })
-    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    expect(await screen.findByText('Discover look')).toBeInTheDocument()
-    fireEvent.click(await screen.findByTestId('runway-discover-load-more'))
-    await waitFor(() =>
-      expect(listGallery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sort: 'discover',
-          exclude: expect.arrayContaining(['discover-1', 'discover-24']),
-        }),
-      ),
-    )
-    expect(await screen.findByText('Discover page two')).toBeInTheDocument()
-    expect(recordGalleryImpressions).not.toHaveBeenCalled()
+    try {
+      render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+      expect(await screen.findByText('Discover look')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(listGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sort: 'discover',
+            exclude: expect.arrayContaining(['discover-1', 'discover-24']),
+          }),
+        ),
+      )
+      expect(await screen.findByText('Discover page two')).toBeInTheDocument()
+      // Exhausted after short page-two → sentinel removed; no visible Load more CTA.
+      expect(screen.queryByTestId('runway-discover-load-more')).toBeNull()
+      expect(screen.queryByRole('button', { name: /Load more/i })).toBeNull()
+      expect(recordGalleryImpressions).not.toHaveBeenCalled()
+    } finally {
+      if (OriginalIO) vi.stubGlobal('IntersectionObserver', OriginalIO)
+      else vi.unstubAllGlobals()
+    }
   })
 
   it('defaults to Discover immersive feed and keeps Friends/Top separate', async () => {
@@ -349,6 +398,8 @@ describe('RunwayScreen', () => {
     )
     expect(await screen.findByTestId('runway-open-discover')).toBeInTheDocument()
     expect(await screen.findByText('Discover look')).toBeInTheDocument()
+    expect(screen.getByText('@atelier_a')).toBeInTheDocument()
+    expect(screen.queryByText('@Designer')).toBeNull()
     expect(screen.queryByTestId('runway-top-limit')).toBeNull()
     expect(screen.queryByText('Worldwide hit')).toBeNull()
 

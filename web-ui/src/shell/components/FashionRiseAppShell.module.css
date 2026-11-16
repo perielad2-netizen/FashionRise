@@ -16,6 +16,82 @@
   overflow: visible;
 }
 
+/* FashionRise immersive feed: look owns the usable viewport (no global header row). */
+.shellImmersive {
+  position: relative;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+  background: #0a0d14;
+}
+
+.shellImmersive .body {
+  grid-template-columns: 1fr;
+}
+
+.shellImmersive .navSlot {
+  display: none;
+}
+
+.shellImmersive .navSlot.navOpen {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(220px, 82vw);
+  z-index: 110;
+  background: #0a0f1c;
+  box-shadow: 16px 0 40px rgba(0, 0, 0, 0.45);
+}
+
+.shellImmersive .scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  cursor: pointer;
+}
+
+.immersiveExit {
+  position: absolute;
+  z-index: 40;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.immersiveExit > * {
+  pointer-events: auto;
+}
+
+.immersiveMenuBtn {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 16, 28, 0.55);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.immersiveMenuBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.mainImmersive {
+  padding: 0 !important;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .body {
   display: grid;
   grid-template-columns: var(--fr-nav-w) minmax(0, 1fr);

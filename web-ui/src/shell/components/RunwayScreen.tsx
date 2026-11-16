@@ -103,6 +103,9 @@ const TABS: Array<{ id: Exclude<TabId, 'friends'>; label: string; hint: string }
 const TOP_LIMITS: TopLimit[] = [10, 20, 50]
 const DISCOVER_PAGE_SIZE = 24
 
+/** Session cache so Follow status is not re-fetched for every remount of the same designer. */
+const followStatusCache = new Map<string, boolean>()
+
 /** Batch unique Discover impressions only after cards become meaningfully visible. */
 function useDiscoverImpressionReporter() {
   const pendingRef = useRef<Set<string>>(new Set())
@@ -393,11 +396,29 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         return { ...prev, discover: merged }
       })
     } catch {
-      setDiscoverHasMore(false)
+      // Keep hasMore true so a later scroll near the end can retry.
     } finally {
       setDiscoverLoadingMore(false)
     }
   }, [discoverHasMore, discoverLoadingMore, state])
+
+  const discoverSentinelRef = useRef<HTMLLIElement | null>(null)
+  const discoverCount = state.status === 'ready' ? state.discover.length : 0
+  useEffect(() => {
+    if (tab !== 'discover' || !discoverHasMore || state.status !== 'ready') return
+    const node = discoverSentinelRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const root = node.parentElement
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        void loadMoreDiscover()
+      },
+      { root, rootMargin: '140% 0px', threshold: 0 },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [discoverCount, discoverHasMore, loadMoreDiscover, state.status, tab])
 
   const onAddFriend = useCallback(
     async (event: FormEvent) => {
@@ -814,20 +835,21 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                   }
                 />
               ))}
-            </ul>
-            {tab === 'discover' && discoverHasMore ? (
-              <div className={styles.loadMoreDock}>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
+              {tab === 'discover' && discoverHasMore ? (
+                <li
+                  ref={discoverSentinelRef}
+                  className={styles.discoverSentinel}
                   data-testid="runway-discover-load-more"
-                  disabled={discoverLoadingMore}
-                  onClick={() => void loadMoreDiscover()}
+                  aria-hidden={discoverLoadingMore ? undefined : true}
                 >
-                  {discoverLoadingMore ? 'Loading…' : 'Load more'}
-                </button>
-              </div>
-            ) : null}
+                  {discoverLoadingMore ? (
+                    <span className={styles.status} role="status">
+                      Loading more looks…
+                    </span>
+                  ) : null}
+                </li>
+              ) : null}
+            </ul>
           </>
         )}
       </div>
@@ -1262,7 +1284,7 @@ function RunwayCard({
   const immersive = layout === 'immersive'
   const chatTitleId = useId()
   const chatInputId = useId()
-  const designerLabel = item.username?.trim() || 'Designer'
+  const designerLabel = item.username?.trim() || null
 
   useEffect(() => {
     impressionSentRef.current = false
@@ -1274,19 +1296,55 @@ function RunwayCard({
       setFollowingDesigner(false)
       return
     }
+    const cached = followStatusCache.get(item.user_id)
+    if (cached !== undefined) {
+      setFollowingDesigner(cached)
+      setFollowKnown(true)
+      return
+    }
+    const node = cardRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      let cancelled = false
+      void getFollowStatus(item.user_id)
+        .then((row) => {
+          if (cancelled) return
+          const next = Boolean(row.following)
+          followStatusCache.set(item.user_id, next)
+          setFollowingDesigner(next)
+          setFollowKnown(true)
+        })
+        .catch(() => {
+          if (!cancelled) setFollowKnown(true)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
     let cancelled = false
-    setFollowKnown(false)
-    void getFollowStatus(item.user_id)
-      .then((row) => {
-        if (cancelled) return
-        setFollowingDesigner(Boolean(row.following))
-        setFollowKnown(true)
-      })
-      .catch(() => {
-        if (!cancelled) setFollowKnown(true)
-      })
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.4)) {
+          return
+        }
+        observer.disconnect()
+        void getFollowStatus(item.user_id)
+          .then((row) => {
+            if (cancelled) return
+            const next = Boolean(row.following)
+            followStatusCache.set(item.user_id, next)
+            setFollowingDesigner(next)
+            setFollowKnown(true)
+          })
+          .catch(() => {
+            if (!cancelled) setFollowKnown(true)
+          })
+      },
+      { threshold: [0.4] },
+    )
+    observer.observe(node)
     return () => {
       cancelled = true
+      observer.disconnect()
     }
   }, [immersive, isOwn, item.user_id, viewerId])
 
@@ -1383,12 +1441,14 @@ function RunwayCard({
     setActionError(null)
     const prev = followingDesigner
     setFollowingDesigner(!prev)
+    followStatusCache.set(item.user_id, !prev)
     try {
       if (prev) await unfollowCreator(item.user_id)
       else await followCreator(item.user_id)
       setFollowKnown(true)
     } catch (err) {
       setFollowingDesigner(prev)
+      followStatusCache.set(item.user_id, prev)
       setActionError(err instanceof ApiError ? err.message : 'Could not update follow.')
     } finally {
       setBusy(null)
@@ -1617,20 +1677,24 @@ function RunwayCard({
                   }
                 >
                   <span className={styles.designerAvatar} aria-hidden>
-                    {(designerLabel[0] || 'D').toUpperCase()}
+                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
                   </span>
                   <span className={styles.designerChipText}>
-                    <strong>@{designerLabel}</strong>
+                    <strong>
+                      {designerLabel ? `@${designerLabel}` : 'View designer'}
+                    </strong>
                     <span>{item.title || 'Untitled look'}</span>
                   </span>
                 </button>
               ) : (
                 <div className={styles.designerChip}>
                   <span className={styles.designerAvatar} aria-hidden>
-                    {(designerLabel[0] || 'D').toUpperCase()}
+                    {(designerLabel?.[0] || item.title?.[0] || '·').toUpperCase()}
                   </span>
                   <span className={styles.designerChipText}>
-                    <strong>@{designerLabel}</strong>
+                    <strong>
+                      {designerLabel ? `@${designerLabel}` : 'Designer'}
+                    </strong>
                     <span>{item.title || 'Untitled look'}</span>
                   </span>
                 </div>

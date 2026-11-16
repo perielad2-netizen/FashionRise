@@ -61,12 +61,18 @@ def test_discover_excludes_older_than_seven_days_and_records_impressions(client,
 
     res = client.get("/api/v1/gallery?sort=discover&limit=10", headers=_auth(viewer))
     assert res.status_code == 200, res.text
-    ids = [row["id"] for row in res.json()]
+    payload = res.json()
+    ids = [row["id"] for row in payload]
     assert fresh_c not in ids
     assert fresh_a in ids or fresh_b in ids
     assert other in ids
     # Creator diversification: at most 2 from author in the page.
     assert sum(1 for i in ids if i in {fresh_a, fresh_b, fresh_c}) <= 2
+    # FashionRise overlays need real author usernames (not a second N+1 profile round-trip).
+    by_id = {row["id"]: row for row in payload}
+    if other in by_id:
+        assert by_id[other]["username"]
+        assert by_id[other]["username"] != "Designer"
 
     # Impressions: first post records, second is idempotent; self-view skipped.
     author_user = db_session.query(User).filter(User.email == "disc_author@example.com").one()

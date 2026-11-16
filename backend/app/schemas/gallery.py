@@ -59,6 +59,8 @@ class GalleryRead(BaseModel):
     my_score: int | None = None
     """Relative API path for authenticated Runway image bytes (look publishes)."""
     image_path: str | None = None
+    """Author username for FashionRise overlays (optional; omitted when unavailable)."""
+    username: str | None = None
 
 
 class GalleryCommentCreate(BaseModel):

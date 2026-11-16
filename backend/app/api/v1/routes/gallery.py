@@ -28,7 +28,7 @@ def create_gallery_item(
     data: GalleryCreate, user: CurrentUser, db: Session = Depends(get_db)
 ) -> GalleryRead:
     item = gallery_service.create_gallery_item(db, user, data)
-    return gallery_service.to_gallery_read(item)
+    return gallery_service.to_gallery_read(item, username=user.username)
 
 
 @router.get("", response_model=list[GalleryRead])
@@ -81,7 +81,7 @@ def record_impressions(
 @router.get("/user/{user_id}", response_model=list[GalleryRead])
 def list_user_gallery(user_id: uuid.UUID, db: Session = Depends(get_db)) -> list[GalleryRead]:
     rows = gallery_service.list_user_gallery(db, user_id)
-    return [gallery_service.to_gallery_read(r) for r in rows]
+    return gallery_service.to_gallery_reads_for_viewer(db, rows, viewer=None)
 
 
 @router.post("/comments/{comment_id}/like", status_code=204)
