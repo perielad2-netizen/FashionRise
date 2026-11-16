@@ -223,6 +223,40 @@ describe('FriendProfilePanel (premium designer card)', () => {
     expect(screen.queryByTestId('designer-look-preview')).not.toBeInTheDocument()
   })
 
+  it('opens the profile photo lightbox when the avatar is clicked', async () => {
+    getPublicProfile.mockResolvedValue({
+      id: 'p1',
+      user_id: 'friend-1',
+      display_name: 'Yaniv',
+      bio: 'Public runway creator',
+      avatar_url: '/api/v1/profiles/friend-1/avatar',
+      cover_url: null,
+      style_tags: [],
+      designs_count: 1,
+      published_count: 1,
+      followers_count: 3,
+      likes_received_count: 10,
+      rating_average: 8,
+      rating_count: 2,
+      reputation_score: 40,
+      reputation_tier: 'rising',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    render(
+      <FriendProfilePanel
+        friend={{ ...friend, avatar_url: '/api/v1/profiles/friend-1/avatar' }}
+        onBack={vi.fn()}
+      />,
+    )
+    fireEvent.click(await screen.findByTestId('designer-avatar-open'))
+    const preview = await screen.findByTestId('designer-avatar-preview-lightbox')
+    expect(within(preview).getByRole('heading', { name: 'Yaniv' })).toBeInTheDocument()
+    expect(within(preview).getByAltText("Yaniv's profile photo")).toBeInTheDocument()
+    fireEvent.click(within(preview).getByRole('button', { name: 'Close profile photo' }))
+    expect(screen.queryByTestId('designer-avatar-preview-lightbox')).not.toBeInTheDocument()
+  })
+
   it('honors startInEditMode for explicit edit entry', async () => {
     getPublicProfile.mockResolvedValue({
       id: 'p-me',
