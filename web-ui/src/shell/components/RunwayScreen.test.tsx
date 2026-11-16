@@ -37,12 +37,14 @@ vi.mock('@/services/galleryApi', () => ({
 const getFollowStatus = vi.fn()
 const followCreator = vi.fn()
 const unfollowCreator = vi.fn()
+const updateMyProfile = vi.fn()
 
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
   getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
+  updateMyProfile: (...args: unknown[]) => updateMyProfile(...args),
 }))
 
 vi.mock('@/services/competitionsApi', () => ({
@@ -175,6 +177,7 @@ describe('RunwayScreen', () => {
     getFollowStatus.mockReset()
     followCreator.mockReset()
     unfollowCreator.mockReset()
+    updateMyProfile.mockReset()
     removeFriend.mockReset()
     enableRunwayPush.mockReset()
     disableRunwayPush.mockReset()
@@ -200,6 +203,54 @@ describe('RunwayScreen', () => {
     listUserGallery.mockResolvedValue([])
     getPublicProfile.mockResolvedValue(null)
     getFollowStatus.mockResolvedValue({ user_id: 'friend-1', following: false })
+    updateMyProfile.mockImplementation(async (payload: Record<string, unknown>) => ({
+      user_id: 'viewer-1',
+      username: 'viewer',
+      display_name: (payload.display_name as string) || 'viewer',
+      bio: (payload.bio as string) || '',
+      avatar_url: null,
+      designs_count: 0,
+      looks_count: 0,
+      followers_count: 0,
+      following_count: 0,
+      reputation_score: 0,
+    }))
+  })
+
+  it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
+    getPublicProfile.mockResolvedValue({
+      user_id: 'viewer-1',
+      username: 'viewer',
+      display_name: 'viewer',
+      bio: '',
+      avatar_url: null,
+      designs_count: 0,
+      looks_count: 0,
+      followers_count: 0,
+      following_count: 0,
+      reputation_score: 0,
+    })
+    listUserGallery.mockResolvedValue([])
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    fireEvent.click(await screen.findByTestId('runway-my-profile'))
+    expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('designer-edit-name'), {
+      target: { value: 'Studio Nova' },
+    })
+    fireEvent.change(screen.getByTestId('designer-edit-bio'), {
+      target: { value: 'Knitwear and evening.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(updateMyProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          display_name: 'Studio Nova',
+          bio: 'Knitwear and evening.',
+        }),
+      ),
+    )
+    expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Studio Nova')
   })
 
   async function openCircleSheet() {

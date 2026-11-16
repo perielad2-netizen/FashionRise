@@ -372,11 +372,16 @@ def delete_account(db: Session, user: User) -> None:
     """
     from sqlalchemy import delete as sa_delete
 
-    from app.services import personal_croquis_service
+    from app.services import personal_croquis_publish, personal_croquis_service
 
     user_id = user.id
     email = user.email
+    # Capture public My Model copies before user CASCADE drops gallery rows.
+    public_model_keys = personal_croquis_publish.public_croquis_gallery_keys_for_owner(
+        db, user_id
+    )
     personal_croquis_service.prepare_owner_account_croquis_cleanup(db, user_id)
     db.execute(sa_delete(User).where(User.id == user_id))
     db.commit()
+    personal_croquis_publish.unlink_public_upload_keys(public_model_keys)
     _log.info("account_deleted user_id=%s email_suffix=%s", user_id, (email or "")[-12:])

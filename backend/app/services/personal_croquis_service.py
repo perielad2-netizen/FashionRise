@@ -637,9 +637,14 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
     Idempotent: repeat calls on an already-erased croquis succeed without remapping.
     Does not mutate design drawing data or remap historical pins.
 
+    Also removes any FashionRise public gallery copy created from this My Model
+    (Discover / rankings / profile / competition surfaces) in the same transaction.
+
     Locks the croquis row then its versions (same order as the generate worker attach
     path) so erase cannot race past a fenced generated-asset attachment.
     """
+    from app.services import personal_croquis_publish as pcp
+
     row = (
         db.query(PersonalCroquis)
         .filter(PersonalCroquis.id == croquis_id, PersonalCroquis.owner_id == user.id)
@@ -649,8 +654,16 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Croquis not found")
 
+    # Always detach public FashionRise copy if present (including repeat erase).
+    _removed, public_key = pcp.remove_owned_croquis_gallery_entry(
+        db, croquis_id=row.id, owner_id=user.id
+    )
+
     now = _utcnow()
     if row.erase_requested_at is not None:
+        db.commit()
+        if public_key:
+            pcp.unlink_public_upload_keys([public_key])
         db.refresh(row)
         return row
 
@@ -705,6 +718,8 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
 
     db.add(row)
     db.commit()
+    if public_key:
+        pcp.unlink_public_upload_keys([public_key])
     db.refresh(row)
     return row
 

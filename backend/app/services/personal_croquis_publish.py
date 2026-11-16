@@ -29,6 +29,58 @@ def gallery_item_for_croquis(db: Session, croquis_id: uuid.UUID) -> GalleryItem 
     return db.scalar(select(GalleryItem).where(GalleryItem.croquis_id == croquis_id))
 
 
+def unlink_public_upload_keys(keys: list[str] | tuple[str, ...] | set[str]) -> None:
+    """Best-effort remove of public FashionRise copies (never touches private croquis root)."""
+    if not keys:
+        return
+    storage = LocalStorageBackend()
+    for key in keys:
+        if not key:
+            continue
+        try:
+            storage.delete_file(key=key)
+        except OSError:
+            pass
+
+
+def remove_owned_croquis_gallery_entry(
+    db: Session,
+    *,
+    croquis_id: uuid.UUID,
+    owner_id: uuid.UUID,
+) -> tuple[bool, str | None]:
+    """Delete this owner's FashionRise gallery row for a My Model (no commit).
+
+    Returns ``(removed, public_storage_key)``. ``removed`` is False when already
+    unpublished or not owned. Does not touch unrelated gallery entries.
+    """
+    item = gallery_item_for_croquis(db, croquis_id)
+    if item is None or item.user_id != owner_id:
+        return False, None
+    storage = LocalStorageBackend()
+    key = storage.key_from_public_url(item.image_url)
+    db.delete(item)
+    db.flush()
+    return True, key
+
+
+def public_croquis_gallery_keys_for_owner(db: Session, owner_id: uuid.UUID) -> list[str]:
+    """Public upload keys for My Model → FashionRise copies owned by ``owner_id``."""
+    storage = LocalStorageBackend()
+    rows = db.scalars(
+        select(GalleryItem).where(
+            GalleryItem.user_id == owner_id,
+            GalleryItem.croquis_id.isnot(None),
+        )
+    ).all()
+    keys: list[str] = []
+    for row in rows:
+        key = storage.key_from_public_url(row.image_url)
+        if key:
+            keys.append(key)
+    return keys
+
+
 def _record_public_share_consent(
     db: Session,
     user: User,
@@ -157,17 +209,12 @@ def publish_personal_croquis(
 
 def unpublish_personal_croquis(db: Session, user: User, croquis_id: uuid.UUID) -> PersonalCroquis:
     croquis = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
-    item = gallery_item_for_croquis(db, croquis.id)
-    if item is None or item.user_id != user.id:
+    removed, key = remove_owned_croquis_gallery_entry(
+        db, croquis_id=croquis.id, owner_id=user.id
+    )
+    if not removed:
         raise NotFoundError("Personal model is not on FashionRise")
-    # Drop public gallery row only — private My Model stays owner-private.
-    storage = LocalStorageBackend()
-    key = storage.key_from_public_url(item.image_url)
-    db.delete(item)
     db.commit()
     if key:
-        try:
-            storage.delete_file(key=key)
-        except OSError:
-            pass
+        unlink_public_upload_keys([key])
     return croquis

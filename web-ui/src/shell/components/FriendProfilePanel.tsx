@@ -27,6 +27,8 @@ export type DesignerRef = {
 type Props = {
   friend: FriendUser | DesignerRef
   onBack: () => void
+  /** When true and viewing self, open the existing Edit Profile form once ready. */
+  startInEditMode?: boolean
 }
 
 type LoadState =
@@ -38,7 +40,7 @@ type LoadState =
  * FashionRise designer profile — public bio, stats, published looks, follow.
  * Never loads private designs or unpublished looks.
  */
-export function FriendProfilePanel({ friend, onBack }: Props) {
+export function FriendProfilePanel({ friend, onBack, startInEditMode = false }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -49,6 +51,7 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
+  const openedEditRef = useRef(false)
   const label =
     friend.display_name ||
     friend.username ||
@@ -59,6 +62,8 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
   useEffect(() => {
     const controller = new AbortController()
     setState({ status: 'loading' })
+    setEditing(false)
+    openedEditRef.current = false
     void Promise.all([
       getPublicProfile(friend.user_id, controller.signal).catch(() => null),
       listUserGallery(friend.user_id, controller.signal),
@@ -105,12 +110,19 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
   }
 
   const beginEdit = () => {
-    if (state.status !== 'ready' || !state.profile) return
-    setEditName(state.profile.display_name || '')
-    setEditBio(state.profile.bio || '')
+    if (state.status !== 'ready' || !isSelf) return
+    setEditName(state.profile?.display_name || friend.display_name || '')
+    setEditBio(state.profile?.bio || '')
     setEditError(null)
     setEditing(true)
   }
+
+  useEffect(() => {
+    if (!startInEditMode || !isSelf || openedEditRef.current) return
+    if (state.status !== 'ready') return
+    openedEditRef.current = true
+    beginEdit()
+  }, [startInEditMode, isSelf, state])
 
   const saveProfile = async () => {
     if (editBusy || state.status !== 'ready') return
@@ -220,7 +232,7 @@ export function FriendProfilePanel({ friend, onBack }: Props) {
         </div>
       ) : null}
 
-      {isSelf && state.status === 'ready' && state.profile ? (
+      {isSelf && state.status === 'ready' ? (
         <div className={styles.actions} style={{ marginTop: 8 }}>
           {!editing ? (
             <button
