@@ -118,9 +118,13 @@ export async function updateMyProfile(
   payload: ProfileUpdatePayload,
   signal?: AbortSignal,
 ): Promise<PublicProfile> {
+  // Pass the object — apiRequest / authorizedFetch JSON.stringify once.
+  // Double-stringify sent a JSON string body → Pydantic 422
+  // "Input should be a valid dictionary or object to extract fields from"
+  // (Android Edit Designer Card Save after a successful photo upload).
   return apiRequest<PublicProfile>('/profiles/me', {
     method: 'PUT',
-    body: JSON.stringify(payload),
+    body: payload,
     signal,
   })
 }

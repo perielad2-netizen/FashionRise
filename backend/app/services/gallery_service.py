@@ -437,6 +437,21 @@ def fetch_discover_candidate_rows(
     return out
 
 
+def _viewer_seen_gallery_ids(
+    db: Session, viewer_id: uuid.UUID, candidate_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Impression rows for this viewer among the current Discover candidate set."""
+    if not candidate_ids:
+        return set()
+    rows = db.scalars(
+        select(GalleryImpression.gallery_item_id).where(
+            GalleryImpression.viewer_user_id == viewer_id,
+            GalleryImpression.gallery_item_id.in_(candidate_ids),
+        )
+    ).all()
+    return set(rows)
+
+
 def list_discover_feed(
     db: Session,
     *,
@@ -444,8 +459,13 @@ def list_discover_feed(
     offset: int = 0,
     exclude_ids: list[uuid.UUID] | None = None,
     now: datetime | None = None,
+    viewer: User | None = None,
 ) -> list[GalleryItem]:
-    """Fair Discovery: all public publishes, per-page creator diversity, optional exclude."""
+    """Fair Discovery: all public publishes, per-page creator diversity, optional exclude.
+
+    When ``viewer`` is signed in, already-impressed looks are demoted and a
+    viewer+time explore salt rotates near-tied scores so the feed feels alive.
+    """
     now_utc = now or datetime.now(timezone.utc)
     rank_rows = fetch_discover_candidate_rows(db, now=now_utc)
     candidates = [
@@ -459,7 +479,16 @@ def list_discover_feed(
         )
         for row in rank_rows
     ]
-    scored = rank_discover_candidates(candidates, now=now_utc)
+    seen_ids: set[uuid.UUID] = set()
+    viewer_id = viewer.id if viewer is not None else None
+    if viewer_id is not None:
+        seen_ids = _viewer_seen_gallery_ids(db, viewer_id, [c.id for c in candidates])
+    scored = rank_discover_candidates(
+        candidates,
+        now=now_utc,
+        viewer_id=viewer_id,
+        seen_ids=seen_ids,
+    )
     skip = list(exclude_ids or [])
     # One API response = one diversified page (≤2 looks/creator). Load-more uses exclude=.
     # Legacy offset paging skips prior full pages so caps reset per page, not mid-response.

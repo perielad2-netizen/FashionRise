@@ -3,10 +3,17 @@
 Pure helpers — no DB. Every public published look is eligible for the endless
 Discover stream. Ranking still prefers cold-start exposure, engagement quality,
 and recency — without hard-dropping older designs from the feed.
+
+Liveliness (pilot → scale):
+- Soft time rotation + optional viewer salt so the same catalog does not freeze
+  into one permanent order for every account / every hour.
+- Seen-by-viewer demotion so already-watched looks sink while fresh ones rise.
+- Extra boost for brand-new publishes (first hours).
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,6 +28,15 @@ MAX_PER_CREATOR_DEFAULT = 2
 ELIGIBLE_HARD_CAP = 10_000
 # Kept for stratified candidate fetch day buckets when the pool is huge.
 DISCOVER_STRATIFY_DAYS = 7
+# Brand-new publishes get an extra lift so they do not sink behind older likes.
+FRESH_BOOST_HOURS = 6.0
+FRESH_BOOST_WEIGHT = 1.6
+# Looks this viewer already saw sink so the feed feels alive on return visits.
+SEEN_BY_VIEWER_FACTOR = 0.42
+# Mild explore jitter (±) so near-tied scores reorder by viewer + time bucket.
+EXPLORE_JITTER_AMP = 0.55
+# Re-roll the explore salt on this cadence (hours).
+EXPLORE_ROTATION_HOURS = 3
 
 
 @dataclass(frozen=True)
@@ -46,7 +62,36 @@ def is_discover_eligible(created_at: datetime, *, now: datetime | None = None) -
     return created <= now_utc + timedelta(seconds=60)
 
 
-def discover_score(candidate: DiscoverCandidate, *, now: datetime | None = None) -> float:
+def explore_time_bucket(now: datetime | None = None) -> int:
+    """Coarse time key so the feed reshuffles every few hours without thrashing."""
+    now_utc = ensure_utc(now or datetime.now(timezone.utc))
+    epoch_hours = int(now_utc.timestamp() // 3600)
+    return epoch_hours // max(1, int(EXPLORE_ROTATION_HOURS))
+
+
+def explore_jitter(
+    item_id: UUID,
+    *,
+    viewer_id: UUID | None = None,
+    now: datetime | None = None,
+    amplitude: float = EXPLORE_JITTER_AMP,
+) -> float:
+    """Deterministic ±jitter from viewer + time bucket + item (stable within a bucket)."""
+    bucket = explore_time_bucket(now)
+    viewer_key = str(viewer_id) if viewer_id is not None else "anon"
+    material = f"{viewer_key}|{bucket}|{item_id}".encode("utf-8")
+    digest = hashlib.sha256(material).hexdigest()
+    # Map first 8 hex chars → [0, 1)
+    unit = int(digest[:8], 16) / float(0xFFFFFFFF)
+    return (unit * 2.0 - 1.0) * float(amplitude)
+
+
+def discover_score(
+    candidate: DiscoverCandidate,
+    *,
+    now: datetime | None = None,
+    seen_by_viewer: bool = False,
+) -> float:
     """Higher is better. Future-dated items score -1; age never hard-excludes."""
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
     created = ensure_utc(candidate.created_at)
@@ -69,20 +114,39 @@ def discover_score(candidate: DiscoverCandidate, *, now: datetime | None = None)
     age_hours = max(0.0, age.total_seconds() / 3600.0)
     recency = math.exp(-age_hours / RECENCY_HALF_LIFE_HOURS)
 
-    return (2.4 * cold) + (3.2 * quality) + (1.1 * recency)
+    # First hours after publish: keep new designs near the top of Discover.
+    if age_hours < FRESH_BOOST_HOURS:
+        fresh = FRESH_BOOST_WEIGHT * (1.0 - (age_hours / FRESH_BOOST_HOURS))
+    else:
+        fresh = 0.0
+
+    score = (2.4 * cold) + (3.2 * quality) + (1.1 * recency) + fresh
+    if seen_by_viewer:
+        score *= SEEN_BY_VIEWER_FACTOR
+    return score
 
 
 def rank_discover_candidates(
     candidates: Sequence[DiscoverCandidate],
     *,
     now: datetime | None = None,
+    viewer_id: UUID | None = None,
+    seen_ids: Sequence[UUID] | set[UUID] | None = None,
 ) -> list[tuple[DiscoverCandidate, float]]:
+    seen = set(seen_ids or ())
     scored: list[tuple[DiscoverCandidate, float]] = []
     for row in candidates:
-        score = discover_score(row, now=now)
+        score = discover_score(row, now=now, seen_by_viewer=row.id in seen)
         if score < 0:
             continue
-        scored.append((row, score))
+        # Personalize only for signed-in viewers (viewer + 3h bucket). Anonymous
+        # Discover stays pure quality order so ranking unit tests stay stable.
+        jitter = (
+            explore_jitter(row.id, viewer_id=viewer_id, now=now)
+            if viewer_id is not None
+            else 0.0
+        )
+        scored.append((row, score + jitter))
     scored.sort(
         key=lambda pair: (
             -pair[1],

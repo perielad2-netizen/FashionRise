@@ -57,6 +57,7 @@ def list_gallery(
             limit=limit,
             offset=offset,
             exclude_ids=exclude or None,
+            viewer=user,
         )
     elif sort == "top10":
         # Worldwide board supports Top 10 / 20 / 50 selectors in the Runway UI.
