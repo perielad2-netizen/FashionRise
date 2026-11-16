@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 
 class GalleryItem(Base):
     __tablename__ = "gallery_items"
+    __table_args__ = (
+        CheckConstraint(
+            "design_id IS NOT NULL OR look_id IS NOT NULL OR croquis_id IS NOT NULL",
+            name="ck_gallery_items_design_look_or_croquis",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     design_id: Mapped[uuid.UUID | None] = mapped_column(

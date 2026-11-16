@@ -27,6 +27,7 @@ def _user(db, email: str, username: str) -> User:
 
 def _publish_item(db, user: User, *, created_at: datetime, title: str) -> GalleryItem:
     item = GalleryItem(
+        look_id=uuid.uuid4(),
         user_id=user.id,
         title=title,
         image_url="https://example.com/look.png",
@@ -149,7 +150,13 @@ def test_tick_locks_previous_week_when_new_week_starts(client, db_session):
     assert result["settled_previous"] is True
 
 
-def test_login_streak_rewards_every_seven_days(client, db_session):
+def test_login_streak_rewards_every_seven_days(client, db_session, monkeypatch):
+    # Explicit activation boundary required after #356 fail-closed gates.
+    monkeypatch.setenv("FASHIONRISE_STREAK_REWARDS_ENABLED", "true")
+    monkeypatch.setenv("FASHIONRISE_STREAK_REWARDS_START_DATE", "2026-11-01")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
     tokens = register_with_invite(client, db_session, "streak@example.com", "streakUser")
     user = _user(db_session, "streak@example.com", "streakUser")
     before = int(user.ai_stars or 0)
@@ -176,6 +183,7 @@ def test_login_streak_rewards_every_seven_days(client, db_session):
     res = client.post("/api/v1/competitions/streak/check-in", headers=_auth(tokens))
     assert res.status_code == 200
     body = res.json()
+    get_settings.cache_clear()
     assert body["current_streak"] >= 1
     assert body["reward_stars"] == 10
 

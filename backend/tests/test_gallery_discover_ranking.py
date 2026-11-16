@@ -113,6 +113,7 @@ def test_candidate_cap_stratifies_older_days_not_newest_only(db_session, client)
     for i in range(6):
         rows.append(
             GalleryItem(
+                look_id=uuid4(),
                 user_id=user.id,
                 title=f"newest-{i}",
                 image_url="https://example.com/n.png",
@@ -125,6 +126,7 @@ def test_candidate_cap_stratifies_older_days_not_newest_only(db_session, client)
             )
         )
     older_a = GalleryItem(
+        look_id=uuid4(),
         user_id=user.id,
         title="older-cold-a",
         image_url="https://example.com/o.png",
@@ -136,6 +138,7 @@ def test_candidate_cap_stratifies_older_days_not_newest_only(db_session, client)
         created_at=cutoff + timedelta(hours=2),
     )
     older_b = GalleryItem(
+        look_id=uuid4(),
         user_id=user.id,
         title="older-cold-b",
         image_url="https://example.com/o2.png",
