@@ -292,15 +292,19 @@
 
 .badges {
   position: absolute;
-  top: 8px;
+  top: 50%;
   left: 8px;
+  z-index: 2;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .badge {
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
@@ -309,6 +313,7 @@
   color: #fff;
   background: rgba(12, 18, 32, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
 }
 
 .favMark {
@@ -319,7 +324,8 @@
 .favIcon,
 .favIconActive {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
+  right: 8px;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -334,15 +340,14 @@
   padding: 0;
 }
 
-.deleteIcon {
-  top: 8px;
-  right: 8px;
-}
-
+/* Stack on the right mid-side so face/head stay clear */
 .favIcon,
 .favIconActive {
-  top: 8px;
-  right: 48px;
+  top: calc(50% - 40px);
+}
+
+.deleteIcon {
+  top: calc(50% + 4px);
 }
 
 .favIconActive {
