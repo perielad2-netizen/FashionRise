@@ -1736,9 +1736,6 @@ function RunwayCard({
                 )}
                 {followControl}
               </div>
-              {isOwn ? (
-                <p className={styles.srOnly}>Your look — likes and scores come from others</p>
-              ) : null}
               {actionError && !commentsOpen ? (
                 <p className={styles.cardError} role="alert">
                   {actionError}
