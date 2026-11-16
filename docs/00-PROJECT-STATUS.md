@@ -3,19 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**friends → full designer profile hotfix** · tip pending · weekly/streak Stars rewards remain **OFF**.)
+**Last updated:** 2026-11-16 (**friends → full designer profile hotfix LIVE** · FE **`c1fed241`** · BE **`11d1b685`** · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. #371 designer profile live; friends-list open now routes to the same full-screen Designer Card (not nested/clipped in Manage Friends). Stars weekly/streak rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. #371 designer profile live; friends-list open uses the same full-screen Designer Card as Discover. Stars weekly/streak rewards remain **OFF**.
 
-## Friends → full designer profile hotfix (2026-11-16)
+## Friends → full designer profile hotfix — FE LIVE (2026-11-16)
 
-| Item | Detail |
+| Item | Result |
 |---|---|
-| Bug | Opening a friend from Manage Friends nested `FriendProfilePanel` inside Friends chrome — Collection clipped / felt locked |
-| Fix | Friend row uses the same `viewingDesigner` full-screen path as Discover |
-| Branch | `cursor/web-friends-profile-full-77c6` |
-| Verify | RunwayScreen Vitest · `tsc -b` |
-| Gates | Rewards OFF · no BE/Alembic change |
+| Bug | Manage Friends nested the profile inside Friends chrome — Collection clipped / felt locked |
+| Fix | Friend row → same `viewingDesigner` full-screen path as Discover · [#372](https://github.com/perielad2-netizen/FashionRise/pull/372) → `main` @ **`c1fed241`** |
+| Frontend | `/var/www/fashionrise/releases/c1fed241-friends-profile-full` · public `/version.json` sha `c1fed241` |
+| Backend | Unchanged **`11d1b685`** · Alembic **035** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/11d1b685-designer-profile-premium /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Gates | Rewards OFF |
 
 ## Designer profile premium #371 — PRODUCTION LIVE (2026-11-16)
 
