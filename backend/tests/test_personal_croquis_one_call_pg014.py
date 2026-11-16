@@ -33,6 +33,7 @@ from tests.croquis_test_fixtures import (
     SYNTHETIC_STORAGE_NOTICE,
     adults_body,
     storage_body,
+    upload_rights_body,
 )
 
 ONE_CALL_ISO_DB = "fashionrise_one_call_test"
@@ -161,6 +162,7 @@ def test_pg014_upload_stored_source_sha_matches_fixture(pg014_engine, dedicated_
         adults = adults_body()
         pcs.record_adults_attestation(db, user, **adults)
         storage = pcs.record_storage_consent(db, user, **storage_body())
+        pcs.record_create_model_upload_consent(db, user, **upload_rights_body())
         source = load_approved_fixture_bytes()
         croquis = pcs.upload_source_photo(
             db,

@@ -106,7 +106,9 @@ def test_end_to_end_user_social_design_flow(client, db_session):
     assert ex_list.status_code == 200
     assert any(e["export_type"] == "spec_sheet_pdf" for e in ex_list.json())
 
-    # Publish to gallery.
+    # Publish to gallery (requires public-publish consent).
+    from tests.runway_publish_helpers import gallery_public_publish_body
+
     publish = client.post(
         "/api/v1/gallery",
         headers=a_headers,
@@ -115,6 +117,7 @@ def test_end_to_end_user_social_design_flow(client, db_session):
             "title": "Flow gallery look",
             "image_url": "https://example.com/preview.png",
             "visibility": "public",
+            **gallery_public_publish_body(),
         },
     )
     assert publish.status_code == 200, publish.text

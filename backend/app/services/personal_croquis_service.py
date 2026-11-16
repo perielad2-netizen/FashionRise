@@ -39,6 +39,7 @@ from app.models.private_media_cleanup import PrivateMediaCleanupQueue
 from app.models.user import User
 from app.models.user_consent_event import (
     PURPOSE_ADULTS_BETA,
+    PURPOSE_CREATE_MODEL_UPLOAD,
     PURPOSE_CROQUIS_AI_PROVIDER,
     PURPOSE_CROQUIS_STORAGE,
     UserConsentEvent,
@@ -80,6 +81,9 @@ def _approved_notice_text(*, purpose: str) -> str:
     elif purpose == PURPOSE_CROQUIS_AI_PROVIDER:
         text = (settings.my_croquis_ai_notice_text or "").strip()
         version = settings.my_croquis_ai_consent_version
+    elif purpose == PURPOSE_CREATE_MODEL_UPLOAD:
+        text = (settings.create_model_upload_notice_text or "").strip()
+        version = settings.create_model_upload_consent_version
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown consent purpose.")
     if not text or text in _BLOCKED_DRAFT_MARKERS:
@@ -136,6 +140,18 @@ def _require_explicit_ack(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Adults-only attestation flag is required on AI consent.",
+            )
+    elif purpose == PURPOSE_CREATE_MODEL_UPLOAD:
+        expected_version = settings.create_model_upload_consent_version
+        if not acknowledged:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Explicit Create Model upload agreement acknowledgment is required.",
+            )
+        if not adults_attested:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Adults-only attestation flag is required on Create Model upload consent.",
             )
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown consent purpose.")
@@ -357,6 +373,78 @@ def record_ai_consent(
     return row
 
 
+def record_create_model_upload_consent(
+    db: Session,
+    user: User,
+    *,
+    acknowledged: bool,
+    adults_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> UserConsentEvent:
+    """Record the complete Create Model short+seven-point upload agreement."""
+    attestation = _latest_adults_attestation(db, user)
+    if attestation is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Adults-only beta attestation is required before Create Model upload consent.",
+        )
+    version, text_hash, _notice = _require_explicit_ack(
+        purpose=PURPOSE_CREATE_MODEL_UPLOAD,
+        acknowledged=acknowledged,
+        adults_attested=adults_attested,
+        notice_version=notice_version,
+        notice_text_hash=notice_text_hash,
+    )
+    row = UserConsentEvent(
+        id=uuid.uuid4(),
+        owner_id=user.id,
+        purpose=PURPOSE_CREATE_MODEL_UPLOAD,
+        consent_version=version,
+        adults_attested=True,
+        text_hash=text_hash,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _require_valid_create_model_upload_consent(db: Session, user: User) -> UserConsentEvent:
+    """Fail closed unless a current Create Model upload agreement exists for this user."""
+    settings = get_settings()
+    try:
+        expected_hash = _hash_text(_approved_notice_text(purpose=PURPOSE_CREATE_MODEL_UPLOAD))
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Create Model upload agreement is not authorized (notice text not approved).",
+        ) from exc
+    expected_version = (settings.create_model_upload_consent_version or "").strip()
+    filters = [
+        UserConsentEvent.owner_id == user.id,
+        UserConsentEvent.purpose == PURPOSE_CREATE_MODEL_UPLOAD,
+        UserConsentEvent.adults_attested.is_(True),
+        UserConsentEvent.consent_version == expected_version,
+        UserConsentEvent.text_hash == expected_hash,
+    ]
+    max_age = int(settings.create_model_upload_consent_max_age_seconds or 0)
+    if max_age > 0:
+        filters.append(UserConsentEvent.created_at >= _utcnow() - timedelta(seconds=max_age))
+    row = (
+        db.query(UserConsentEvent)
+        .filter(*filters)
+        .order_by(UserConsentEvent.created_at.desc())
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Valid Create Model upload agreement is required before photo upload.",
+        )
+    return row
+
+
 def _get_valid_storage_consent(
     db: Session,
     user: User,
@@ -457,6 +545,7 @@ def upload_source_photo(
 ) -> PersonalCroquis:
     """Consent-gated source upload. Requires MY_CROQUIS_UPLOAD_ENABLED."""
     _require_upload_gate()
+    _require_valid_create_model_upload_consent(db, user)
     consent = _get_valid_storage_consent(db, user, storage_consent_id)
     png_bytes, content_type, width, height = normalize_croquis_source_bytes(
         raw, declared_content_type=declared_content_type

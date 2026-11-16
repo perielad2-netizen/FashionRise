@@ -1,4 +1,4 @@
-"""Shared Runway publish consent payload for API tests."""
+"""Shared Runway / public-publish consent payload for API tests."""
 
 from __future__ import annotations
 
@@ -12,6 +12,17 @@ def runway_publish_body() -> dict[str, object]:
     notice = (settings.runway_share_notice_text or "").strip()
     return {
         "runway_share_attested": True,
+        "notice_version": settings.runway_share_consent_version,
+        "notice_text_hash": hashlib.sha256(notice.encode("utf-8")).hexdigest(),
+    }
+
+
+def gallery_public_publish_body() -> dict[str, object]:
+    """Consent fields required for public POST /gallery creates."""
+    settings = get_settings()
+    notice = (settings.runway_share_notice_text or "").strip()
+    return {
+        "public_publish_attested": True,
         "notice_version": settings.runway_share_consent_version,
         "notice_text_hash": hashlib.sha256(notice.encode("utf-8")).hexdigest(),
     }

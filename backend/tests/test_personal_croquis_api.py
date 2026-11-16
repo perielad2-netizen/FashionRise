@@ -58,10 +58,13 @@ def _disable_upload(monkeypatch):
 
 
 def _attest_and_consent(client, tokens):
+    from tests.croquis_test_fixtures import record_upload_rights
+
     a = client.post(f"{BASE}/attestations/adults", headers=_auth(tokens), json=adults_body())
     assert a.status_code == 200, a.text
     c = client.post(f"{BASE}/consent/storage", headers=_auth(tokens), json=storage_body())
     assert c.status_code == 200, c.text
+    record_upload_rights(client, tokens)
     return c.json()["id"]
 
 

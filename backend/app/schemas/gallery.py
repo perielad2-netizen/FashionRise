@@ -31,6 +31,10 @@ class GalleryCreate(BaseModel):
     title: str = Field(max_length=300)
     image_url: str | None = Field(default=None, max_length=1024)
     visibility: str = "public"
+    # Required when visibility is public — same notice as Runway / public-publish.
+    public_publish_attested: bool = False
+    notice_version: str = ""
+    notice_text_hash: str = ""
 
     @model_validator(mode="after")
     def require_design_or_look(self) -> "GalleryCreate":

@@ -90,6 +90,35 @@ class Settings(BaseSettings):
     # Adults-only account attestation: 0 = durable for this notice version (no daily re-check).
     # Bump my_croquis_adults_attestation_version / notice text when the legal copy changes.
     my_croquis_adults_attestation_max_age_seconds: int = 0
+    # Complete Create Model upload agreement (short checkbox + seven-point full terms).
+    # Must stay byte-identical with web-ui `formatCreateModelUploadNoticeText()`.
+    # Distinct from adults/storage/AI notices; recorded as purpose create_model_upload.
+    create_model_upload_consent_version: str = "create-model-upload-2026-11-17"
+    create_model_upload_consent_max_age_seconds: int = 3600
+    create_model_upload_notice_text: str = (
+        "I confirm I have the rights and permissions to use this photo and agree to "
+        "private storage and AI processing.\n\n"
+        "By uploading this image, I confirm that:\n\n"
+        "1. I own the image or have the necessary rights, licenses or authorization to "
+        "upload it and allow FashionRise and its authorized AI service providers to "
+        "process and modify it.\n"
+        "2. If an identifiable real person appears in the image, including a celebrity "
+        "or public figure, I have all permissions or other lawful authorization required "
+        "for the intended AI modifications and use of their likeness.\n"
+        "3. I will not upload images that unlawfully infringe copyright, privacy, "
+        "publicity, trademark or other rights, or that impersonate, deceive, exploit or "
+        "harass other people.\n"
+        "4. I will not upload nonconsensual intimate images, sexualized or humiliating "
+        "manipulations of identifiable people, or sexualized depictions of minors.\n"
+        "5. I understand that FashionRise may privately store and process my image, "
+        "including through authorized third-party AI services, to generate my personal "
+        "model, as described in the Privacy Policy.\n"
+        "6. I understand that uploading an image does not automatically make it public. "
+        "Publishing generated content requires a separate agreement.\n"
+        "7. I accept responsibility for having the rights and permissions required for "
+        "my submission. FashionRise may reject or remove content that violates its "
+        "policies or applicable law."
+    )
     # FashionRise Runway / public gallery publish — standardized public-publish notice.
     # Must stay byte-identical with web-ui `formatPublicPublishNoticeText()`.
     runway_share_consent_version: str = "runway-share-2026-11-17"

@@ -16,6 +16,7 @@ import {
   acceptPersonalCroquisVersion,
   acceptedVersionNumber,
   acknowledgeAiConsent,
+  acknowledgeCreateModelUploadConsent,
   acknowledgeStorageConsent,
   attestAdults,
   fetchCroquisAssetBlob,
@@ -35,6 +36,8 @@ import {
   CREATE_MODEL_UPLOAD_CHECKBOX_LABEL,
   CREATE_MODEL_UPLOAD_FULL_TERMS_INTRO,
   CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS,
+  CREATE_MODEL_UPLOAD_NOTICE_VERSION,
+  formatCreateModelUploadNoticeText,
 } from '@/lib/createModelUploadConsent'
 import { prepareCroquisUpload } from '@/lib/prepareCroquisUpload'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
@@ -137,7 +140,8 @@ export function CreateMyCroquisWizard({
       const uploadFile = await prepareCroquisUpload(localFile)
       setBusyLabel('Uploading…')
       // Distinct auditable backend records from one UI agreement. Order matters:
-      // adults → storage → upload (bytes) → AI consent bound to croquis → generate.
+      // adults → storage → create_model_upload (short+7-point) → upload bytes →
+      // AI consent bound to croquis → generate.
       await attestAdults({
         adults_attested: true,
         notice_version: croquisNoticeVersion('adults'),
@@ -148,6 +152,12 @@ export function CreateMyCroquisWizard({
         adults_attested: true,
         notice_version: croquisNoticeVersion('storage'),
         notice_text_hash: await sha256Hex(storageNotice),
+      })
+      await acknowledgeCreateModelUploadConsent({
+        acknowledged: true,
+        adults_attested: true,
+        notice_version: CREATE_MODEL_UPLOAD_NOTICE_VERSION,
+        notice_text_hash: await sha256Hex(formatCreateModelUploadNoticeText()),
       })
       const created = await uploadPersonalCroquisPhoto(uploadFile, storageEvent.id)
       setCroquisId(created.id)

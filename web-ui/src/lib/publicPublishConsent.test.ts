@@ -7,6 +7,8 @@ import {
 import {
   CREATE_MODEL_UPLOAD_CHECKBOX_LABEL,
   CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS,
+  CREATE_MODEL_UPLOAD_NOTICE_VERSION,
+  formatCreateModelUploadNoticeText,
 } from './createModelUploadConsent'
 
 describe('public vs upload consent separation', () => {
@@ -20,6 +22,15 @@ describe('public vs upload consent separation', () => {
     const joined = CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS.join(' ')
     expect(joined).toMatch(/does not automatically make it public/i)
     expect(joined).toMatch(/separate agreement/i)
+  })
+
+  it('hashes a stable create-model upload notice including short checkbox copy', () => {
+    expect(CREATE_MODEL_UPLOAD_NOTICE_VERSION).toBe('create-model-upload-2026-11-17')
+    const text = formatCreateModelUploadNoticeText()
+    expect(text.startsWith(CREATE_MODEL_UPLOAD_CHECKBOX_LABEL)).toBe(true)
+    expect(text).toContain('By uploading this image, I confirm that:')
+    expect(text).toContain('1. I own the image')
+    expect(text).toContain('7. I accept responsibility')
   })
 
   it('publish notice includes platform operating license without advertising expansion', () => {

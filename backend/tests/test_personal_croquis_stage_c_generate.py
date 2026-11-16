@@ -111,6 +111,8 @@ def _upload_ready(client, tokens, monkeypatch):
     assert a.status_code == 200, a.text
     c = client.post(f"{BASE}/consent/storage", headers=_auth(tokens), json=storage_body())
     assert c.status_code == 200, c.text
+    from tests.croquis_test_fixtures import record_upload_rights
+    record_upload_rights(client, tokens)
     consent_id = c.json()["id"]
     up = client.post(
         f"{BASE}/photos",

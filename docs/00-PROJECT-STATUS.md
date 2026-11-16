@@ -7,17 +7,18 @@
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-legal-consent-ux-77c6` |
-| Change | One short checkbox + expandable **Read full terms** for (A) Create Model private upload and (B) public publish; distinct agreements; Privacy Policy accuracy pass |
-| Create Model versions | `adults-beta-2026-11-17` · `storage-2026-11-17` · `ai-provider-2026-11-17` (FE+BE; SHA pins in `assert-prod-vite-flags.mjs`) |
-| Create Model SHA256 | adults `579a9d61…` · storage `0bf393b8…` · AI `5cdb56d7…` |
-| Public publish versions | `runway-share-2026-11-17` · `croquis-public-share-2026-11-17` (same 8-point notice body; hash `bac02828…`) |
-| Entry points | Create Model wizard · My Looks → Publish to Runway · My Models public publish **API/constants** (publish UI still removed) |
+| Branch | `cursor/web-legal-consent-ux-77c6` · PR **#411** |
+| Change | One short checkbox + expandable **Read full terms** for (A) Create Model private upload and (B) public publish; auditable `create_model_upload` event; close public `POST /gallery` consent bypass |
+| Create Model versions | `adults-beta-2026-11-17` · `storage-2026-11-17` · `ai-provider-2026-11-17` · **`create-model-upload-2026-11-17`** (Alembic **036**) |
+| Create Model SHA256 | adults `579a9d61…` · storage `0bf393b8…` · AI `5cdb56d7…` · upload agreement `1134d156…` |
+| Public publish versions | `runway-share-2026-11-17` · `croquis-public-share-2026-11-17` (hash `bac02828…`); legacy public gallery create reuses same notice |
+| Entry points | Create Model wizard · My Looks → Runway · `POST /gallery` public · My Models publish API/constants |
+| Native | **Old store builds rejected** after BE deploy (stale versions / missing upload consent). Roll out FE+BE together, then rebuild Android/iOS — do not weaken enforcement |
 | Docs | `docs/deploy/LEGAL-CONSENT-NOTICE-ROTATION-2026-11-17.md` |
 | Legal gaps | **No Terms of Service page** · **No in-product content-reporting/takedown process** documented |
-| Verification | FE focused vitest **37 passed** · BE adults/runway/profile-publish **10 passed** · `tsc --noEmit` ok · `npm run build` assert notices **pass** |
-| Production | Unchanged until PM approve + BE notice env rotate + FE deploy |
-| Next | PM review → approve deploy → rotate `MY_CROQUIS_*_NOTICE_TEXT` on API host with FE tip |
+| Verification | FE vitest focused pass · BE upload-consent + gallery-consent + croquis/user-flow pass · `tsc` · prod build notices pass · FE/BE upload hash `1134d156…` match |
+| Production | Unchanged until PM merge + Alembic 036 + notice env rotate + FE deploy |
+| Next | Final PM merge review → deploy FE+BE together → native rebuild from same tip |
 
 ## Preview — My Looks Look Details Mobbin polish (2026-11-16 23:45 Asia/Jerusalem)
 

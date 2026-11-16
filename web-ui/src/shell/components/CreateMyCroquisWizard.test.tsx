@@ -7,6 +7,7 @@ import type { PersonalCroquisRead } from '@/services/personalCroquisApi'
 
 const attestAdults = vi.fn()
 const acknowledgeStorageConsent = vi.fn()
+const acknowledgeCreateModelUploadConsent = vi.fn()
 const acknowledgeAiConsent = vi.fn()
 const uploadPersonalCroquisPhoto = vi.fn()
 const listPersonalCroquis = vi.fn()
@@ -24,6 +25,8 @@ vi.mock('@/services/personalCroquisApi', async () => {
     ...actual,
     attestAdults: (...args: unknown[]) => attestAdults(...args),
     acknowledgeStorageConsent: (...args: unknown[]) => acknowledgeStorageConsent(...args),
+    acknowledgeCreateModelUploadConsent: (...args: unknown[]) =>
+      acknowledgeCreateModelUploadConsent(...args),
     acknowledgeAiConsent: (...args: unknown[]) => acknowledgeAiConsent(...args),
     uploadPersonalCroquisPhoto: (...args: unknown[]) => uploadPersonalCroquisPhoto(...args),
     listPersonalCroquis: (...args: unknown[]) => listPersonalCroquis(...args),
@@ -143,6 +146,13 @@ describe('CreateMyCroquisWizard offline harness', () => {
       id: 'consent-1',
       purpose: 'croquis_storage',
       consent_version: 'storage-2026-11-17',
+      adults_attested: true,
+      created_at: '2026-10-31T12:00:00+00:00',
+    })
+    acknowledgeCreateModelUploadConsent.mockResolvedValue({
+      id: 'upload-consent-1',
+      purpose: 'create_model_upload',
+      consent_version: 'create-model-upload-2026-11-17',
       adults_attested: true,
       created_at: '2026-10-31T12:00:00+00:00',
     })
@@ -301,6 +311,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
 
     await waitFor(() => expect(attestAdults).toHaveBeenCalled())
     await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
+    await waitFor(() => expect(acknowledgeCreateModelUploadConsent).toHaveBeenCalled())
     await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalledWith(
       expect.any(File),
       'consent-1',

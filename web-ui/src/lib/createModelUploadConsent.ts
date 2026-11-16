@@ -1,10 +1,13 @@
 /**
- * Create Model — private image upload consent (UI).
+ * Create Model — private image upload consent (UI + auditable notice body).
  *
  * Short checkbox + expandable full terms. Distinct from public-publish consent.
- * Backend still records separate adults / storage / AI events with versioned
- * notice hashes; those approved notices remain visible under the full terms.
+ * Backend records purpose `create_model_upload` with SHA256 of
+ * `formatCreateModelUploadNoticeText()` (short label + seven-point body),
+ * in addition to the existing adults / storage / AI consent events.
  */
+
+export const CREATE_MODEL_UPLOAD_NOTICE_VERSION = 'create-model-upload-2026-11-17'
 
 export const CREATE_MODEL_UPLOAD_CHECKBOX_LABEL =
   'I confirm I have the rights and permissions to use this photo and agree to private storage and AI processing.'
@@ -21,3 +24,9 @@ export const CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS: readonly string[] = [
   'I understand that uploading an image does not automatically make it public. Publishing generated content requires a separate agreement.',
   'I accept responsibility for having the rights and permissions required for my submission. FashionRise may reject or remove content that violates its policies or applicable law.',
 ]
+
+/** Canonical notice hashed/sent for purpose create_model_upload (must match backend). */
+export function formatCreateModelUploadNoticeText(): string {
+  const points = CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS.map((p, i) => `${i + 1}. ${p}`).join('\n')
+  return `${CREATE_MODEL_UPLOAD_CHECKBOX_LABEL}\n\n${CREATE_MODEL_UPLOAD_FULL_TERMS_INTRO}\n\n${points}`
+}
