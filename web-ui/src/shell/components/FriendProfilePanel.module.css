@@ -307,7 +307,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   max-height: min(52vh, 420px);
   overflow: auto;
 }
@@ -316,11 +316,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 16px;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
 }
 
 .peopleIdentity {
@@ -328,18 +330,30 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.peopleIdentity > div {
+  min-width: 0;
+}
+
+.peopleIdentity strong,
+.peopleIdentity .handle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .peopleIdentity strong {
-  display: block;
   font-size: 14px;
   color: #fff;
 }
 
 .peopleAvatar,
 .peopleAvatarFallback {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   flex: 0 0 auto;
   object-fit: cover;
@@ -351,6 +365,54 @@
   background: rgba(244, 114, 182, 0.22);
   color: #fce7f3;
   font-weight: 700;
+  font-size: 13px;
+}
+
+/* Compact row actions — do not reuse hero primaryBtn (full-width glow). */
+.peopleFollow,
+.peopleFollowOn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  min-width: 0;
+  width: auto;
+  max-width: 118px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.peopleFollow {
+  background: linear-gradient(135deg, #f9a8d4, #d63384 55%, #be185d);
+  color: #1a0610;
+}
+
+.peopleFollowOn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.peopleFollow:disabled,
+.peopleFollowOn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.peopleFollow:focus-visible,
+.peopleFollowOn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .stats strong {
