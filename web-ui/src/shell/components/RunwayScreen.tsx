@@ -222,7 +222,8 @@ export function RunwayScreen({
 
   useEffect(() => {
     if (!openOwnProfile || !viewerId) return
-    setOpenOwnProfileEditing(true)
+    // Show the designed profile first — edit opens from Edit Designer Card.
+    setOpenOwnProfileEditing(false)
     setViewingDesigner({
       user_id: viewerId,
       username: viewerUsername || undefined,
@@ -677,7 +678,7 @@ export function RunwayScreen({
               data-testid="runway-my-profile"
               onClick={() => {
                 setMenuOpen(false)
-                setOpenOwnProfileEditing(true)
+                setOpenOwnProfileEditing(false)
                 setViewingDesigner({
                   user_id: viewerId,
                   username: viewerUsername || undefined,

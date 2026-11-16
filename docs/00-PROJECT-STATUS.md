@@ -3,9 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**reel chrome FE LIVE** · #365 · pure algorithmic Discover · no Top/Following/Friends feed filters.)
+**Last updated:** 2026-11-16 (**designer profile premium redesign** · draft PR · **not deployed** · weekly/streak Stars rewards remain **OFF**.)
 
-**Phase:** FashionRise Social **LIVE** with Reels chrome (#365 FE). Stars weekly/streak rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE** with Reels chrome (#365 FE). Designer profile premium redesign is in review (no prod tip until UI approved). Stars weekly/streak rewards remain **OFF**.
+
+## Designer profile premium redesign — DRAFT / NOT DEPLOYED (2026-11-16)
+
+| Item | Detail |
+|---|---|
+| Scope | Shared `FriendProfilePanel` luxury Designer Card hero · same view for owner/visitor · Edit Designer Card sheet · Collection grid + look preview · no auto-open edit on My Profile |
+| Branch | `cursor/web-designer-profile-premium-77c6` |
+| Verify | Vitest FriendProfilePanel + RunwayScreen · `tsc -b` · production `npm run build` |
+| Disabled gates | `FASHIONRISE_WEEKLY_REWARDS_ENABLED=false` · streak rewards OFF · Stars purchasing OFF · no Codemagic/Android QA changes |
+| Next | UI approval → then FE tip deploy (not before) |
 
 ## FashionRise Social — scope & progress
 
@@ -30,7 +40,7 @@
 
 **Out of scope for Social track:** weekly themes, Fashion Battles/Remix/Wardrobe/AI Stylist, paid likes/boosts, new Stars billing, weekly app releases for competitions, Sunday-only publishing, private queues, scheduled reposts.
 
-**Exact next step:** Hard-refresh Android QA on FashionRise Discover (SW may cache prior tip). Merge #365 when accepted. Keep weekly/streak rewards **OFF**.
+**Exact next step:** Review designer profile premium redesign PR (do **not** deploy until UI approved). Keep weekly/streak rewards **OFF**. Merge #365 when accepted.
 
 ## Release roadmap (source of truth)
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FriendProfilePanel } from './FriendProfilePanel'
 
@@ -7,14 +7,16 @@ const getFollowStatus = vi.fn()
 const followCreator = vi.fn()
 const unfollowCreator = vi.fn()
 const listUserGallery = vi.fn()
+const updateMyProfile = vi.fn()
+const uploadMyAvatar = vi.fn()
 
 vi.mock('@/services/profilesApi', () => ({
   getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
   getFollowStatus: (...args: unknown[]) => getFollowStatus(...args),
   followCreator: (...args: unknown[]) => followCreator(...args),
   unfollowCreator: (...args: unknown[]) => unfollowCreator(...args),
-  updateMyProfile: vi.fn(),
-  uploadMyAvatar: vi.fn(),
+  updateMyProfile: (...args: unknown[]) => updateMyProfile(...args),
+  uploadMyAvatar: (...args: unknown[]) => uploadMyAvatar(...args),
   profileAvatarSrc: (userId: string, avatarUrl: string | null | undefined) =>
     avatarUrl ? `/api/v1/profiles/${userId}/avatar` : null,
 }))
@@ -39,13 +41,22 @@ const friend = {
   avatar_url: null,
 }
 
-describe('FriendProfilePanel (V2-0010)', () => {
+const own = {
+  user_id: 'viewer-1',
+  username: 'viewer',
+  display_name: 'Viewer',
+  avatar_url: null,
+}
+
+describe('FriendProfilePanel (premium designer card)', () => {
   beforeEach(() => {
     getPublicProfile.mockReset()
     getFollowStatus.mockReset()
     followCreator.mockReset()
     unfollowCreator.mockReset()
     listUserGallery.mockReset()
+    updateMyProfile.mockReset()
+    uploadMyAvatar.mockReset()
     getPublicProfile.mockResolvedValue({
       id: 'p1',
       user_id: 'friend-1',
@@ -96,11 +107,13 @@ describe('FriendProfilePanel (V2-0010)', () => {
     expect(screen.getByTestId('designer-followers')).toHaveTextContent('3')
     expect(screen.getByTestId('designer-likes')).toHaveTextContent('10')
     expect(screen.getByTestId('designer-reputation')).toHaveTextContent('40')
+    expect(screen.getByTestId('designer-tier-badge')).toHaveTextContent(/rising/i)
     expect(screen.queryByText('99')).not.toBeInTheDocument()
     expect(screen.getByTestId('friend-look-g1')).toBeInTheDocument()
     expect(getPublicProfile).toHaveBeenCalledWith('friend-1', expect.any(AbortSignal))
     expect(listUserGallery).toHaveBeenCalledWith('friend-1', expect.any(AbortSignal))
     expect(await screen.findByTestId('designer-follow-btn')).toHaveTextContent(/Follow/i)
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('friend-profile-back'))
     expect(onBack).toHaveBeenCalled()
@@ -129,5 +142,109 @@ describe('FriendProfilePanel (V2-0010)', () => {
     render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
     expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Yaniv')
     await waitFor(() => expect(screen.getByTestId('friend-look-g1')).toBeInTheDocument())
+  })
+
+  it('shows own designed profile first and opens edit sheet on demand', async () => {
+    getPublicProfile.mockResolvedValue({
+      id: 'p-me',
+      user_id: 'viewer-1',
+      display_name: 'Studio Nova',
+      bio: '',
+      avatar_url: null,
+      cover_url: null,
+      style_tags: [],
+      designs_count: 0,
+      published_count: 0,
+      followers_count: 0,
+      likes_received_count: 0,
+      rating_average: null,
+      rating_count: 0,
+      reputation_score: 12,
+      reputation_tier: 'newcomer',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    listUserGallery.mockResolvedValue([])
+    render(<FriendProfilePanel friend={own} onBack={vi.fn()} />)
+
+    expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Studio Nova')
+    expect(screen.queryByTestId('designer-follow-btn')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+    expect(screen.getByTestId('designer-edit-profile')).toHaveTextContent(/Edit Designer Card/i)
+
+    fireEvent.click(screen.getByTestId('designer-edit-profile'))
+    expect(screen.getByTestId('designer-profile-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('designer-avatar-preview')).toBeInTheDocument()
+
+    updateMyProfile.mockResolvedValue({
+      id: 'p-me',
+      user_id: 'viewer-1',
+      display_name: 'Atelier Noa',
+      bio: 'Evening knits.',
+      avatar_url: null,
+      cover_url: null,
+      style_tags: [],
+      designs_count: 0,
+      published_count: 0,
+      followers_count: 0,
+      likes_received_count: 0,
+      rating_average: null,
+      rating_count: 0,
+      reputation_score: 12,
+      reputation_tier: 'newcomer',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    fireEvent.change(screen.getByTestId('designer-edit-name'), {
+      target: { value: 'Atelier Noa' },
+    })
+    fireEvent.change(screen.getByTestId('designer-edit-bio'), {
+      target: { value: 'Evening knits.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(updateMyProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          display_name: 'Atelier Noa',
+          bio: 'Evening knits.',
+        }),
+      ),
+    )
+    expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Atelier Noa')
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+  })
+
+  it('opens a published look preview from the collection', async () => {
+    render(<FriendProfilePanel friend={friend} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByTestId('friend-look-g1'))
+    const preview = await screen.findByTestId('designer-look-preview')
+    expect(within(preview).getByRole('heading', { name: 'Public look' })).toBeInTheDocument()
+    fireEvent.click(within(preview).getByRole('button', { name: 'Close look' }))
+    expect(screen.queryByTestId('designer-look-preview')).not.toBeInTheDocument()
+  })
+
+  it('honors startInEditMode for explicit edit entry', async () => {
+    getPublicProfile.mockResolvedValue({
+      id: 'p-me',
+      user_id: 'viewer-1',
+      display_name: 'Viewer',
+      bio: '',
+      avatar_url: null,
+      cover_url: null,
+      style_tags: [],
+      designs_count: 0,
+      published_count: 0,
+      followers_count: 0,
+      likes_received_count: 0,
+      rating_average: null,
+      rating_count: 0,
+      reputation_score: 0,
+      reputation_tier: 'newcomer',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    listUserGallery.mockResolvedValue([])
+    render(<FriendProfilePanel friend={own} onBack={vi.fn()} startInEditMode />)
+    expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
   })
 })

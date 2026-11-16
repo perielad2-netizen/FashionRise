@@ -430,7 +430,8 @@ describe('RunwayScreen', () => {
       />,
     )
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
-    expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('designer-edit-profile')).toHaveTextContent(/Edit Designer Card/i)
   })
 
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
@@ -445,12 +446,15 @@ describe('RunwayScreen', () => {
       followers_count: 0,
       following_count: 0,
       reputation_score: 0,
+      reputation_tier: 'newcomer',
     })
     listUserGallery.mockResolvedValue([])
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await openMoreMenu()
     fireEvent.click(await screen.findByTestId('runway-my-profile'))
     expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('designer-profile-editor')).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('designer-edit-profile'))
     expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
     expect(screen.getByTestId('designer-avatar-preview')).toBeInTheDocument()
     expect(screen.getByTestId('designer-edit-avatar')).toHaveTextContent(/Change photo/i)
