@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-16 (**reel chrome FE LIVE** · release `40f68321-reel-chrome-365` · #365 · single algorithmic Discover feed · chrome inside look.)
+**Last updated:** 2026-11-16 (**reel chrome FE LIVE** · #365 · pure algorithmic Discover · no Top/Following/Friends feed filters.)
 
 **Phase:** FashionRise Social **LIVE** with Reels chrome (#365 FE). Stars weekly/streak rewards remain **OFF**.
 
@@ -24,7 +24,7 @@
 | **Prod DB backup** | One authorized `pg_dump -Fc` of `fashionrise_beta` | **COMPLETE** · `…/pm-pre-social-mig-backup-20261116T125955Z/fashionrise_beta.dump` |
 | **Prod Social deploy** | Migrate **030→035** + BE/FE **`82e58571`** · rewards FALSE | **LIVE 2026-11-16** · smoke PASS · **0** Social star payouts |
 | **UX hotfix #363** | Immersive full-viewport Discover · gallery `username` · auto Discover page · Follow cache keyed by viewer+designer | **MERGED + DEPLOYED** → `main` @ **`1cac14f0`** · tip `6c293475` · FE `1cac14f0-immersive-363` · Alembic **035** unchanged |
-| **Reel chrome** | Single algorithmic Discover feed · Following/Friends/Top as optional lists · full-bleed look · chrome inside image · Reels-scale actions | **FE DEPLOYED** · `40f68321-reel-chrome-365` · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) open · rollback `1cac14f0-immersive-363` |
+| **Reel chrome** | Pure algorithmic Discover only · no Following/Friends/Top/Top10–50 filters · full-bleed look · Reels chrome | **FE DEPLOYED** · `1ba10665-reel-chrome-365` · PR [#365](https://github.com/perielad2-netizen/FashionRise/pull/365) open · rollback `1cac14f0-immersive-363` |
 
 **Product rules (publishing vs competition):** Users may publish **anytime**. A design enters the **current** competition week immediately and competes only that week (no auto re-entry). Sunday starts a new week and locks the previous week’s winners. Discover’s rolling 7-day freshness stays independent of the contest clock.
 
@@ -41,7 +41,7 @@
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm + **gallery or camera** · FE tip **`7dfc22a9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **Studio fabrics** | **LIVE** | Tip **`e9bbc42c`** · 12 starters (leather in / velvet out) · scale on select · #351 merged |
-| **FashionRise Social** | **LIVE** · #349–#363 merged · #365 FE tip · Alembic **035** · rewards OFF · Reels chrome | Prod BE **`1cac14f0`** · FE `40f68321-reel-chrome-365` · rollback FE `1cac14f0-immersive-363` |
+| **FashionRise Social** | **LIVE** · #349–#363 merged · #365 FE tip · Alembic **035** · rewards OFF · Reels chrome | Prod BE **`1cac14f0`** · FE `1ba10665-reel-chrome-365` · rollback FE `1cac14f0-immersive-363` |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** · **`FASHIONRISE_WEEKLY_REWARDS_ENABLED=false`** · **`FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START=""`** · **`FASHIONRISE_STREAK_REWARDS_ENABLED=false`** · **`FASHIONRISE_STREAK_REWARDS_START_DATE=""`** |
 
