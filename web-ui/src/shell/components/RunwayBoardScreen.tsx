@@ -322,11 +322,6 @@ export function RunwayBoardScreen() {
             <h2 className={styles.boardTitle}>{boardTitle}</h2>
             <p className={styles.boardHint}>{boardHint}</p>
           </div>
-          {mode === 'category' &&
-          categoryLoad.status === 'ready' &&
-          categoryLoad.board.group_index != null ? (
-            <p className={styles.groupChip}>Group {categoryLoad.board.group_index + 1}</p>
-          ) : null}
         </div>
 
         {mode === 'category' ? (

@@ -106,7 +106,7 @@ describe('RunwayBoardScreen', () => {
     expect(await screen.findByText('Noa Peri')).toBeInTheDocument()
     expect(screen.getByText('@NoaPeri')).toBeInTheDocument()
     expect(screen.getByText('Peri Shilat')).toBeInTheDocument()
-    expect(screen.getByText('Group 1')).toBeInTheDocument()
+    expect(screen.queryByText('Group 1')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Top Designer' })).toBeInTheDocument()
     expect(screen.getByLabelText('Top Designer top three')).toBeInTheDocument()
   })
