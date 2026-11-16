@@ -11,13 +11,14 @@
  * fabric — if encoding cannot stay under the transport budget, Magic continues
  * without a swatch (never fails with a size error).
  */
+import { getCachedDefaultFabricImage } from '@/lib/defaultFabricTiles'
 import { getCachedFabricImage, ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
-import type { FillOp } from '@/lib/fills'
+import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import {
-  BUILTIN_FABRIC_TILE_PX,
   renderFabricTile,
   renderUploadedFabricTile,
+  scaleFabricCanvasTile,
 } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 
@@ -154,12 +155,18 @@ export async function captureFabricSwatchForMagic(
   if (!isGarmentScalePatternedFill(fill)) return null
 
   if (fill.style.kind === 'fabric') {
-    const tile = renderFabricTile(fill.style.fabricId)
-    if (!tile.width || !tile.height) return null
-    // Sanity: built-in tiles must match Studio unit size.
-    if (tile.width !== BUILTIN_FABRIC_TILE_PX) {
-      // Still usable — proceed with whatever renderFabricTile produced.
+    const scale = Number.isFinite(fill.style.scale) ? fill.style.scale : 1
+    const preset = FABRIC_PRESETS.find((p) => p.id === fill.style.fabricId)
+    let tile: HTMLCanvasElement
+    if (preset?.tileUrl) {
+      const img = getCachedDefaultFabricImage(fill.style.fabricId)
+      tile = img
+        ? renderUploadedFabricTile(img, scale)
+        : scaleFabricCanvasTile(renderFabricTile(fill.style.fabricId), scale)
+    } else {
+      tile = scaleFabricCanvasTile(renderFabricTile(fill.style.fabricId), scale)
     }
+    if (!tile.width || !tile.height) return null
     const dataUrl = encodeSwatchDataUrl(tile)
     if (!dataUrl) return null
     const approxBytes = Math.floor((dataUrl.length * 3) / 4)

@@ -44,7 +44,7 @@ describe('fills schema', () => {
       seedX: 5,
       seedY: 5,
     })
-    expect(fabric?.style).toEqual({ kind: 'fabric', fabricId: 'denim' })
+    expect(fabric?.style).toEqual({ kind: 'fabric', fabricId: 'denim', scale: 1 })
 
     const withEraseIndex = parseFillOp({
       contour: [0, 0, 20, 0, 20, 20, 0, 20],
@@ -142,13 +142,14 @@ describe('fills schema', () => {
   })
 
   it('exposes fashion fabric and gradient presets', () => {
+    expect(FABRIC_PRESETS).toHaveLength(12)
     expect(FABRIC_PRESETS.map((f) => f.id)).toEqual([
-      'satin',
-      'denim',
-      'cotton',
-      'lace',
-      'floral',
-      'sequins',
+      'blue-denim',
+      'white-silk',
+      'black-cotton',
+      'brown-corduroy',
+      'blush-chiffon',
+      'charcoal-wool',
       'gold-glitter',
       'blue-velvet',
       'wedding-lace',
@@ -156,8 +157,14 @@ describe('fills schema', () => {
       'stockings',
       'stitch-jeans',
     ])
-    expect(fabricStyle('lace')?.fabricId).toBe('lace')
+    expect(fabricStyle('lace')).toBeNull()
+    expect(fabricStyle('blue-denim')).toEqual({
+      kind: 'fabric',
+      fabricId: 'blue-denim',
+      scale: 1,
+    })
     expect(fabricStyle('stitch-jeans')?.fabricId).toBe('stitch-jeans')
+    expect(FABRIC_PRESETS.every((f) => Boolean(f.tileUrl))).toBe(true)
     expect(FABRIC_PRESETS.find((f) => f.id === 'gold-glitter')?.tileUrl).toMatch(/\/fabrics\/defaults\//)
     expect(gradientStyleFromPreset('champagne')?.colors[0]).toBe('#F8F4F0')
     expect(contourToSvgPath([0, 0, 10, 0, 10, 10])).toMatch(/^M 0 0 L 10 0 L 10 10 Z$/)

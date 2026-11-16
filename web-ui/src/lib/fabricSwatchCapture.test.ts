@@ -52,7 +52,9 @@ describe('fabricSwatchCapture', () => {
         seedY: 100,
       },
     ]
-    expect(dominantPatternedFill(fills)?.style).toEqual({ kind: 'fabric', fabricId: 'denim' })
+    expect(dominantPatternedFill(fills)?.style).toEqual(
+      expect.objectContaining({ kind: 'fabric', fabricId: 'denim' }),
+    )
     expect(dominantPatternedFill([])).toBeNull()
   })
 

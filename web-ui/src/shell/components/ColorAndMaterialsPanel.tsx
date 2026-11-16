@@ -9,6 +9,8 @@ import {
   UPLOADED_FABRIC_SCALE_MAX,
   UPLOADED_FABRIC_SCALE_MIN,
   clampUploadedFabricScale,
+  fabricPatternScale,
+  fabricStyle,
   gradientPreviewCss,
   type FillStyle,
   type GradientFillStyle,
@@ -83,8 +85,15 @@ export function ColorAndMaterialsPanel({
   const nameFieldId = useId()
   const aiPromptId = useId()
   const aiNameId = useId()
-  const scale =
-    fillStyle.kind === 'uploaded-fabric' ? fillStyle.scale : UPLOADED_FABRIC_SCALE_DEFAULT
+  const scale = fabricPatternScale(fillStyle)
+  const patternScaleActive =
+    fillStyle.kind === 'fabric' || fillStyle.kind === 'uploaded-fabric'
+  const activeFabricPreview =
+    fillStyle.kind === 'fabric'
+      ? FABRIC_PRESETS.find((f) => f.id === fillStyle.fabricId)?.preview ?? '#3f3340'
+      : fillStyle.kind === 'uploaded-fabric' && previews[fillStyle.assetId]
+        ? `url(${previews[fillStyle.assetId]}) center / cover`
+        : '#3f3340'
   const inferredTab: 'colors' | 'fabrics' | 'gradients' =
     fillStyle.kind === 'fabric' || fillStyle.kind === 'uploaded-fabric'
       ? 'fabrics'
@@ -231,7 +240,8 @@ export function ColorAndMaterialsPanel({
       setMyFabrics((prev) => prev.filter((f) => f.id !== fabric.id))
       rememberFabricPromptShort(fabric.id, null)
       if (fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id) {
-        onFillStyle({ kind: 'fabric', fabricId: 'satin' })
+        const fallback = fabricStyle(FABRIC_PRESETS[0]!.id, scale)
+        if (fallback) onFillStyle(fallback)
       }
       onNotice?.(
         `“${fabric.name}” removed from My Fabrics. Designs that already use it can still reopen.`,
@@ -282,9 +292,14 @@ export function ColorAndMaterialsPanel({
 
   const onScaleChange = (raw: number) => {
     const next = clampUploadedFabricScale(raw)
-    if (fillStyle.kind === 'uploaded-fabric') {
+    if (fillStyle.kind === 'uploaded-fabric' || fillStyle.kind === 'fabric') {
       onFillStyle({ ...fillStyle, scale: next })
     }
+  }
+
+  const selectBuiltin = (fabricId: string) => {
+    const style = fabricStyle(fabricId, scale)
+    if (style) onFillStyle(style)
   }
 
   return (
@@ -425,7 +440,10 @@ export function ColorAndMaterialsPanel({
                 </button>
               </div>
             </div>
-            <p className={styles.note}>Select a fabric, then use Fill on a closed outline.</p>
+            <p className={styles.note}>
+              Pick a fabric, set pattern scale, then Fill a closed outline.
+              {libraryBusy ? ' Loading your fabrics…' : ''}
+            </p>
             <input
               ref={fileInputRef}
               type="file"
@@ -435,89 +453,121 @@ export function ColorAndMaterialsPanel({
               tabIndex={-1}
               onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
             />
-            <div className={styles.fabrics}>
+            <div className={styles.fabrics} data-testid="fabrics-all-grid">
               {FABRIC_PRESETS.map((fabric) => {
                 const active = fillStyle.kind === 'fabric' && fillStyle.fabricId === fabric.id
                 return (
-                  <button
-                    key={fabric.id}
-                    type="button"
-                    className={active ? styles.fabricActive : styles.fabric}
-                    style={{ background: fabric.preview }}
-                    aria-label={fabric.label}
-                    aria-pressed={active}
-                    title={fabric.label}
-                    onClick={() => onFillStyle({ kind: 'fabric', fabricId: fabric.id })}
-                  />
+                  <div key={fabric.id} className={styles.fabricCell}>
+                    <button
+                      type="button"
+                      className={active ? styles.fabricActive : styles.fabric}
+                      style={{ background: fabric.preview }}
+                      aria-label={fabric.label}
+                      aria-pressed={active}
+                      title={fabric.label}
+                      data-testid={`fabric-preset-${fabric.id}`}
+                      onClick={() => selectBuiltin(fabric.id)}
+                    />
+                    <span className={styles.fabricCaption}>{fabric.label}</span>
+                  </div>
+                )
+              })}
+              {myFabrics.map((fabric) => {
+                const active =
+                  fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id
+                return (
+                  <div key={fabric.id} className={styles.fabricCell}>
+                    <button
+                      type="button"
+                      className={active ? styles.fabricActive : styles.fabric}
+                      style={{
+                        backgroundImage: previews[fabric.id]
+                          ? `url(${previews[fabric.id]})`
+                          : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        backgroundColor: '#3f3340',
+                      }}
+                      aria-label={fabric.name}
+                      aria-pressed={active}
+                      title={fabric.name}
+                      data-testid={`fabric-mine-${fabric.id}`}
+                      onClick={() => selectUploaded(fabric)}
+                    />
+                    <span className={styles.fabricCaption}>{fabric.name}</span>
+                    <button
+                      type="button"
+                      className={styles.removeFabricInline}
+                      onClick={() => void removeUploaded(fabric)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )
               })}
             </div>
-
-            <p className={styles.note}>My Fabrics {libraryBusy ? '· loading…' : ''}</p>
             {myFabrics.length === 0 ? (
-              <p className={styles.note}>Upload a JPG, PNG, or WebP to reuse across your designs.</p>
-            ) : (
-              <div className={styles.myFabrics}>
-                {myFabrics.map((fabric) => {
-                  const active =
-                    fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id
-                  return (
-                    <div key={fabric.id} className={styles.myFabricRow}>
+              <p className={styles.note}>
+                Create with AI or upload a JPG/PNG/WebP — new fabrics appear here with the starters.
+              </p>
+            ) : null}
+
+            {patternScaleActive ? (
+              <div className={styles.scaleBlock} data-testid="fabric-scale-block">
+                <div className={styles.scalePreviewRow}>
+                  <div
+                    className={styles.scalePreview}
+                    style={{
+                      background: activeFabricPreview,
+                      backgroundSize: `${Math.round(48 * scale)}px`,
+                      backgroundRepeat: 'repeat',
+                      backgroundPosition: 'center',
+                    }}
+                    aria-hidden
+                    data-testid="fabric-scale-preview"
+                  />
+                  <div className={styles.scaleControls}>
+                    <div className={styles.scalePresets} role="group" aria-label="Pattern scale presets">
                       <button
                         type="button"
-                        className={active ? styles.fabricActive : styles.fabric}
-                        style={{
-                          backgroundImage: previews[fabric.id]
-                            ? `url(${previews[fabric.id]})`
-                            : undefined,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                          backgroundColor: '#3f3340',
-                        }}
-                        aria-label={fabric.name}
-                        aria-pressed={active}
-                        title={fabric.name}
-                        onClick={() => selectUploaded(fabric)}
-                      />
-                      <div className={styles.myFabricMeta}>
-                        <span className={styles.myFabricName}>{fabric.name}</span>
-                        <button
-                          type="button"
-                          className={styles.removeFabric}
-                          onClick={() => void removeUploaded(fabric)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                        className={scale <= 0.6 ? styles.scalePresetActive : styles.scalePreset}
+                        onClick={() => onScaleChange(0.5)}
+                      >
+                        Fine
+                      </button>
+                      <button
+                        type="button"
+                        className={scale > 0.6 && scale < 1.5 ? styles.scalePresetActive : styles.scalePreset}
+                        onClick={() => onScaleChange(1)}
+                      >
+                        Medium
+                      </button>
+                      <button
+                        type="button"
+                        className={scale >= 1.5 ? styles.scalePresetActive : styles.scalePreset}
+                        onClick={() => onScaleChange(2)}
+                      >
+                        Coarse
+                      </button>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {fillStyle.kind === 'uploaded-fabric' ? (
-              <div className={styles.scaleBlock}>
-                <label className={styles.scaleRow}>
-                  <span>Pattern scale</span>
-                  <input
-                    type="range"
-                    min={UPLOADED_FABRIC_SCALE_MIN}
-                    max={UPLOADED_FABRIC_SCALE_MAX}
-                    step={0.05}
-                    value={scale}
-                    aria-label="Uploaded fabric pattern scale"
-                    onChange={(e) => onScaleChange(Number(e.target.value))}
-                  />
-                  <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
-                </label>
-                {/* V2-0028 */}
-                <p className={styles.scaleHint}>
-                  Higher = larger fabric repeats (fewer tiles). Lower = finer, denser pattern.
-                </p>
-                <div className={styles.scaleEnds} aria-hidden>
-                  <span>Fine</span>
-                  <span>Coarse</span>
+                    <label className={styles.scaleRow}>
+                      <span>Scale</span>
+                      <input
+                        type="range"
+                        min={UPLOADED_FABRIC_SCALE_MIN}
+                        max={UPLOADED_FABRIC_SCALE_MAX}
+                        step={0.05}
+                        value={scale}
+                        aria-label="Fabric pattern scale"
+                        onChange={(e) => onScaleChange(Number(e.target.value))}
+                      />
+                      <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
+                    </label>
+                  </div>
                 </div>
+                <p className={styles.scaleHint}>
+                  Live preview · Fine = denser repeats · Coarse = larger pattern tiles
+                </p>
               </div>
             ) : null}
           </section>

@@ -105,18 +105,54 @@ function makeFabricPattern(
   ctx: FillPaintContext,
   style: FabricFillStyle,
 ): CanvasPattern | string | null {
+  const scale = Number.isFinite(style.scale) ? style.scale : 1
+  const key = `${style.fabricId}:${scale.toFixed(3)}`
   const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
   if (preset?.tileUrl) {
     const img = getCachedDefaultFabricImage(style.fabricId)
-    if (img) return ctx.createPattern(img, 'repeat')
-    return preset.fallbackColor ?? '#CCCCCC'
+    if (!img) return preset.fallbackColor ?? '#CCCCCC'
+    let tile = fabricTileCache.get(key)
+    if (!tile) {
+      tile = renderUploadedFabricTile(img, scale)
+      fabricTileCache.set(key, tile)
+    }
+    return ctx.createPattern(tile, 'repeat')
   }
-  let tile = fabricTileCache.get(style.fabricId)
+  // Legacy procedural builtins (satin/denim/…) — still scale for old designs.
+  let tile = fabricTileCache.get(key)
   if (!tile) {
-    tile = renderFabricTile(style.fabricId)
-    fabricTileCache.set(style.fabricId, tile)
+    const base = renderFabricTile(style.fabricId)
+    tile = scaleFabricCanvasTile(base, scale)
+    fabricTileCache.set(key, tile)
   }
   return ctx.createPattern(tile, 'repeat')
+}
+
+/** Resize a procedural builtin tile using the same scale curve as uploads. */
+export function scaleFabricCanvasTile(
+  source: HTMLCanvasElement,
+  scale: number,
+): HTMLCanvasElement {
+  if (!source.width || !source.height) return source
+  const safeScale = Number.isFinite(scale) ? scale : 1
+  const target = Math.round(
+    Math.min(
+      UPLOADED_FABRIC_TILE_MAX_PX,
+      Math.max(UPLOADED_FABRIC_TILE_MIN_PX, UPLOADED_FABRIC_BASE_TILE_PX * safeScale),
+    ),
+  )
+  const aspect = source.width / Math.max(1, source.height)
+  const w = aspect >= 1 ? target : Math.max(UPLOADED_FABRIC_TILE_MIN_PX, Math.round(target * aspect))
+  const h = aspect >= 1 ? Math.max(UPLOADED_FABRIC_TILE_MIN_PX, Math.round(target / aspect)) : target
+  if (w === source.width && h === source.height) return source
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const tileCtx = c.getContext('2d')
+  if (!tileCtx) return source
+  tileCtx.imageSmoothingEnabled = true
+  tileCtx.drawImage(source, 0, 0, w, h)
+  return c
 }
 
 const uploadedTileCache = new Map<string, HTMLCanvasElement>()

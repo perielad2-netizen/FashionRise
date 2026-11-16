@@ -20,6 +20,8 @@ export type GradientFillStyle = {
 export type FabricFillStyle = {
   kind: 'fabric'
   fabricId: string
+  /** Tile scale relative to the source image (0.25–4). Defaults to 1 when omitted (legacy fills). */
+  scale?: number
 }
 
 /** Designer-uploaded fabric referenced by private asset id (bytes stored server-side). */
@@ -29,6 +31,16 @@ export type UploadedFabricFillStyle = {
   /** Tile scale relative to the source image (0.25–4). */
   scale: number
 }
+
+/** Procedural studio fabrics retired from the picker; still parse for old designs. */
+export const LEGACY_FABRIC_IDS = [
+  'satin',
+  'denim',
+  'cotton',
+  'lace',
+  'floral',
+  'sequins',
+] as const
 
 export type FillStyle = SolidFillStyle | GradientFillStyle | FabricFillStyle | UploadedFabricFillStyle
 
@@ -111,38 +123,52 @@ export type FabricPreset = {
   fallbackColor?: string
 }
 
+/** Twelve starter fabrics for every account — photoreal tiles (no weak procedurals). */
 export const FABRIC_PRESETS: FabricPreset[] = [
+  // Everyday staples
   {
-    id: 'satin',
-    label: 'Satin',
-    preview: 'linear-gradient(135deg,#fff7fb 0%,#f9a8d4 40%,#be185d 70%,#fff1f8 100%)',
+    id: 'blue-denim',
+    label: 'Blue denim',
+    preview: 'url(/fabrics/defaults/blue-denim.png) center / cover',
+    tileUrl: '/fabrics/defaults/blue-denim.png',
+    fallbackColor: '#1E3A8A',
   },
   {
-    id: 'denim',
-    label: 'Denim',
-    preview: 'linear-gradient(145deg,#93c5fd,#1e3a8a 55%,#172554)',
+    id: 'white-silk',
+    label: 'White silk',
+    preview: 'url(/fabrics/defaults/white-silk.png) center / cover',
+    tileUrl: '/fabrics/defaults/white-silk.png',
+    fallbackColor: '#F5F5F5',
   },
   {
-    id: 'cotton',
-    label: 'Cotton',
-    preview: 'linear-gradient(145deg,#f5e6d3,#e7d3b8 50%,#c4a484)',
+    id: 'black-cotton',
+    label: 'Black cotton',
+    preview: 'url(/fabrics/defaults/black-cotton.png) center / cover',
+    tileUrl: '/fabrics/defaults/black-cotton.png',
+    fallbackColor: '#1A1A1C',
   },
   {
-    id: 'lace',
-    label: 'Lace',
-    preview: 'radial-gradient(circle at 30% 30%,#fff 0 2px,transparent 3px),#fce7f3',
+    id: 'brown-corduroy',
+    label: 'Brown corduroy',
+    preview: 'url(/fabrics/defaults/brown-corduroy.png) center / cover',
+    tileUrl: '/fabrics/defaults/brown-corduroy.png',
+    fallbackColor: '#6B4226',
   },
   {
-    id: 'floral',
-    label: 'Floral',
-    preview: 'radial-gradient(circle at 35% 40%,#fb7185 0 4px,transparent 5px),#fef3c7',
+    id: 'blush-chiffon',
+    label: 'Blush chiffon',
+    preview: 'url(/fabrics/defaults/blush-chiffon.png) center / cover',
+    tileUrl: '/fabrics/defaults/blush-chiffon.png',
+    fallbackColor: '#E8A0A8',
   },
   {
-    id: 'sequins',
-    label: 'Sequins',
-    preview: 'radial-gradient(circle at 40% 40%,#fde68a 0 3px,#b45309 4px,transparent 5px),#7c2d12',
+    id: 'charcoal-wool',
+    label: 'Charcoal wool',
+    preview: 'url(/fabrics/defaults/charcoal-wool.png) center / cover',
+    tileUrl: '/fabrics/defaults/charcoal-wool.png',
+    fallbackColor: '#2A2C30',
   },
-  // Shared AI studio defaults (Peri + Yaniv) — available to every account.
+  // Shared AI studio defaults (Peri + Yaniv)
   {
     id: 'gold-glitter',
     label: 'Gold glitter',
@@ -186,6 +212,25 @@ export const FABRIC_PRESETS: FabricPreset[] = [
     fallbackColor: '#2F4A6E',
   },
 ]
+
+export function isKnownFabricId(fabricId: string): boolean {
+  return (
+    FABRIC_PRESETS.some((p) => p.id === fabricId) ||
+    (LEGACY_FABRIC_IDS as readonly string[]).includes(fabricId)
+  )
+}
+
+export function fabricPatternScale(style: FillStyle): number {
+  if (style.kind === 'uploaded-fabric') {
+    return clampUploadedFabricScale(style.scale)
+  }
+  if (style.kind === 'fabric') {
+    return clampUploadedFabricScale(
+      typeof style.scale === 'number' ? style.scale : UPLOADED_FABRIC_SCALE_DEFAULT,
+    )
+  }
+  return UPLOADED_FABRIC_SCALE_DEFAULT
+}
 
 export type GradientPreset = {
   id: string
@@ -546,9 +591,14 @@ function parseFillStyle(raw: unknown): FillStyle | null {
     }
   }
   if (s.kind === 'fabric' && typeof s.fabricId === 'string') {
-    const known = FABRIC_PRESETS.some((p) => p.id === s.fabricId)
-    if (!known) return null
-    return { kind: 'fabric', fabricId: s.fabricId }
+    if (!isKnownFabricId(s.fabricId)) return null
+    return {
+      kind: 'fabric',
+      fabricId: s.fabricId,
+      scale: clampUploadedFabricScale(
+        typeof s.scale === 'number' ? s.scale : UPLOADED_FABRIC_SCALE_DEFAULT,
+      ),
+    }
   }
   if (s.kind === 'uploaded-fabric' && typeof s.assetId === 'string' && isAssetId(s.assetId)) {
     return {
@@ -564,9 +614,16 @@ export function solidStyle(color: string): SolidFillStyle {
   return { kind: 'solid', color: color.toUpperCase() }
 }
 
-export function fabricStyle(fabricId: string): FabricFillStyle | null {
+export function fabricStyle(
+  fabricId: string,
+  scale: number = UPLOADED_FABRIC_SCALE_DEFAULT,
+): FabricFillStyle | null {
   if (!FABRIC_PRESETS.some((p) => p.id === fabricId)) return null
-  return { kind: 'fabric', fabricId }
+  return {
+    kind: 'fabric',
+    fabricId,
+    scale: clampUploadedFabricScale(scale),
+  }
 }
 
 export function uploadedFabricStyle(
