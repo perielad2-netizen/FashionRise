@@ -50,7 +50,7 @@ AWARD_DEFS: list[tuple[str, int]] = [
 ]
 
 CATEGORY_LABELS = {
-    "top_design": "Top Design",
+    "top_design": "Top Designs",
     "top_designer": "Top Designer",
     "community_champion": "Community Champion",
     "top_supporter": "Top Supporter",

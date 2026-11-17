@@ -2,6 +2,7 @@ import { App } from '@capacitor/app'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { installNativeDeepLinkRouter } from './deepLinks'
+import { isNativeFilePickerOpen } from './filePickerGuard'
 import {
   isNativeIosStarsShop,
   recoverPendingStarsPurchases,
@@ -33,6 +34,9 @@ export async function bootstrapNativeShell(): Promise<void> {
     /* ignore */
   }
   void App.addListener('backButton', ({ canGoBack }) => {
+    // Android: Back during CAMERA permission / capture Activity must not navigate
+    // or exit — that was crashing Fitting Room “Take photo”.
+    if (isNativeFilePickerOpen()) return
     if (canGoBack) window.history.back()
     else void App.exitApp()
   })

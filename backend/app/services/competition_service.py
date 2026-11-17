@@ -279,7 +279,20 @@ def build_category_board(
     scored_users: list[ScoredUser] = []
     scored_designs: list[ScoredDesign] = []
     if cat == "top_design":
-        scored_designs = designs[: max(1, min(limit, 50))]
+        # One best look per designer; skip unscored rows (defense — scorer already > 0).
+        seen_users: set[uuid.UUID] = set()
+        unique_designs: list[ScoredDesign] = []
+        cap = max(1, min(limit, 50))
+        for row in designs:
+            if int(row.score or 0) <= 0:
+                continue
+            if row.user_id in seen_users:
+                continue
+            seen_users.add(row.user_id)
+            unique_designs.append(row)
+            if len(unique_designs) >= cap:
+                break
+        scored_designs = unique_designs
     elif cat == "top_designer":
         scored_users = designer_scores_from_designs(designs)[: max(1, min(limit, 50))]
     elif cat == "community_champion":

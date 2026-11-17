@@ -27,6 +27,21 @@ vi.mock('@/services/profilesApi', () => ({
 vi.mock('@/services/galleryApi', () => ({
   listUserGallery: (...args: unknown[]) => listUserGallery(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
+  getGalleryItem: vi.fn(async (id: string) => ({ id, likes_count: 0, liked_by_me: false })),
+  likeGalleryItem: vi.fn(async () => undefined),
+  unlikeGalleryItem: vi.fn(async () => undefined),
+  rateGalleryItem: vi.fn(async () => ({ score: 8 })),
+  listGalleryComments: vi.fn(async () => []),
+  postGalleryComment: vi.fn(async () => ({
+    id: 'c1',
+    gallery_item_id: 'g1',
+    user_id: 'viewer-1',
+    body: 'Nice',
+    moderation_status: 'ok',
+    likes_count: 0,
+    created_at: '2026-11-17T00:00:00Z',
+    username: 'viewer',
+  })),
 }))
 
 vi.mock('@/services/auth/AuthProvider', () => ({

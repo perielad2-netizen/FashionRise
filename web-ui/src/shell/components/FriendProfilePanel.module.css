@@ -780,6 +780,112 @@
   background: #f7f1ea;
 }
 
+.lookDialogSocial {
+  background: linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
+  border-color: rgba(244, 114, 182, 0.22);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.lookSocialRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.lookSocialBtn,
+.lookSocialOn,
+.lookSocialChip,
+.lookScoreLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lookSocialBtn {
+  cursor: pointer;
+}
+
+.lookSocialOn {
+  border-color: rgba(244, 114, 182, 0.45);
+  background: rgba(214, 51, 132, 0.22);
+  color: #f9a8d4;
+  cursor: pointer;
+}
+
+.lookScoreLabel {
+  padding-right: 8px;
+}
+
+.lookScoreSelect {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.lookComments {
+  display: grid;
+  gap: 8px;
+}
+
+.lookCommentsTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f9a8d4;
+}
+
+.lookCommentList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.lookCommentList li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.lookCommentList strong {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lookCommentCompose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.lookCommentInput {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font: inherit;
+}
+
 .avatarDialog {
   width: min(100%, 360px);
   max-height: min(92dvh, 720px);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Crown,
   Globe2,
@@ -13,6 +14,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
+import { FASHIONRISE_PATH } from '@/pages/StudioPage'
 import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
@@ -23,6 +25,7 @@ import {
   type CategoryBoardEntry,
 } from '@/services/competitionsApi'
 import { profileAvatarSrc } from '@/services/profilesApi'
+import { CompetitionStrip } from './CompetitionStrip'
 import styles from './RunwayBoardScreen.module.css'
 
 type ScopeId = 'worldwide' | 'friends' | 'following'
@@ -51,9 +54,9 @@ const WEEKLY_CATEGORIES: ReadonlyArray<{
 }> = [
   {
     id: 'top_design',
-    label: 'Top Design',
+    label: 'Top Designs',
     stars: 50,
-    blurb: 'Most engaged look this week',
+    blurb: 'Most engaged look this week · one per designer',
     Icon: Sparkles,
   },
   {
@@ -106,6 +109,7 @@ function podiumClass(rank: number): string {
  * Visual polish inspired by Mobbin leaderboard / awards patterns (branch only).
  */
 export function RunwayBoardScreen() {
+  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('rankings')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [scope, setScope] = useState<ScopeId>('worldwide')
@@ -113,6 +117,7 @@ export function RunwayBoardScreen() {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [categoryLoad, setCategoryLoad] = useState<CategoryLoad>({ status: 'idle' })
   const [daysLeft, setDaysLeft] = useState<number | null>(null)
+  const [previewEntry, setPreviewEntry] = useState<CategoryBoardEntry | null>(null)
 
   const loadRankings = useCallback(
     async (signal?: AbortSignal) => {
@@ -234,6 +239,15 @@ export function RunwayBoardScreen() {
           Runway
         </h1>
         <p className={styles.lead}>Weekly awards and Top rankings.</p>
+        <button
+          type="button"
+          className={styles.socialCta}
+          data-testid="runway-open-fashionrise"
+          onClick={() => navigate(FASHIONRISE_PATH)}
+        >
+          Open FashionRise Social
+        </button>
+        <CompetitionStrip />
       </header>
 
       <section className={styles.weekly} aria-labelledby="runway-weekly-title">
@@ -337,6 +351,7 @@ export function RunwayBoardScreen() {
           <CategoryBoardPanel
             load={categoryLoad}
             onRetry={() => activeCategory && void loadCategory(activeCategory)}
+            onOpenLook={(entry) => setPreviewEntry(entry)}
           />
         ) : (
           <RankingsPanel
@@ -347,6 +362,9 @@ export function RunwayBoardScreen() {
           />
         )}
       </div>
+      {previewEntry?.gallery_item_id ? (
+        <CategoryLookPreview entry={previewEntry} onClose={() => setPreviewEntry(null)} />
+      ) : null}
     </section>
   )
 }
@@ -396,9 +414,11 @@ function RankingsPanel({
 function CategoryBoardPanel({
   load,
   onRetry,
+  onOpenLook,
 }: {
   load: CategoryLoad
   onRetry: () => void
+  onOpenLook: (entry: CategoryBoardEntry) => void
 }) {
   if (load.status === 'idle' || load.status === 'loading') {
     return <p className={styles.status}>Loading category board…</p>
@@ -414,19 +434,25 @@ function CategoryBoardPanel({
     )
   }
   const { board } = load
-  if (board.entries.length === 0) {
+  // Hide unscored entries client-side as defense (backend already filters).
+  const entries = board.entries.filter((e) => Number(e.score) > 0)
+  if (entries.length === 0) {
     return <p className={styles.empty}>{board.empty_reason || 'No standings yet this week.'}</p>
   }
 
-  const podium = board.entries.slice(0, 3)
-  const rest = board.entries.slice(3)
+  const podium = entries.slice(0, 3)
+  const rest = entries.slice(3)
 
   return (
     <div className={styles.categoryBoard}>
       <ol className={styles.podium} aria-label={`${board.label} top three`}>
         {/* Visual order: 2 · 1 · 3 */}
         {[podium[1], podium[0], podium[2]].filter(Boolean).map((entry) => (
-          <PodiumCard key={`podium-${entry.user_id}-${entry.gallery_item_id ?? 'u'}`} entry={entry} />
+          <PodiumCard
+            key={`podium-${entry.user_id}-${entry.gallery_item_id ?? 'u'}`}
+            entry={entry}
+            onOpenLook={onOpenLook}
+          />
         ))}
       </ol>
       {rest.length > 0 ? (
@@ -435,14 +461,14 @@ function CategoryBoardPanel({
             <ProfileRow
               key={`${entry.user_id}-${entry.gallery_item_id ?? 'user'}`}
               entry={entry}
+              onOpenLook={onOpenLook}
             />
           ))}
         </ol>
       ) : null}
-      {/* Keep full list accessible for screen readers when only podium shows */}
       {rest.length === 0 ? (
         <ol className={styles.srOnlyList} aria-label={`${board.label} full board`}>
-          {board.entries.map((entry) => (
+          {entries.map((entry) => (
             <li key={`sr-${entry.user_id}-${entry.rank}`}>
               #{entry.rank} {entry.display_name || entry.username || 'Designer'} {entry.score} pts
             </li>
@@ -453,14 +479,60 @@ function CategoryBoardPanel({
   )
 }
 
-function PodiumCard({ entry }: { entry: CategoryBoardEntry }) {
+function LookThumb({
+  galleryItemId,
+  label,
+  onOpen,
+}: {
+  galleryItemId: string | null | undefined
+  label: string
+  onOpen?: () => void
+}) {
+  const authImg = useAuthGalleryImage(galleryItemId ?? null, Boolean(galleryItemId))
+  if (!galleryItemId) return null
+  const body = authImg.url ? (
+    <img src={authImg.url} alt="" />
+  ) : (
+    <span className={styles.lookThumbEmpty} aria-hidden>
+      <Sparkles size={14} />
+    </span>
+  )
+  if (!onOpen) {
+    return <div className={styles.lookThumb}>{body}</div>
+  }
+  return (
+    <button
+      type="button"
+      className={styles.lookThumbBtn}
+      aria-label={`View look ${label}`}
+      data-testid={`runway-look-thumb-${galleryItemId}`}
+      onClick={onOpen}
+    >
+      {body}
+    </button>
+  )
+}
+
+function PodiumCard({
+  entry,
+  onOpenLook,
+}: {
+  entry: CategoryBoardEntry
+  onOpenLook: (entry: CategoryBoardEntry) => void
+}) {
   const handle = entry.username?.trim() ? `@${entry.username.trim()}` : null
   const name = entry.display_name?.trim() || handle || 'Designer'
   const avatar = profileAvatarSrc(entry.user_id, entry.avatar_url)
   const tall = entry.rank === 1
+  const lookLabel = entry.look_title?.trim() || name
 
   return (
     <li className={tall ? `${styles.podiumCard} ${styles.podiumCardLead}` : styles.podiumCard}>
+      <LookThumb
+        galleryItemId={entry.gallery_item_id}
+        label={lookLabel}
+        onOpen={entry.gallery_item_id ? () => onOpenLook(entry) : undefined}
+      />
       <div className={`${styles.podiumAvatar} ${podiumClass(entry.rank)}`} aria-hidden>
         {avatar ? <img src={avatar} alt="" /> : <span>{initialFrom(name)}</span>}
         <span className={`${styles.podiumMedal} ${podiumClass(entry.rank)}`}>
@@ -477,11 +549,18 @@ function PodiumCard({ entry }: { entry: CategoryBoardEntry }) {
   )
 }
 
-function ProfileRow({ entry }: { entry: CategoryBoardEntry }) {
+function ProfileRow({
+  entry,
+  onOpenLook,
+}: {
+  entry: CategoryBoardEntry
+  onOpenLook: (entry: CategoryBoardEntry) => void
+}) {
   const handle = entry.username?.trim() ? `@${entry.username.trim()}` : null
   const name = entry.display_name?.trim() || handle || 'Designer'
   const avatar = profileAvatarSrc(entry.user_id, entry.avatar_url)
   const metal = podiumClass(entry.rank)
+  const lookLabel = entry.look_title?.trim() || name
 
   return (
     <li className={styles.profileRow}>
@@ -498,11 +577,56 @@ function ProfileRow({ entry }: { entry: CategoryBoardEntry }) {
         {handle && name !== handle ? <p className={styles.profileHandle}>{handle}</p> : null}
         {entry.look_title ? <p className={styles.profileLook}>{entry.look_title}</p> : null}
       </div>
+      <LookThumb
+        galleryItemId={entry.gallery_item_id}
+        label={lookLabel}
+        onOpen={entry.gallery_item_id ? () => onOpenLook(entry) : undefined}
+      />
       <div className={styles.profileScore}>
         <strong>{formatCount(entry.score)}</strong>
         <span>pts</span>
       </div>
     </li>
+  )
+}
+
+function CategoryLookPreview({
+  entry,
+  onClose,
+}: {
+  entry: CategoryBoardEntry
+  onClose: () => void
+}) {
+  const authImg = useAuthGalleryImage(entry.gallery_item_id, Boolean(entry.gallery_item_id))
+  const title = entry.look_title?.trim() || 'Look'
+  const handle = entry.username?.trim() ? `@${entry.username.trim()}` : null
+
+  return (
+    <div className={styles.lookBackdrop} role="presentation" onClick={onClose}>
+      <div
+        className={styles.lookDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        data-testid="runway-category-look-preview"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.lookDialogHead}>
+          <div>
+            <p className={styles.lookDialogTitle}>{title}</p>
+            {handle ? <p className={styles.lookDialogMeta}>{handle}</p> : null}
+          </div>
+          <button type="button" className={styles.lookClose} aria-label="Close look" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        {authImg.url ? (
+          <img src={authImg.url} alt="" className={styles.lookDialogImage} />
+        ) : (
+          <div className={styles.lookDialogPlaceholder} aria-hidden />
+        )}
+      </div>
+    </div>
   )
 }
 
