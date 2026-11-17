@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | branch `cursor/web-android-camera-back-loop-77c6` @ **`556348e9`** |
+| Tip | FE **`556348e9`** · `/var/www/fashionrise/releases/556348e9-camera-back` |
+| Root cause | Capacitor Back handler called `exitApp()` while CAMERA permission / capture was open → Activity finished mid `filePathCallback` → next Camera tap crashed (“keeps stopping” loop) |
+| Fix | Disable Capacitor back handler while picker open · never `exitApp` on root Back (`minimizeApp`) · clear guard on input change/cancel or real resume |
+| Verify web | `/version.json` → `556348e9` |
+| **Android** | **Must rebuild APK/AAB** — store shell ships bundled `dist/` (not live web). Until then the device still runs the old back/exit path |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/49485aca-followers-profile /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Ops — Public registration email verification ON (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
