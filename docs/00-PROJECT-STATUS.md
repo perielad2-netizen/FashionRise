@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Streak-only + Followers → profile LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#421** `cursor/web-runway-streak-only-77c6` @ **`49485aca`** |
+| Tip | FE **`49485aca`** · `/var/www/fashionrise/releases/49485aca-followers-profile` |
+| Change | CompetitionStrip = `Login streak x/7` only · Followers list row opens that designer’s profile (Follow button unchanged) |
+| Verify | `/version.json` → `49485aca` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/9ad718c1-android-tester /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Native | Hard-refresh / SW clear; Capacitor rebuild picks up with next shell build |
+| Rewards | **OFF** |
+
 ## Deployed — Android tester batch LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |

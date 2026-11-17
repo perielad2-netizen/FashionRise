@@ -611,6 +611,10 @@ export function RunwayScreen({
         <FriendProfilePanel
           friend={viewingDesigner}
           startInEditMode={openOwnProfileEditing && viewingDesigner.user_id === viewerId}
+          onOpenDesigner={(designer) => {
+            setOpenOwnProfileEditing(false)
+            setViewingDesigner(designer)
+          }}
         />
       </section>
     )

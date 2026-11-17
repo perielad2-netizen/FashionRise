@@ -38,7 +38,17 @@ vi.mock('@/services/competitionsApi', () => ({
     weekly_rewards_launch_week_start: null,
   })),
   fetchCompetitionAwards: vi.fn(async () => []),
-  fetchStreakStatus: vi.fn(async () => null),
+  fetchStreakStatus: vi.fn(async () => ({
+    current_streak: 2,
+    longest_streak: 2,
+    last_checkin_date: '2026-11-16',
+    lifetime_checkins: 2,
+    days_until_reward: 5,
+    rewarded_this_checkin: false,
+    stars_awarded: 0,
+    reward_stars: 7,
+    rewards_enabled: false,
+  })),
   fetchCategoryBoard: (...args: unknown[]) => fetchCategoryBoard(...args),
 }))
 
@@ -118,6 +128,9 @@ describe('RunwayBoardScreen', () => {
     expect(screen.getByText('@NoaPeri')).toBeInTheDocument()
     expect(screen.getByText('Peri Shilat')).toBeInTheDocument()
     expect(screen.queryByText('Group 1')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Week of/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/left$/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Login streak')).toHaveTextContent('Login streak 2/7')
     expect(screen.getByRole('heading', { level: 2, name: 'Top Designer' })).toBeInTheDocument()
     expect(screen.getByLabelText('Top Designer top three')).toBeInTheDocument()
   })
