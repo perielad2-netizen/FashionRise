@@ -13,6 +13,7 @@ import {
   BellOff,
   ChevronLeft,
   Crown,
+  Flag,
   Globe2,
   Heart,
   MessageCircle,
@@ -73,6 +74,7 @@ import {
   subscribeFollowStatus,
 } from '@/lib/followStatusStore'
 import { FriendProfilePanel, type DesignerRef } from '@/shell/components/FriendProfilePanel'
+import { ReportLookSheet } from '@/shell/components/ReportLookSheet'
 import styles from './RunwayScreen.module.css'
 
 export { __followStatusCacheTestUtils, followStatusCacheKey }
@@ -898,6 +900,7 @@ export function RunwayScreen({
                   viewerUsername={viewerUsername}
                   onItemChange={patchItem}
                   onMediaUnavailable={removeUnavailableItem}
+                  onHideReported={removeUnavailableItem}
                   onOpenDesigner={(designer) => setViewingDesigner(designer)}
                   onVisibleImpression={
                     tab === 'discover' && viewerId && item.user_id !== viewerId
@@ -940,6 +943,7 @@ export function RunwayScreen({
           viewerId={viewerId}
           viewerUsername={viewerUsername}
           onItemChange={patchItem}
+          onHideReported={removeUnavailableItem}
           onClose={() => setBrowseSheet(null)}
           onOpenLooks={onOpenLooks}
           onOpenFriends={() => {
@@ -965,6 +969,7 @@ function RunwayBrowseSheet({
   viewerId,
   viewerUsername,
   onItemChange,
+  onHideReported,
   onClose,
   onOpenLooks,
   onOpenFriends,
@@ -976,6 +981,7 @@ function RunwayBrowseSheet({
   viewerId: string | null
   viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
+  onHideReported?: (galleryItemId: string) => void
   onClose: () => void
   onOpenLooks: () => void
   onOpenFriends: () => void
@@ -1111,6 +1117,7 @@ function RunwayBrowseSheet({
                   viewerId={viewerId}
                   viewerUsername={viewerUsername}
                   onItemChange={onItemChange}
+                  onHideReported={onHideReported}
                   onOpenDesigner={onOpenDesigner}
                   onVisibleImpression={
                     onVisibleImpression && viewerId && item.user_id !== viewerId
@@ -1446,6 +1453,7 @@ function RunwayCard({
   viewerUsername,
   onItemChange,
   onMediaUnavailable,
+  onHideReported,
   onOpenDesigner,
   onVisibleImpression,
 }: {
@@ -1459,6 +1467,8 @@ function RunwayCard({
   onItemChange: (next: GalleryItem) => void
   /** Hide feed cards whose look media 404s (deleted look orphans). */
   onMediaUnavailable?: (galleryItemId: string) => void
+  /** Hide look after the viewer reports it (moderation). */
+  onHideReported?: (galleryItemId: string) => void
   onOpenDesigner?: (designer: DesignerRef) => void
   /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
   onVisibleImpression?: (galleryItemId: string) => void
@@ -1471,6 +1481,7 @@ function RunwayCard({
   const impressionSentRef = useRef(false)
   const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comments, setComments] = useState<GalleryComment[] | null>(null)
   const [commentsError, setCommentsError] = useState<string | null>(null)
@@ -1908,6 +1919,22 @@ function RunwayCard({
           {followingDesigner ? 'Following' : 'Follow'}
         </button>
       ) : null}
+      {!isOwn && viewerId ? (
+        <button
+          type="button"
+          className={styles.reportBtn}
+          aria-label="Report look"
+          data-testid={`runway-report-${item.id}`}
+          onClick={() => {
+            setCommentsOpen(false)
+            setActionError(null)
+            setReportOpen(true)
+          }}
+        >
+          <Flag size={immersive ? 24 : 12} aria-hidden />
+          {!immersive ? <span>Report</span> : null}
+        </button>
+      ) : null}
     </div>
   )
 
@@ -2050,6 +2077,16 @@ function RunwayCard({
           </div>
         </>
       )}
+      {!isOwn && viewerId ? (
+        <ReportLookSheet
+          item={item}
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          onReported={(galleryItemId) => {
+            onHideReported?.(galleryItemId)
+          }}
+        />
+      ) : null}
       {!compact && commentsOpen
         ? createPortal(
             <div

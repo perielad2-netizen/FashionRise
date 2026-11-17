@@ -309,6 +309,10 @@ class Settings(BaseSettings):
     # Soft per-email resend cooldown (seconds) in addition to SlowAPI IP limits.
     email_verification_resend_cooldown_seconds: int = 60
 
+    # Moderation inbox for FashionRise Social look/designer reports.
+    # Defaults to the public support address used by Contact Us.
+    content_report_notify_email: str = "Fashionriseapp@gmail.com"
+
     # Forgot-password email recovery. Default off — enable only after SMTP works.
     # SPA shows the Forgot password? link only when enabled AND email delivery is configured.
     password_reset_enabled: bool = False

@@ -70,6 +70,32 @@ class GalleryRead(BaseModel):
     avatar_url: str | None = None
 
 
+ReportReason = Literal[
+    "sexual_content",
+    "harassment",
+    "hate",
+    "spam",
+    "impersonation",
+    "other",
+]
+
+
+class ContentReportCreate(BaseModel):
+    reason: ReportReason
+    details: str | None = Field(default=None, max_length=2000)
+
+
+class ContentReportRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    gallery_item_id: uuid.UUID
+    reported_user_id: uuid.UUID
+    reason: ReportReason
+    status: str
+    created_at: datetime
+
+
 class GalleryCommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 
