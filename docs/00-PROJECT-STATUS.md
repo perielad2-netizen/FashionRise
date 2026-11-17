@@ -3,17 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## In progress — Social look report / moderation intake (2026-11-17 Asia/Jerusalem)
+## Deployed — Social look report / moderation intake (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-social-report-77c6` |
-| Change | FashionRise Social feed **Report** (flag on immersive + browse cards) → reasons sheet → thank you; look hidden for reporter |
-| API | `POST /api/v1/gallery/{id}/report` · Alembic **037** `content_reports` · email to `CONTENT_REPORT_NOTIFY_EMAIL` (default Fashionriseapp@gmail.com) |
+| PR | **#425** · branch `cursor/web-social-report-77c6` · tip **`ada9adf`** |
+| Tip | FE **`ada9adf`** · `/var/www/fashionrise/releases/ada9adf-social-report` · BE src detached at `ada9adf` · Alembic **037** |
+| Change | FashionRise Social **Report** (flag on immersive + browse cards) → reasons → thank you; look hidden for reporter |
+| API | `POST /api/v1/gallery/{id}/report` · `content_reports` · email `CONTENT_REPORT_NOTIFY_EMAIL` → Fashionriseapp@gmail.com |
 | Reasons | sexual_content · harassment · hate · spam · impersonation · other |
-| Nginx | Allowlist `…/gallery/{uuid}/report` POST (see `docs/deploy/PROPOSED-NGINX-GALLERY-ALLOWLIST.md`) |
-| Not yet | Block/mute designer · admin review UI · auto-hide for everyone |
-| Tests | `tests/test_content_reports.py` · `ReportLookSheet.test.tsx` |
+| Nginx | `…/gallery/{uuid}/report` POST allowlisted |
+| Verify | `/version.json` → `ada9adf` · report sheet on others’ looks |
+| Not yet | Block/mute · admin review UI · auto-hide for all viewers |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/556348e9-camera-back /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
 
