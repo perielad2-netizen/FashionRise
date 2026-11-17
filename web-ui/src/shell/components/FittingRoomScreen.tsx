@@ -25,6 +25,10 @@ import { fetchJobImageBlob } from '@/services/ai/magicApi'
 import { pollAiJobUntilSettled } from '@/services/ai/pollAiJob'
 import { ApiError } from '@/services/api/client'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import {
+  armNativeFilePickerFocusClear,
+  markNativeFilePickerOpen,
+} from '@/services/native/filePickerGuard'
 import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './FittingRoomScreen.module.css'
@@ -84,10 +88,19 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const noticeTimer = useRef<number | null>(null)
   const replacePieceId = useRef<string | null>(null)
 
+  const openNativePicker = (el: HTMLInputElement | null, opts: { camera: boolean }) => {
+    if (!el) return
+    if (opts.camera) {
+      markNativeFilePickerOpen()
+      armNativeFilePickerFocusClear()
+    }
+    el.click()
+  }
+
   const openGarmentPicker = (mode: 'gallery' | 'camera', replaceId: string | null = null) => {
     replacePieceId.current = replaceId
     const el = mode === 'camera' ? garmentCameraRef.current : garmentRef.current
-    el?.click()
+    openNativePicker(el, { camera: mode === 'camera' })
   }
 
   const [personUrl, setPersonUrl] = useState<string | null>(null)
@@ -573,7 +586,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               type="button"
               className={styles.btn}
               data-testid="fitting-room-person-take"
-              onClick={() => personCameraRef.current?.click()}
+              onClick={() => openNativePicker(personCameraRef.current, { camera: true })}
             >
               {personUrl ? 'Retake photo' : 'Take photo'}
             </button>

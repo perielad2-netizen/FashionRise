@@ -1,6 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RunwayBoardScreen } from './RunwayBoardScreen'
+
+function renderBoard() {
+  return render(
+    <MemoryRouter>
+      <RunwayBoardScreen />
+    </MemoryRouter>,
+  )
+}
 
 const listGallery = vi.fn()
 const fetchCategoryBoard = vi.fn()
@@ -95,8 +104,10 @@ describe('RunwayBoardScreen', () => {
   })
 
   it('opens a weekly category profile board on click', async () => {
-    render(<RunwayBoardScreen />)
+    renderBoard()
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
+    expect(screen.getByTestId('runway-open-fashionrise')).toHaveTextContent(/FashionRise Social/i)
+    expect(screen.getByTestId('runway-cat-top_design')).toHaveTextContent(/Top Designs/i)
     expect(await screen.findByText('Pink gown')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('runway-cat-top_designer'))

@@ -312,10 +312,19 @@ def resolve_gallery_image_file(db: Session, gallery_item_id: uuid.UUID) -> Path:
     return ai_service.resolve_completed_job_image_path(job)
 
 
+def _not_deleted_look_clause():
+    """Keep non-look gallery rows; drop publishes whose Magic look was deleted."""
+    from app.models.magic_look_meta import MagicLookMeta
+
+    deleted_look_ids = select(MagicLookMeta.id).where(MagicLookMeta.is_deleted.is_(True))
+    return or_(GalleryItem.look_id.is_(None), GalleryItem.look_id.notin_(deleted_look_ids))
+
+
 def _public_gallery_base() -> Select:
     return select(GalleryItem).where(
         GalleryItem.visibility == "public",
         GalleryItem.moderation_status == "ok",
+        _not_deleted_look_clause(),
     )
 
 
@@ -405,6 +414,7 @@ def _discover_eligible_filter():
     return (
         GalleryItem.visibility == "public",
         GalleryItem.moderation_status == "ok",
+        _not_deleted_look_clause(),
     )
 
 
@@ -665,6 +675,7 @@ def list_user_gallery(db: Session, user_id: uuid.UUID) -> list[GalleryItem]:
             GalleryItem.user_id == user_id,
             GalleryItem.visibility == "public",
             GalleryItem.moderation_status == "ok",
+            _not_deleted_look_clause(),
         )
         .order_by(GalleryItem.created_at.desc())
     )

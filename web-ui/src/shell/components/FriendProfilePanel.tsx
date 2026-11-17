@@ -1,10 +1,20 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Camera, UserMinus, UserPlus, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Camera, Heart, MessageCircle, Star, UserMinus, UserPlus, X } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
 import type { FriendUser } from '@/services/friendsApi'
-import { listUserGallery, type GalleryItem } from '@/services/galleryApi'
+import {
+  getGalleryItem,
+  likeGalleryItem,
+  listGalleryComments,
+  listUserGallery,
+  postGalleryComment,
+  rateGalleryItem,
+  unlikeGalleryItem,
+  type GalleryComment,
+  type GalleryItem,
+} from '@/services/galleryApi'
 import { syncFollowStatus } from '@/lib/followStatusStore'
 import {
   followCreator,
@@ -493,7 +503,20 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
             <ul className={styles.looksGrid}>
               {state.looks.map((item) => (
                 <li key={item.id}>
-                  <FriendLookTile item={item} onOpen={() => setPreviewLook(item)} />
+                  <FriendLookTile
+                    item={item}
+                    onOpen={() => setPreviewLook(item)}
+                    onUnavailable={(id) => {
+                      setState((prev) => {
+                        if (prev.status !== 'ready') return prev
+                        return {
+                          ...prev,
+                          looks: prev.looks.filter((row) => row.id !== id),
+                        }
+                      })
+                      setPreviewLook((cur) => (cur?.id === id ? null : cur))
+                    }}
+                  />
                 </li>
               ))}
             </ul>
@@ -631,7 +654,29 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
       ) : null}
 
       {previewLook ? (
-        <PublishedLookLightbox item={previewLook} onClose={() => setPreviewLook(null)} />
+        <PublishedLookLightbox
+          item={previewLook}
+          viewerId={viewerId}
+          onClose={() => setPreviewLook(null)}
+          onItemChange={(next) => {
+            setPreviewLook(next)
+            setState((prev) => {
+              if (prev.status !== 'ready') return prev
+              return {
+                ...prev,
+                looks: prev.looks.map((row) => (row.id === next.id ? { ...row, ...next } : row)),
+              }
+            })
+          }}
+          onUnavailable={() => {
+            const id = previewLook.id
+            setPreviewLook(null)
+            setState((prev) => {
+              if (prev.status !== 'ready') return prev
+              return { ...prev, looks: prev.looks.filter((row) => row.id !== id) }
+            })
+          }}
+        />
       ) : null}
 
       {previewAvatar && avatarSrc ? (
@@ -742,9 +787,26 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
   )
 }
 
-function FriendLookTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) {
+function FriendLookTile({
+  item,
+  onOpen,
+  onUnavailable,
+}: {
+  item: GalleryItem
+  onOpen: () => void
+  onUnavailable?: (galleryItemId: string) => void
+}) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const mediaGone =
+    Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
+
+  useEffect(() => {
+    if (mediaGone) onUnavailable?.(item.id)
+  }, [item.id, mediaGone, onUnavailable])
+
+  if (mediaGone) return null
+
   return (
     <button
       type="button"
@@ -771,14 +833,106 @@ function FriendLookTile({ item, onOpen }: { item: GalleryItem; onOpen: () => voi
 
 function PublishedLookLightbox({
   item,
+  viewerId,
   onClose,
+  onItemChange,
+  onUnavailable,
 }: {
   item: GalleryItem
+  viewerId: string | null
   onClose: () => void
+  onItemChange: (next: GalleryItem) => void
+  onUnavailable: () => void
 }) {
   const titleId = useId()
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const mediaGone =
+    Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
+  const isOwn = Boolean(viewerId && item.user_id === viewerId)
+  const canReact = Boolean(viewerId) && !isOwn
+  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [comments, setComments] = useState<GalleryComment[] | null>(null)
+  const [draft, setDraft] = useState('')
+
+  useEffect(() => {
+    if (mediaGone) onUnavailable()
+  }, [mediaGone, onUnavailable])
+
+  useEffect(() => {
+    let cancelled = false
+    void listGalleryComments(item.id)
+      .then((rows) => {
+        if (!cancelled) setComments(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setComments([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [item.id])
+
+  const refresh = useCallback(async () => {
+    const fresh = await getGalleryItem(item.id)
+    onItemChange(fresh)
+    return fresh
+  }, [item.id, onItemChange])
+
+  const onToggleLike = useCallback(async () => {
+    if (!canReact || busy) return
+    setBusy('like')
+    setActionError(null)
+    try {
+      if (item.liked_by_me) await unlikeGalleryItem(item.id)
+      else await likeGalleryItem(item.id)
+      await refresh()
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Could not update like')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, canReact, item.id, item.liked_by_me, refresh])
+
+  const onScore = useCallback(
+    async (value: string) => {
+      if (!canReact || busy) return
+      const score = Number(value)
+      if (!Number.isFinite(score) || score < 1 || score > 10) return
+      setBusy('score')
+      setActionError(null)
+      try {
+        await rateGalleryItem(item.id, score)
+        await refresh()
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.message : 'Could not save score')
+      } finally {
+        setBusy(null)
+      }
+    },
+    [busy, canReact, item.id, refresh],
+  )
+
+  const onSendComment = useCallback(async () => {
+    const body = draft.trim()
+    if (!viewerId || !body || busy) return
+    setBusy('comment')
+    setActionError(null)
+    try {
+      const row = await postGalleryComment(item.id, body)
+      setComments((prev) => [...(prev ?? []), row])
+      setDraft('')
+      await refresh()
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Could not post comment')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, draft, item.id, refresh, viewerId])
+
+  if (mediaGone) return null
+
   return (
     <div
       className={styles.lookBackdrop}
@@ -787,7 +941,7 @@ function PublishedLookLightbox({
       onClick={onClose}
     >
       <div
-        className={styles.lookDialog}
+        className={`${styles.lookDialog} ${styles.lookDialogSocial}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -801,6 +955,7 @@ function PublishedLookLightbox({
             <p className={styles.lookDialogMeta}>
               {item.likes_count ?? 0} likes
               {item.rating_average != null ? ` · ${item.rating_average.toFixed(1)} score` : ''}
+              {item.rating_count ? ` · ${item.rating_count} ratings` : ''}
             </p>
           </div>
           <button type="button" className={styles.closeIcon} aria-label="Close look" onClick={onClose}>
@@ -812,6 +967,103 @@ function PublishedLookLightbox({
         ) : (
           <div className={styles.lookDialogPlaceholder} aria-hidden />
         )}
+        <div className={styles.lookSocialRail} aria-label="Look reactions">
+          {canReact ? (
+            <button
+              type="button"
+              className={item.liked_by_me ? styles.lookSocialOn : styles.lookSocialBtn}
+              aria-pressed={Boolean(item.liked_by_me)}
+              disabled={busy === 'like'}
+              onClick={() => void onToggleLike()}
+            >
+              <Heart size={16} aria-hidden fill={item.liked_by_me ? 'currentColor' : 'none'} />
+              {item.likes_count ?? 0}
+            </button>
+          ) : (
+            <span className={styles.lookSocialChip}>
+              <Heart size={16} aria-hidden />
+              {item.likes_count ?? 0}
+            </span>
+          )}
+          {canReact ? (
+            <label className={styles.lookScoreLabel}>
+              <Star size={16} aria-hidden />
+              <select
+                className={styles.lookScoreSelect}
+                aria-label="Rate look from 1 to 10"
+                value={item.my_score ?? ''}
+                disabled={busy === 'score'}
+                onChange={(e) => void onScore(e.target.value)}
+              >
+                <option value="" disabled>
+                  {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
+                </option>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span className={styles.lookSocialChip}>
+              <Star size={16} aria-hidden />
+              {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
+            </span>
+          )}
+          <span className={styles.lookSocialChip}>
+            <MessageCircle size={16} aria-hidden />
+            {comments?.length ?? item.comments_count ?? 0}
+          </span>
+        </div>
+        {actionError ? (
+          <p className={styles.status} role="alert">
+            {actionError}
+          </p>
+        ) : null}
+        <div className={styles.lookComments}>
+          <p className={styles.lookCommentsTitle}>Comments</p>
+          {comments == null ? (
+            <p className={styles.lookDialogMeta}>Loading…</p>
+          ) : comments.length === 0 ? (
+            <p className={styles.lookDialogMeta}>Be the first to comment.</p>
+          ) : (
+            <ul className={styles.lookCommentList}>
+              {comments.map((row) => (
+                <li key={row.id}>
+                  <strong>{row.username ? `@${row.username}` : 'Designer'}</strong>
+                  <span>{row.body}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {viewerId ? (
+            <div className={styles.lookCommentCompose}>
+              <input
+                className={styles.lookCommentInput}
+                value={draft}
+                maxLength={500}
+                placeholder="Add a comment…"
+                aria-label="Add a comment"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void onSendComment()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                disabled={busy === 'comment' || !draft.trim()}
+                onClick={() => void onSendComment()}
+              >
+                Send
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )

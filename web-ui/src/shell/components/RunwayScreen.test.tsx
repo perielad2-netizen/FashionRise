@@ -22,6 +22,7 @@ const requestFriendByUsername = vi.fn()
 const listUserGallery = vi.fn()
 const getPublicProfile = vi.fn()
 const removeFriend = vi.fn()
+const fetchGalleryImageBlob = vi.fn(async () => new Blob())
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
@@ -35,7 +36,7 @@ vi.mock('@/services/galleryApi', () => ({
   likeGalleryComment: (...args: unknown[]) => likeGalleryComment(...args),
   unlikeGalleryComment: (...args: unknown[]) => unlikeGalleryComment(...args),
   listUserGallery: (...args: unknown[]) => listUserGallery(...args),
-  fetchGalleryImageBlob: vi.fn(async () => new Blob()),
+  fetchGalleryImageBlob: (...args: unknown[]) => fetchGalleryImageBlob(...args),
 }))
 
 const getFollowStatus = vi.fn()
@@ -199,6 +200,8 @@ describe('RunwayScreen', () => {
     disableRunwayPush.mockReset()
     runwayPushIsEnabled.mockReset()
     ensureDefaultRunwayPush.mockReset()
+    fetchGalleryImageBlob.mockReset()
+    fetchGalleryImageBlob.mockResolvedValue(new Blob())
     runwayPushIsEnabled.mockResolvedValue(false)
     enableRunwayPush.mockResolvedValue('granted')
     disableRunwayPush.mockResolvedValue(undefined)
@@ -952,5 +955,35 @@ describe('RunwayScreen', () => {
     expect(screen.getByText(/isn’t (enabled|configured) on the server yet/i)).toBeInTheDocument()
     fireEvent.click(toggle)
     expect(enableRunwayPush).not.toHaveBeenCalled()
+  })
+
+  it('hides immersive cards when look media fails (deleted look orphan)', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'orphan-1',
+            title: 'Deleted look reel',
+            username: 'NoaPeri',
+            look_id: 'look-deleted',
+          },
+        ]
+      }
+      if (opts?.sort === 'circle') return []
+      if (opts?.sort === 'following') return []
+      if (opts?.sort === 'top10') return []
+      return []
+    })
+    fetchGalleryImageBlob.mockRejectedValue(new Error('Gallery image not available'))
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await waitFor(() => expect(listGallery).toHaveBeenCalled())
+    expect(await screen.findByText(/Deleted look reel/i)).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Deleted look reel/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/@NoaPeri/i)).not.toBeInTheDocument()
+    })
   })
 })

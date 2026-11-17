@@ -78,3 +78,83 @@ def test_publish_look_appears_on_runway_feed(client, db_session):
     assert removed.status_code == 200, removed.text
     assert removed.json()["runway_item_id"] is None
     assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
+
+
+def test_delete_look_removes_runway_publish_from_feed(client, db_session):
+    """My Looks delete must not leave a black empty reel on FashionRise."""
+    tokens = register_with_invite(client, db_session, "runway_del@example.com", "runway_del")
+    viewer = register_with_invite(client, db_session, "runway_del_v@example.com", "runway_delv")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    job = _add_job(db_session, user_id=uid, image_url=_store_image(), summary="to delete")
+    look_id = str(job.id)
+
+    published = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(tokens),
+        json=runway_publish_body(),
+    )
+    assert published.status_code == 200, published.text
+    runway_id = published.json()["runway_item_id"]
+
+    feed_before = client.get("/api/v1/gallery?sort=newest", headers=_auth(viewer))
+    assert feed_before.status_code == 200
+    assert any(row["id"] == runway_id for row in feed_before.json())
+
+    deleted = client.delete(f"/api/v1/looks/{look_id}", headers=_auth(tokens))
+    assert deleted.status_code == 204, deleted.text
+    assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
+
+    feed_after = client.get("/api/v1/gallery?sort=newest", headers=_auth(viewer))
+    assert feed_after.status_code == 200
+    assert all(row["id"] != runway_id for row in feed_after.json())
+    assert (
+        client.get(f"/api/v1/gallery/{runway_id}/image", headers=_auth(viewer)).status_code == 404
+    )
+
+    # Idempotent re-delete still succeeds and leaves feed clean.
+    assert client.delete(f"/api/v1/looks/{look_id}", headers=_auth(tokens)).status_code == 204
+
+
+def test_feed_excludes_orphaned_deleted_look_publish(client, db_session):
+    """Defense: gallery rows for tombstoned looks must not appear even if unpublish was skipped."""
+    from datetime import UTC, datetime
+
+    from app.models.magic_look_meta import MagicLookMeta
+
+    tokens = register_with_invite(client, db_session, "runway_orph@example.com", "runway_orph")
+    viewer = register_with_invite(client, db_session, "runway_orph_v@example.com", "runway_orphv")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    job = _add_job(db_session, user_id=uid, image_url=_store_image(), summary="orphan")
+    look_id = job.id
+
+    published = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(tokens),
+        json=runway_publish_body(),
+    )
+    assert published.status_code == 200, published.text
+    runway_id = uuid.UUID(published.json()["runway_item_id"])
+
+    meta = db_session.get(MagicLookMeta, look_id)
+    if meta is None:
+        meta = MagicLookMeta(id=look_id, user_id=uid)
+        db_session.add(meta)
+    meta.is_deleted = True
+    meta.deleted_at = datetime.now(UTC)
+    db_session.add(meta)
+    db_session.commit()
+    assert db_session.get(GalleryItem, runway_id) is not None
+
+    feed = client.get("/api/v1/gallery?sort=newest", headers=_auth(viewer))
+    assert feed.status_code == 200
+    assert all(row["id"] != str(runway_id) for row in feed.json())
+
+    discover = client.get("/api/v1/gallery?sort=discover", headers=_auth(viewer))
+    assert discover.status_code == 200
+    assert all(row["id"] != str(runway_id) for row in discover.json())
+
+    profile = client.get(f"/api/v1/gallery/user/{uid}", headers=_auth(viewer))
+    assert profile.status_code == 200
+    assert all(row["id"] != str(runway_id) for row in profile.json())

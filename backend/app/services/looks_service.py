@@ -520,11 +520,25 @@ def delete_look(db: Session, user: User, look_id: uuid.UUID) -> None:
 
     Does not erase ai_jobs rows or generated image files. Deleted looks are
     excluded from list/get/patch; archive/restore cannot revive them.
+
+    Also removes any FashionRise / Runway gallery publish for this look so the
+    social feed does not keep a black empty reel after My Looks delete.
     """
+    from app.models.gallery_item import GalleryItem
+
     meta = db.get(MagicLookMeta, look_id)
     if meta is not None and meta.user_id != user.id:
         raise NotFoundError("Look not found")
     if meta is not None and meta.is_deleted:
+        # Still scrub any orphaned gallery row left from older deletes.
+        orphan = db.scalar(
+            select(GalleryItem).where(
+                GalleryItem.look_id == look_id, GalleryItem.user_id == user.id
+            )
+        )
+        if orphan is not None:
+            db.delete(orphan)
+            db.commit()
         return
 
     jobs = _load_polish_jobs(db, user)
@@ -544,4 +558,11 @@ def delete_look(db: Session, user: User, look_id: uuid.UUID) -> None:
     meta.is_deleted = True
     meta.deleted_at = datetime.now(UTC)
     db.add(meta)
+
+    published = db.scalar(
+        select(GalleryItem).where(GalleryItem.look_id == look_id, GalleryItem.user_id == user.id)
+    )
+    if published is not None:
+        db.delete(published)
+
     db.commit()

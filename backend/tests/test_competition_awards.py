@@ -196,7 +196,7 @@ def test_competition_status_endpoint(client, db_session):
     assert "week_start" in body
     assert "seconds_remaining" in body
     assert body["publish_note"]
-    assert "Top Design" in [c["label"] for c in body["award_categories"]]
+    assert "Top Designs" in [c["label"] for c in body["award_categories"]]
 
 
 def test_competition_category_board_endpoint(client, db_session):
@@ -213,3 +213,72 @@ def test_competition_category_board_endpoint(client, db_session):
     assert isinstance(body["entries"], list)
     bad = client.get("/api/v1/competitions/categories/not_a_cat/board", headers=_auth(tokens))
     assert bad.status_code == 404
+
+
+def test_top_designs_board_one_look_per_user(client, db_session):
+    """Top Designs live board keeps only the best-scored look per designer."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.gallery_item import GalleryItem
+    from app.models.gallery_like import GalleryLike
+    from app.models.rating import Rating
+    from app.models.user import User
+    from app.services.competition_clock import competition_week_start
+    from app.services.competition_groups import enroll_on_activity
+    from app.services.competition_service import build_category_board
+
+    week = competition_week_start(datetime(2026, 11, 18, 12, tzinfo=UTC))
+    author = register_with_invite(client, db_session, "tdedupe_a@example.com", "tdedupeA")
+    fan = register_with_invite(client, db_session, "tdedupe_b@example.com", "tdedupeB")
+    author_id = uuid.UUID(client.get("/api/v1/auth/me", headers=_auth(author)).json()["id"])
+    fan_id = uuid.UUID(client.get("/api/v1/auth/me", headers=_auth(fan)).json()["id"])
+
+    strong = GalleryItem(
+        look_id=uuid.uuid4(),
+        user_id=author_id,
+        title="strong look",
+        image_url="https://example.com/s.png",
+        visibility="public",
+        moderation_status="ok",
+        created_at=week + timedelta(days=1),
+    )
+    weak = GalleryItem(
+        look_id=uuid.uuid4(),
+        user_id=author_id,
+        title="weak look",
+        image_url="https://example.com/w.png",
+        visibility="public",
+        moderation_status="ok",
+        created_at=week + timedelta(days=1),
+    )
+    db_session.add_all([strong, weak])
+    db_session.flush()
+    enroll_on_activity(db_session, author_id, now=week + timedelta(hours=2))
+    enroll_on_activity(db_session, fan_id, now=week + timedelta(hours=2))
+    db_session.add(
+        GalleryLike(user_id=fan_id, gallery_item_id=strong.id, created_at=week + timedelta(days=2))
+    )
+    db_session.add(
+        Rating(
+            user_id=fan_id,
+            gallery_item_id=strong.id,
+            score=10,
+            created_at=week + timedelta(days=2),
+        )
+    )
+    db_session.add(
+        GalleryLike(user_id=fan_id, gallery_item_id=weak.id, created_at=week + timedelta(days=2))
+    )
+    db_session.commit()
+
+    board = build_category_board(
+        db_session,
+        db_session.get(User, author_id),
+        category="top_design",
+        now=week + timedelta(days=3),
+    )
+    assert board["label"] == "Top Designs"
+    user_ids = [e["user_id"] for e in board["entries"]]
+    assert user_ids.count(str(author_id)) == 1
+    assert all(int(e["score"]) > 0 for e in board["entries"])
+    assert board["entries"][0]["gallery_item_id"] == str(strong.id)
