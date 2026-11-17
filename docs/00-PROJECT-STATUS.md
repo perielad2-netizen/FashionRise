@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Fix — Report discard keep-private + confirm Send (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Discard | Soft-hide from Social (`rejected`) · **owner keeps paid look** · **republish blocked** |
+| Why not delete | User paid Stars for Magic; private My Looks stay; only Social publish is revoked |
+| Report UI | Reason → details + **Send report** (details required for “Something else”) |
+| Moderation view/email | Shows reporter details text |
+| Branch | `cursor/web-report-discard-keep-77c6` |
+
 ## Fix — Look Details rename keyboard black square (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
