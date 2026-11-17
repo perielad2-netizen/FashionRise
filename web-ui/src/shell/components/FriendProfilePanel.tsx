@@ -43,6 +43,8 @@ type Props = {
   friend: FriendUser | DesignerRef
   /** When true and viewing self, open the Edit Designer Card sheet once ready. */
   startInEditMode?: boolean
+  /** Open another designer profile (e.g. from the Followers list). */
+  onOpenDesigner?: (designer: DesignerRef) => void
 }
 
 type LoadState =
@@ -69,7 +71,11 @@ function tierLabel(tier: string | null | undefined): string | null {
  * FashionRise designer profile — premium brand cover, follow, published collection.
  * Never loads private designs or unpublished looks.
  */
-export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
+export function FriendProfilePanel({
+  friend,
+  startInEditMode = false,
+  onOpenDesigner,
+}: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -735,9 +741,25 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
                 {followersState.people.map((person) => {
                   const personAvatar = profileAvatarSrc(person.user_id, person.avatar_url)
                   const canFollow = Boolean(viewerId && viewerId !== person.user_id)
+                  const openProfile = () => {
+                    setFollowersOpen(false)
+                    if (person.user_id === friend.user_id) return
+                    onOpenDesigner?.({
+                      user_id: person.user_id,
+                      username: person.username,
+                      display_name: person.display_name ?? undefined,
+                      avatar_url: person.avatar_url,
+                    })
+                  }
                   return (
                     <li key={person.user_id} className={styles.peopleRow}>
-                      <div className={styles.peopleIdentity}>
+                      <button
+                        type="button"
+                        className={styles.peopleIdentity}
+                        data-testid={`follower-open-${person.user_id}`}
+                        aria-label={`Open ${person.display_name || person.username} profile`}
+                        onClick={openProfile}
+                      >
                         {personAvatar ? (
                           <img
                             src={personAvatar}
@@ -753,7 +775,7 @@ export function FriendProfilePanel({ friend, startInEditMode = false }: Props) {
                           <strong>{person.display_name || person.username}</strong>
                           <div className={styles.handle}>@{person.username}</div>
                         </div>
-                      </div>
+                      </button>
                       {canFollow ? (
                         <button
                           type="button"

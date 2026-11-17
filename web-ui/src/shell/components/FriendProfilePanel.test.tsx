@@ -167,6 +167,29 @@ describe('FriendProfilePanel (premium designer card)', () => {
     expect(__followStatusCacheTestUtils.get('viewer-1', 'fan-1')).toBe(true)
   })
 
+  it('opens a follower profile from the Followers list', async () => {
+    const onOpenDesigner = vi.fn()
+    listProfileFollowers.mockResolvedValue([
+      {
+        user_id: 'fan-1',
+        username: 'fanone',
+        display_name: 'Fan One',
+        avatar_url: null,
+        following: false,
+      },
+    ])
+    render(<FriendProfilePanel friend={friend} onOpenDesigner={onOpenDesigner} />)
+    fireEvent.click(await screen.findByTestId('designer-followers-btn'))
+    fireEvent.click(await screen.findByTestId('follower-open-fan-1'))
+    expect(onOpenDesigner).toHaveBeenCalledWith({
+      user_id: 'fan-1',
+      username: 'fanone',
+      display_name: 'Fan One',
+      avatar_url: null,
+    })
+    expect(screen.queryByTestId('designer-followers-sheet')).not.toBeInTheDocument()
+  })
+
   it('shows an empty state when the friend has no published looks', async () => {
     listUserGallery.mockResolvedValue([])
     render(<FriendProfilePanel friend={friend} />)
