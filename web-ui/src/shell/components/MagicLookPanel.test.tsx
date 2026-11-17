@@ -76,7 +76,8 @@ describe('MagicLookPanel', () => {
         onViewInMyLooks={() => undefined}
       />,
     )
-    expect(screen.getByRole('heading', { name: 'Try On Person' })).toBeTruthy()
+    expect(screen.getByText('Try On Person')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Your preview' })).toBeTruthy()
     expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
     expect(screen.queryByText('Not a faithful try-on')).toBeNull()
     expect(screen.getByRole('button', { name: 'Compare original' })).toBeTruthy()
@@ -261,7 +262,9 @@ describe('MagicLookPanel', () => {
         onBackToSketch={() => undefined}
       />,
     )
-    expect(screen.getByText('Generating your try-on preview...')).toBeTruthy()
+    expect(screen.getByTestId('magic-generating')).toBeTruthy()
+    expect(screen.getByText('Generating your try-on preview…')).toBeTruthy()
+    expect(screen.getByTestId('magic-status-pill')).toBeTruthy()
     expect(screen.queryByText(/FASHN/i)).toBeNull()
     expect(screen.queryByText(/credit/i)).toBeNull()
     // Busy/start: no Stop waiting / Back to sketch — Close dismisses only.
@@ -287,7 +290,9 @@ describe('MagicLookPanel', () => {
         onBackToSketch={() => undefined}
       />,
     )
+    expect(screen.getByRole('heading', { name: 'Creating your look' })).toBeTruthy()
     expect(screen.getByText('Creating your look…')).toBeTruthy()
+    expect(screen.getByText('FashionRise Magic')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Stop waiting' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Back to sketch' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Close Magic' })).toBeTruthy()
