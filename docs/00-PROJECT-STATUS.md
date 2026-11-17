@@ -7,8 +7,8 @@
 
 | Field | Value |
 | --- | --- |
-| PR | **#425** · branch `cursor/web-social-report-77c6` |
-| Tip | FE **`ada9adf`** · BE tip with signed moderation links (see latest commit on branch) · Alembic **037** |
+| PR | **#425** → `main` @ **`342d96db`** |
+| Tip | FE **`ada9adf`** · BE tip with signed moderation links · Alembic **037** |
 | Change | FashionRise Social **Report** → reasons → thank you; look hidden from reporter only (not deleted) |
 | Email | View look · **Keep design (OK)** · **Discard design (abuse)** — signed `/api/v1/moderation/reports/{id}/…` links (14d TTL) |
 | Discard | Sets `moderation_status=rejected` (hidden from all feeds); **does not delete** gallery row/images |
@@ -16,6 +16,18 @@
 | Nginx | gallery report POST + moderation `(view\|image\|keep\|discard)` GET |
 | Not yet | Block/mute · admin inbox UI |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/556348e9-camera-back /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
+## Ops — Free capacity wins on current VPS (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Cost | **$0** (same Vultr box) |
+| Nginx | Allowlisted `POST /api/v1/gallery/impressions` + `GET /api/v1/push/native/capability` (were **403** → client retries / “slow” feel) |
+| API | `fashionrise-api` uvicorn **`--workers 2`** (was 1) |
+| Kernel | `vm.swappiness=10` (prefer RAM over swap when possible) |
+| Not fixed by this | Shared box with PickWise · OpenAI Magic latency · need paid scale for 1M downloads |
+| Rollback API | set `--workers 1` in `/etc/systemd/system/fashionrise-api.service` · `daemon-reload` · `restart fashionrise-api` |
+| Rollback nginx | restore `/var/backups/fashionrise/nginx-free-capacity-*.conf` |
 
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
 
