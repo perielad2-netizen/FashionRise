@@ -3,11 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Ops — Public registration email verification ON (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Prod `EMAIL_VERIFICATION_REQUIRED=true` (same SMTP as forgot-password: `smtp.gmail.com` / `fashionriseapp@gmail.com`) |
+| Effect | New email/password signups stay `verification_pending` until inbox link confirmed; login blocked until verified |
+| Status API | `/api/v1/auth/registration/status` → `requires_email_verification: true`, `email_delivery_configured: true` |
+| Does not change | Existing accounts already marked verified · Google OAuth (Google already proves email) · weekly/streak Stars still **OFF** |
+| Rollback | Set `EMAIL_VERIFICATION_REQUIRED=false` in `/opt/fashionrise/src/backend/.env` · `systemctl restart fashionrise-api` · backup `*.pre-email-verify-*` |
+| Helps | Stops throwaways that cannot receive mail (`@example.com`, fake addresses). Does **not** stop real disposable Gmails |
+
 ## Deployed — Streak-only + Followers → profile LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | **#421** `cursor/web-runway-streak-only-77c6` @ **`49485aca`** |
+| PR | **#421** → `main` @ **`7f8a792e`** (code tip **`49485aca`**) |
 | Tip | FE **`49485aca`** · `/var/www/fashionrise/releases/49485aca-followers-profile` |
 | Change | CompetitionStrip = `Login streak x/7` only · Followers list row opens that designer’s profile (Follow button unchanged) |
 | Verify | `/version.json` → `49485aca` |
