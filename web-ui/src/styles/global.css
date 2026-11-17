@@ -92,3 +92,21 @@ img {
 .studio-draw-surface {
   touch-action: none;
 }
+
+/*
+ * Fixed overlays that host text inputs (Look Details rename, Friends add,
+ * profile edit, Save Design, report details, etc.).
+ * While an editable is focused, clip the overlay to the true visual viewport
+ * so Android soft-keyboard + scrollIntoView cannot leave a black void band.
+ */
+html[data-fr-keyboard='1'] .fr-keyboard-overlay {
+  top: 0;
+  bottom: auto;
+  height: var(--fr-visible-height, 100dvh);
+  max-height: var(--fr-visible-height, 100dvh);
+  align-items: flex-start;
+  align-content: flex-start;
+  place-items: start center;
+  overflow-y: auto;
+  box-sizing: border-box;
+}

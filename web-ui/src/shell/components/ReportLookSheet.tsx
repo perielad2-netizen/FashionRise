@@ -105,7 +105,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
 
   return createPortal(
     <div
-      className={styles.chatScrim}
+      className={`fr-keyboard-overlay ${styles.chatScrim}`}
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()

@@ -36,6 +36,7 @@ import {
   PUBLIC_PUBLISH_FULL_TERMS_POINTS,
 } from '@/lib/publicPublishConsent'
 import { LegalConsentField } from '@/components/LegalConsentField'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { requestShare } from '@/lib/sharePromo'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MyLooksScreen.module.css'
@@ -175,6 +176,7 @@ function LookDetailDialog({
   }
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
   const [runwayShareAgreed, setRunwayShareAgreed] = useState(false)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
   const [mobileSide, setMobileSide] = useState<'front' | 'back'>(
     look.front?.has_image ? 'front' : 'back',
   )
@@ -250,7 +252,7 @@ function LookDetailDialog({
 
   return (
     <div
-      className={styles.overlay}
+      className={`fr-keyboard-overlay ${styles.overlay}`}
       role="presentation"
       onClick={() => {
         // Ignore dismiss while the nested Publish confirm is open — otherwise a
@@ -342,12 +344,16 @@ function LookDetailDialog({
               Look name
             </label>
             <input
+              ref={renameInputRef}
               id={`${titleId}-rename`}
               className={styles.renameInput}
               value={title}
               maxLength={120}
               disabled={busy}
+              autoComplete="off"
+              enterKeyHint="done"
               onChange={(e) => setTitle(e.target.value)}
+              onFocus={() => onAndroidEditableFocus(renameInputRef.current)}
             />
             <button
               type="button"

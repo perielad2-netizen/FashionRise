@@ -96,7 +96,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className={styles.scrim}
+      className={`fr-keyboard-overlay ${styles.scrim}`}
       role="presentation"
       data-testid="confirm-dialog-scrim"
       onPointerDown={stopOverlayDismiss}

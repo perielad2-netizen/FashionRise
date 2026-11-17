@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { TITLE_MAX_LENGTH } from '@/lib/savedDesign'
 import styles from './ConfirmDialog.module.css'
 
@@ -53,7 +54,7 @@ export function SaveDesignDialog({
   }
 
   return (
-    <div className={styles.scrim} role="presentation">
+    <div className={`fr-keyboard-overlay ${styles.scrim}`} role="presentation">
       <form
         className={styles.dialog}
         role="dialog"
@@ -78,11 +79,13 @@ export function SaveDesignDialog({
               value={title}
               maxLength={TITLE_MAX_LENGTH}
               autoComplete="off"
+              enterKeyHint="done"
               spellCheck
               disabled={saving}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? `${errorId} ${hintId}` : hintId}
               onChange={(event) => setTitle(event.target.value)}
+              onFocus={() => onAndroidEditableFocus(inputRef.current)}
             />
           </div>
           {error ? (

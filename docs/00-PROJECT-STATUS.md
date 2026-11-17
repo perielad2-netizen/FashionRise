@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Fix — Look Details rename keyboard black square (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Bug | My Looks → look details → rename: Android keyboard opens with large black/navy void (same class as Friends add-user) |
+| Root cause | Fixed overlay + tall `100svh` dialog + soft keyboard scroll; `#root` keyboard-safe height left empty band |
+| Fix | `--fr-visible-height` + `data-fr-keyboard` · `.fr-keyboard-overlay` clips overlays while typing · Look Details / Save Design / profile edit / report / Create Model / chat sheets |
+| Also audited | Friends add (kept) · ConfirmDialog / SaveDesignDialog · FriendProfile edit · ReportLookSheet · CreateMyCroquisWizard |
+| Native | **Rebuild Android APK/AAB** — shell bundles `dist/` |
+| Branch | `cursor/web-look-rename-keyboard-77c6` |
+
 ## Ops — Magic AI workers ×3 (option A) LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |

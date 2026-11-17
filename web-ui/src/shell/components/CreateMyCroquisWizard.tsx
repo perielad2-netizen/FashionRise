@@ -300,7 +300,11 @@ export function CreateMyCroquisWizard({
 
   return (
     <>
-    <div className={styles.backdrop} role="presentation" onClick={handleClose}>
+    <div
+      className={`fr-keyboard-overlay ${styles.backdrop}`}
+      role="presentation"
+      onClick={handleClose}
+    >
       <div
         className={styles.dialog}
         role="dialog"

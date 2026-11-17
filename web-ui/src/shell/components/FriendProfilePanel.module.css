@@ -589,6 +589,7 @@
   width: min(100%, 440px);
   max-width: 100%;
   max-height: min(88dvh, 720px);
+  max-height: min(88dvh, var(--fr-visible-height, 88dvh), 720px);
   overflow: auto;
   display: grid;
   gap: 12px;
