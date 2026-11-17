@@ -3,11 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Deleted look black feed fix LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | branch `cursor/web-deleted-look-feed-77c6` @ **`59497766`** |
+| Tip | BE+FE **`59497766`** · FE `/var/www/fashionrise/releases/59497766-deleted-look-feed` |
+| Change | My Looks delete also unpublishes Runway; gallery feeds filter tombstoned looks; immersive cards hide when look media 404s (no black empty reel) |
+| Verify | `/version.json` → `59497766` · API `/health` ok |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1c8d7a2e-modals-mobbin /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 5744b290 && systemctl restart fashionrise-api` |
+| Native | Capacitor rebuild still needed for shell UI |
+| Rewards | **OFF** |
+
 ## Deployed — Modals Mobbin pink-glass sweep LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | **#417** · branch `cursor/web-modals-mobbin-theme-77c6` @ **`1c8d7a2e`** (open; includes Magic theme) |
+| PR | **#417** → `main` @ **`24af8c38`** (Magic theme included; #416 closed as superseded) |
 | Tip | FE **`1c8d7a2e`** · `/var/www/fashionrise/releases/1c8d7a2e-modals-mobbin` |
 | Change | Confirm/share/avatar/color/gradient · techpack sheets · Runway sheet/chat · About/menus · auth cards · studio side panels → Create Model pink-glass; Magic generating/result included |
 | Verify | `/version.json` → `1c8d7a2e` |
