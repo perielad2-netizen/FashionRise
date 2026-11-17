@@ -3,22 +3,33 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## PR — Legal consent UX (upload vs public publish) — **NOT DEPLOYED** (2026-11-17 Asia/Jerusalem)
+## Merged — Legal consent UX #411 — **NOT DEPLOYED** (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-legal-consent-ux-77c6` · PR **#411** |
-| Change | One short checkbox + expandable **Read full terms** for (A) Create Model private upload and (B) public publish; auditable `create_model_upload` event; close public `POST /gallery` consent bypass |
-| Create Model versions | `adults-beta-2026-11-17` · `storage-2026-11-17` · `ai-provider-2026-11-17` · **`create-model-upload-2026-11-17`** (Alembic **036**) |
-| Create Model SHA256 | adults `579a9d61…` · storage `0bf393b8…` · AI `5cdb56d7…` · upload agreement `1134d156…` |
-| Public publish versions | `runway-share-2026-11-17` · `croquis-public-share-2026-11-17` (hash `bac02828…`); legacy public gallery create reuses same notice |
-| Entry points | Create Model wizard · My Looks → Runway · `POST /gallery` public · My Models publish API/constants |
-| Native | **Old store builds rejected** after BE deploy (stale versions / missing upload consent). Roll out FE+BE together, then rebuild Android/iOS — do not weaken enforcement |
+| Merge | **#411** squash → `main` @ **`ed89d050`** (from head `1481a488`) |
+| Alembic (repo) | Head **`036`** (`create_model_upload` purpose CHECK expand) — additive only; **no UPDATE/DELETE of existing rows** |
+| Live Alembic | **`035`** (confirmed read-only on prod DB) — **036 not applied** |
+| Live consent integrity | **233** rows intact: `adults_beta` 27 · `croquis_storage` 25 · `croquis_ai_provider` 21 · `runway_share` 8 · `try_on_person` 152 · `create_model_upload` **0** · CHECK still pre-036 purposes only |
+| Change | Create Model short+full terms + auditable `create_model_upload`; public-publish terms; public `POST /gallery` gated; Privacy Policy accuracy |
+| Versions | adults/storage/AI `…-2026-11-17` · upload `create-model-upload-2026-11-17` (`1134d156…`) · runway/croquis public `…-2026-11-17` (`bac02828…`) |
+| Live prod now | FE `/version.json` **`56177590`** · BE detached **`5617759`** · Alembic **035** — consent UX **not** live until coordinated deploy |
+| Rewards | Weekly/streak Stars remain **OFF** |
 | Docs | `docs/deploy/LEGAL-CONSENT-NOTICE-ROTATION-2026-11-17.md` |
-| Legal gaps | **No Terms of Service page** · **No in-product content-reporting/takedown process** documented |
-| Verification | FE vitest focused pass · BE upload-consent + gallery-consent + croquis/user-flow pass · `tsc` · prod build notices pass · FE/BE upload hash `1134d156…` match |
-| Production | Unchanged until PM merge + Alembic 036 + notice env rotate + FE deploy |
-| Next | Final PM merge review → deploy FE+BE together → native rebuild from same tip |
+| Legal gaps | **No Terms of Service page** · **No in-product content-reporting/takedown process** |
+| Native impact (after BE deploy) | All currently distributed Capacitor shells that predate `ed89d050` fail Create Model / Runway publish until rebuilt — **do not weaken checks** |
+| Affected native builds | **iOS App Store 1.0** (bundle `app.fashionrise.studio`, marketing **1.0**, CFBundleVersion = `PROJECT_BUILD_NUMBER+100`) · **Android QA / Play Internal 1.0** (`versionCode` = `PROJECT_BUILD_NUMBER+10`, package `app.fashionrise.studio`) built from tips before `ed89d050` (gate noted as `b6e70054+` / live web tip `56177590`) |
+| Native update path | After web FE+BE deploy: Codemagic **FashionRise Android (Play AAB)** + **FashionRise iOS (App Store IPA)** from **`main` @ `ed89d050`+** with rotated `fashionrise_native` notice env; Play Internal upload + App Store/TestFlight update — **rebuilds not authorized by this merge** |
+| Next (authorized later) | Coordinated production rollout only after PM deploy approve — see rollout checklist below |
+
+### Coordinated production rollout (prepared — **do not run** until PM deploy approve)
+
+1. **API host:** `alembic upgrade 036` · set `MY_CROQUIS_{ADULTS,STORAGE,AI}_NOTICE_TEXT` to `.env.production.example` bodies · confirm `create_model_upload_*` / `runway_share_*` / `croquis_public_share_*` from config · restart `fashionrise-api`
+2. **FE:** build from `ed89d050` with matching `VITE_MY_CROQUIS_*_NOTICE_TEXT` · release symlink · nginx reload · verify `/version.json` + Create Model / Runway consent
+3. **Smoke:** missing/stale consent → 4xx · valid consent → upload/publish · historical consent rows still queryable
+4. **Native (separate authorize):** Codemagic Android + iOS from same tip; communicate brief Create Model/Runway outage for old installs until update
+
+**Stop line:** No VPS deploy · no Codemagic · no store submit · rewards **OFF**
 
 ## Preview — My Looks Look Details Mobbin polish (2026-11-16 23:45 Asia/Jerusalem)
 
@@ -257,7 +268,7 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-17 (**Legal consent UX PR open — not deployed** · live tip still production prior tip · rewards **OFF**.)
+**Last updated:** 2026-11-17 (**#411 merged** `ed89d050` · Alembic head **036** · **not deployed** · live tip still `56177590`/`5617759` · rewards **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**. Legal consent upload vs publish standardization awaits PM deploy approval on `cursor/web-legal-consent-ux-77c6`.
 
