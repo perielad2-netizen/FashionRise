@@ -174,10 +174,16 @@ def _record_public_share_consent(
     if not expected_version or not notice:
         raise ValidationAppError("My Model publish consent is not configured on this server yet.")
     if notice_version != expected_version:
-        raise ValidationAppError("My Model publish notice version is not current.")
+        raise ValidationAppError(
+            "Publish terms were updated. Refresh FashionRise (or install the latest app "
+            "build) so the current agreement loads, then try again."
+        )
     expected_hash = hashlib.sha256(notice.encode("utf-8")).hexdigest()
     if notice_text_hash.lower() != expected_hash.lower():
-        raise ValidationAppError("My Model publish notice text does not match the approved copy.")
+        raise ValidationAppError(
+            "Publish terms were updated. Refresh FashionRise (or install the latest app "
+            "build) so the current agreement loads, then try again."
+        )
     db.add(
         UserConsentEvent(
             id=uuid.uuid4(),

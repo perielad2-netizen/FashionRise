@@ -3185,35 +3185,46 @@ export function useStudioEditor() {
     }
   }, [magicDualActive, magicOperationId, magicResult])
 
-  const downloadMagicLook = useCallback(() => {
+  const downloadMagicLook = useCallback(async (): Promise<'web' | 'gallery' | 'share'> => {
     if (magicDualActive) {
       const side = magicDualViewSide
       const url = magicSideLookUrlsRef.current[side]
-      if (!url) return
-      void fetch(url)
-        .then((r) => r.blob())
-        .then((blob) => saveOrDownloadBlob(blob, exportFilename(`look-${side}`)))
-        .catch(() => setMagicError('Could not download the look image.'))
-      return
+      if (!url) throw new Error('Could not download the look image.')
+      try {
+        const blob = await (await fetch(url)).blob()
+        return await saveOrDownloadBlob(blob, exportFilename(`look-${side}`))
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Could not download the look image.'
+        setMagicError(message)
+        throw err instanceof Error ? err : new Error(message)
+      }
     }
-    if (!magicLookUrlRef.current) return
-    void fetch(magicLookUrlRef.current)
-      .then((r) => r.blob())
-      .then((blob) => saveOrDownloadBlob(blob, exportFilename('look')))
-      .catch(() => setMagicError('Could not download the look image.'))
+    if (!magicLookUrlRef.current) throw new Error('Could not download the look image.')
+    try {
+      const blob = await (await fetch(magicLookUrlRef.current)).blob()
+      return await saveOrDownloadBlob(blob, exportFilename('look'))
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not download the look image.'
+      setMagicError(message)
+      throw err instanceof Error ? err : new Error(message)
+    }
   }, [magicDualActive, magicDualViewSide])
 
-  const downloadMagicSide = useCallback(
-    (side: StudioPaperSide) => {
-      const url = magicSideLookUrlsRef.current[side]
-      if (!url) return
-      void fetch(url)
-        .then((r) => r.blob())
-        .then((blob) => saveOrDownloadBlob(blob, exportFilename(`look-${side}`)))
-        .catch(() => setMagicError(`Could not download the ${side} look.`))
-    },
-    [],
-  )
+  const downloadMagicSide = useCallback(async (side: StudioPaperSide): Promise<'web' | 'gallery' | 'share'> => {
+    const url = magicSideLookUrlsRef.current[side]
+    if (!url) throw new Error(`Could not download the ${side} look.`)
+    try {
+      const blob = await (await fetch(url)).blob()
+      return await saveOrDownloadBlob(blob, exportFilename(`look-${side}`))
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : `Could not download the ${side} look.`
+      setMagicError(message)
+      throw err instanceof Error ? err : new Error(message)
+    }
+  }, [])
 
   const retryMagicSide = useCallback(
     (side: StudioPaperSide) => {
