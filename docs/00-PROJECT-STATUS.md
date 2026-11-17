@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Modals Mobbin pink-glass sweep LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#417** · branch `cursor/web-modals-mobbin-theme-77c6` @ **`1c8d7a2e`** (open; includes Magic theme) |
+| Tip | FE **`1c8d7a2e`** · `/var/www/fashionrise/releases/1c8d7a2e-modals-mobbin` |
+| Change | Confirm/share/avatar/color/gradient · techpack sheets · Runway sheet/chat · About/menus · auth cards · studio side panels → Create Model pink-glass; Magic generating/result included |
+| Verify | `/version.json` → `1c8d7a2e` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/5744b290-magic-results /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Native | Capacitor rebuild still needed for shell UI |
+| Rewards | **OFF** |
+
 ## Deployed — Magic results Mobbin + download toast LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
