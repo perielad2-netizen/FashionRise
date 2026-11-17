@@ -16,6 +16,7 @@ const listGalleryComments = vi.fn()
 const postGalleryComment = vi.fn()
 const likeGalleryComment = vi.fn()
 const unlikeGalleryComment = vi.fn()
+const reportGalleryItem = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
 const requestFriendByUsername = vi.fn()
@@ -35,6 +36,7 @@ vi.mock('@/services/galleryApi', () => ({
   postGalleryComment: (...args: unknown[]) => postGalleryComment(...args),
   likeGalleryComment: (...args: unknown[]) => likeGalleryComment(...args),
   unlikeGalleryComment: (...args: unknown[]) => unlikeGalleryComment(...args),
+  reportGalleryItem: (...args: unknown[]) => reportGalleryItem(...args),
   listUserGallery: (...args: unknown[]) => listUserGallery(...args),
   fetchGalleryImageBlob: (...args: unknown[]) => fetchGalleryImageBlob(...args),
 }))

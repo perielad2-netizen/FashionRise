@@ -3,6 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Social look report / moderation intake (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#425** · branch `cursor/web-social-report-77c6` |
+| Tip | FE **`ada9adf`** · BE tip with signed moderation links (see latest commit on branch) · Alembic **037** |
+| Change | FashionRise Social **Report** → reasons → thank you; look hidden from reporter only (not deleted) |
+| Email | View look · **Keep design (OK)** · **Discard design (abuse)** — signed `/api/v1/moderation/reports/{id}/…` links (14d TTL) |
+| Discard | Sets `moderation_status=rejected` (hidden from all feeds); **does not delete** gallery row/images |
+| Keep | Marks report `dismissed`; look stays `ok` |
+| Nginx | gallery report POST + moderation `(view\|image\|keep\|discard)` GET |
+| Not yet | Block/mute · admin inbox UI |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/556348e9-camera-back /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |

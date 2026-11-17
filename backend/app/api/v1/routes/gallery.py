@@ -10,6 +10,8 @@ from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.gallery import (
+    ContentReportCreate,
+    ContentReportRead,
     GalleryCommentCreate,
     GalleryCommentRead,
     GalleryCreate,
@@ -132,6 +134,25 @@ def add_like(gallery_item_id: uuid.UUID, user: CurrentUser, db: Session = Depend
 @router.delete("/{gallery_item_id}/like", status_code=204)
 def remove_like(gallery_item_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)) -> None:
     gallery_service.remove_gallery_like(db, user, gallery_item_id)
+
+
+@router.post(
+    "/{gallery_item_id}/report",
+    response_model=ContentReportRead,
+    status_code=201,
+)
+@limiter.limit("10/minute")
+def report_gallery_item(
+    request: Request,
+    gallery_item_id: uuid.UUID,
+    data: ContentReportCreate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> ContentReportRead:
+    """Report a FashionRise Social look (nudity, abuse, spam, etc.)."""
+    _ = request.url
+    row = gallery_service.report_gallery_item(db, user, gallery_item_id, data)
+    return ContentReportRead.model_validate(row)
 
 
 @router.get("/{gallery_item_id}/image")
