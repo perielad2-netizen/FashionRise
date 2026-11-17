@@ -228,9 +228,11 @@
   top: calc(100% + 6px);
   min-width: 168px;
   padding: 6px;
-  border-radius: 12px;
-  background: #151d30;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background:
+    radial-gradient(180px 90px at 100% 0%, rgba(214, 51, 132, 0.22), transparent 60%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
+  border: 1px solid rgba(244, 114, 182, 0.22);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.4);
   z-index: 50;
 }

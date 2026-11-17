@@ -23,10 +23,16 @@
   position: relative;
   width: min(460px, 100%);
   padding: var(--space-xl) var(--space-lg);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(165deg, rgba(24, 34, 53, 0.96), rgba(17, 24, 39, 0.98));
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-panel);
+  border-radius: 22px;
+  background:
+    radial-gradient(900px 420px at 8% -20%, rgba(214, 51, 132, 0.28), transparent 55%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.5),
+    0 0 28px rgba(214, 51, 132, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
 }
 
 .brand {
@@ -51,9 +57,12 @@
 
 .title {
   margin: 0 0 6px;
-  font-size: var(--font-size-xl);
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: clamp(1.55rem, 5vw, 1.9rem);
   font-weight: 600;
+  letter-spacing: -0.02em;
   text-align: center;
+  color: #fff;
 }
 
 .subtitle {

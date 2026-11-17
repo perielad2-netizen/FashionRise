@@ -260,9 +260,11 @@
   top: calc(100% + 8px);
   min-width: 168px;
   padding: 8px;
-  border-radius: 12px;
-  background: #151d30;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background:
+    radial-gradient(180px 90px at 100% 0%, rgba(214, 51, 132, 0.22), transparent 60%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
+  border: 1px solid rgba(244, 114, 182, 0.22);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
   z-index: 70;
 }
@@ -362,17 +364,25 @@
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(5, 10, 22, 0.55);
+  background: rgba(4, 6, 12, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .aboutCard {
   width: min(360px, 100%);
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #12182a;
+  border-radius: 22px;
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  background:
+    radial-gradient(900px 420px at 8% -20%, rgba(214, 51, 132, 0.28), transparent 55%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
   color: #f8f3ee;
   padding: 16px 16px 14px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.4),
+    0 0 28px rgba(214, 51, 132, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .aboutHeader {
@@ -385,24 +395,29 @@
 
 .aboutHeader h2 {
   margin: 0;
-  font-size: 1.05rem;
-  font-weight: 650;
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: clamp(1.2rem, 4vw, 1.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
 }
 
 .aboutClose {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
   color: #f8f3ee;
   cursor: pointer;
+  display: grid;
+  place-items: center;
 }
 
 .aboutBody {
   margin: 0 0 12px;
   font-size: 13px;
-  color: rgba(248, 243, 238, 0.72);
+  color: rgba(226, 232, 240, 0.72);
 }
 
 .settingsList {
@@ -415,11 +430,11 @@
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
-  border-radius: 10px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   color: #f8f3ee;
   font: inherit;
   font-size: 13px;
