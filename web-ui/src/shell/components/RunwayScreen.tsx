@@ -587,6 +587,21 @@ export function RunwayScreen({
     })
   }, [])
 
+  /** Drop deleted/orphan publishes that fail image load (black empty reel). */
+  const removeUnavailableItem = useCallback((galleryItemId: string) => {
+    setState((prev) => {
+      if (prev.status !== 'ready') return prev
+      const drop = (rows: GalleryItem[]) => rows.filter((row) => row.id !== galleryItemId)
+      return {
+        status: 'ready',
+        discover: drop(prev.discover),
+        circle: drop(prev.circle),
+        following: drop(prev.following),
+        top10: drop(prev.top10),
+      }
+    })
+  }, [])
+
   if (viewingDesigner) {
     return (
       <section
@@ -878,6 +893,7 @@ export function RunwayScreen({
                   viewerId={viewerId}
                   viewerUsername={viewerUsername}
                   onItemChange={patchItem}
+                  onMediaUnavailable={removeUnavailableItem}
                   onOpenDesigner={(designer) => setViewingDesigner(designer)}
                   onVisibleImpression={
                     tab === 'discover' && viewerId && item.user_id !== viewerId
@@ -1425,6 +1441,7 @@ function RunwayCard({
   viewerId,
   viewerUsername,
   onItemChange,
+  onMediaUnavailable,
   onOpenDesigner,
   onVisibleImpression,
 }: {
@@ -1436,12 +1453,16 @@ function RunwayCard({
   viewerId: string | null
   viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
+  /** Hide feed cards whose look media 404s (deleted look orphans). */
+  onMediaUnavailable?: (galleryItemId: string) => void
   onOpenDesigner?: (designer: DesignerRef) => void
   /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
   onVisibleImpression?: (galleryItemId: string) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const mediaGone =
+    Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
   const cardRef = useRef<HTMLLIElement | null>(null)
   const impressionSentRef = useRef(false)
   const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | null>(null)
@@ -1472,6 +1493,11 @@ function RunwayCard({
   useEffect(() => {
     impressionSentRef.current = false
   }, [item.id])
+
+  useEffect(() => {
+    if (!mediaGone || !onMediaUnavailable) return
+    onMediaUnavailable(item.id)
+  }, [item.id, mediaGone, onMediaUnavailable])
 
   useEffect(() => {
     setComments(null)
@@ -1880,6 +1906,10 @@ function RunwayCard({
       ) : null}
     </div>
   )
+
+  if (mediaGone) {
+    return null
+  }
 
   return (
     <li
