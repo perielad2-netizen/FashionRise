@@ -17,6 +17,12 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    # Discover unique impressions (required for fair Social feed)
+    location = /api/v1/gallery/impressions {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/gallery/user/[0-9a-fA-F-]{36}$" {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
@@ -95,6 +101,12 @@
 
     location ~ "^/api/v1/profiles/[0-9a-fA-F-]{36}/follow$" {
         limit_except POST DELETE { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    # Native push capability probe (Capacitor / Android)
+    location = /api/v1/push/native/capability {
+        limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }
 

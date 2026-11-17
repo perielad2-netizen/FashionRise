@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Ops — Free capacity wins on current VPS (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Cost | **$0** (same Vultr box) |
+| Nginx | Allowlisted `POST /api/v1/gallery/impressions` + `GET /api/v1/push/native/capability` (were **403** → client retries / “slow” feel) |
+| API | `fashionrise-api` uvicorn **`--workers 2`** (was 1) |
+| Kernel | `vm.swappiness=10` (prefer RAM over swap when possible) |
+| Not fixed by this | Shared box with PickWise · OpenAI Magic latency · need paid scale for 1M downloads |
+| Rollback API | set `--workers 1` in `/etc/systemd/system/fashionrise-api.service` · `daemon-reload` · `restart fashionrise-api` |
+| Rollback nginx | restore `/var/backups/fashionrise/nginx-free-capacity-*.conf` |
+
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
