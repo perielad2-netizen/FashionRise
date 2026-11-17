@@ -3,6 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Magic pink-glass theme (generating + result) LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#416** · branch `cursor/web-magic-theme-mobbin-77c6` @ **`ee410eb4`** (open) |
+| Tip | FE **`ee410eb4`** · `/var/www/fashionrise/releases/ee410eb4-magic-theme` |
+| Change | Magic generating + Your Look result modals restyled to Create Model pink-glass (serif, radial pink, filled Front/Back segment, pulse spinner + status pill) |
+| Kept | Front/Back tabs · download gallery toast from #414 |
+| Verify | `/version.json` → `ee410eb4` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/5744b290-magic-results /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Native | Capacitor shells still need rebuild to pick up this UI |
+| Rewards | **OFF** |
+
 ## Deployed — Magic results Mobbin + download toast LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
