@@ -3,7 +3,9 @@
   inset: 0;
   /* Above look-detail / sheet overlays (80) so nested confirms stay interactive. */
   z-index: 95;
-  background: rgba(4, 6, 12, 0.62);
+  background: rgba(4, 6, 12, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: grid;
   place-items: center;
   align-content: center;
@@ -25,12 +27,18 @@
 
 .dialog {
   width: min(420px, 100%);
-  border-radius: 18px;
-  background: #151d30;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  border-radius: 22px;
+  background:
+    radial-gradient(900px 420px at 8% -20%, rgba(214, 51, 132, 0.28), transparent 55%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.5),
+    0 0 28px rgba(214, 51, 132, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   padding: 18px;
   color: #f5f0ea;
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
   box-sizing: border-box;
   /* All confirm dialogs stay inside the visible viewport (Magic pink CTA). */
   max-height: min(
@@ -55,9 +63,11 @@
 
 .title {
   margin: 0 0 10px;
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: 20px;
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: clamp(1.2rem, 4vw, 1.4rem);
   font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
   flex: 0 0 auto;
 }
 
@@ -69,7 +79,7 @@
 .body {
   font-size: 13px;
   line-height: 1.45;
-  color: #c7d0e0;
+  color: rgba(226, 232, 240, 0.78);
   margin-bottom: 16px;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -97,13 +107,13 @@
   margin-top: 4px;
   padding-top: 10px;
   padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));
-  background: #151d30;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(12, 10, 18, 0.2) 0%, rgba(12, 10, 18, 0.92) 30%);
+  border-top: 1px solid rgba(244, 114, 182, 0.14);
   width: 100%;
 }
 
 .dialogScrollable .actions {
-  background: linear-gradient(180deg, rgba(21, 29, 48, 0.72) 0%, #151d30 28%);
+  background: linear-gradient(180deg, rgba(12, 10, 18, 0.55) 0%, rgba(12, 10, 18, 0.96) 28%);
 }
 
 @media (max-width: 430px) {
@@ -136,8 +146,9 @@
 }
 
 .primary {
-  background: linear-gradient(135deg, #d63384, #f472b6);
+  background: linear-gradient(135deg, var(--fr-pink, #d63384), var(--fr-pink-soft, #f472b6));
   color: white;
+  box-shadow: 0 10px 24px rgba(214, 51, 132, 0.28);
 }
 
 .danger {
@@ -148,7 +159,7 @@
 .ghost {
   background: rgba(255, 255, 255, 0.06);
   color: #f5f0ea;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .primary:disabled,

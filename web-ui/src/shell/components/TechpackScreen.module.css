@@ -4,10 +4,13 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--fr-radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, #141c2e 0%, #0f1626 100%);
+  border: 1px solid rgba(244, 114, 182, 0.16);
+  background:
+    radial-gradient(1100px 520px at 6% -18%, rgba(214, 51, 132, 0.2), transparent 56%),
+    linear-gradient(180deg, #16121a 0%, #0c0e14 100%);
   box-shadow: var(--fr-shadow);
   overflow: hidden;
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
 }
 
 .head {

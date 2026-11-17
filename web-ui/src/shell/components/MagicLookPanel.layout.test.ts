@@ -103,4 +103,17 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(panel).toContain('width: min(920px, 100%)')
     expect(panel).toContain('900px')
   })
+
+  it('applies Create Model pink-glass theme tokens to panel + generating chrome', () => {
+    const panel = rule(css, '.panel')
+    expect(panel).toContain('rgba(214, 51, 132')
+    expect(panel).toContain("var(--fr-sans")
+    expect(css).toMatch(/\.eyebrow \{[^}]*var\(--fr-pink-soft/s)
+    expect(css).toMatch(/\.titleBlock h2 \{[^}]*var\(--fr-serif/s)
+    expect(css).toContain('.generatingVisual')
+    expect(css).toContain('.pulseRing')
+    expect(css).toContain('.statusPill')
+    expect(css).toMatch(/\.dualTabActive \{[^}]*linear-gradient/s)
+    expect(css).toMatch(/\.primary \{[^}]*var\(--fr-pink/s)
+  })
 })
