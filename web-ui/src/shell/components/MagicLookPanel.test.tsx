@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 
 describe('MagicLookPanel', () => {
-  it('shows the full look image with contain sizing and keeps final look download', () => {
+  it('shows the full look image with contain sizing and keeps final look download', async () => {
     const onDownload = vi.fn()
     render(
       <MagicLookPanel
@@ -40,13 +40,14 @@ describe('MagicLookPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Download look' }))
     expect(onDownload).toHaveBeenCalledTimes(1)
+    expect(await screen.findByTestId('magic-download-notice')).toHaveTextContent('Saved ✓')
 
     fireEvent.click(screen.getByRole('button', { name: 'Show look notes' }))
     expect(screen.getByText('A couture look')).toBeTruthy()
     expect(screen.getByText('Hat')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Compare sketch' }))
-    expect(screen.getByAltText('Original sketch')).toBeTruthy()
+    expect(await screen.findByAltText('Original sketch')).toBeTruthy()
   })
 
   it('labels Try On Person results without changing Fashion Magic copy', () => {
@@ -127,8 +128,8 @@ describe('MagicLookPanel', () => {
     expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
   })
 
-  it('keeps dual Front/Back Magic look downloads', () => {
-    const onDownloadSide = vi.fn()
+  it('keeps dual Front/Back Magic look downloads with success notice', async () => {
+    const onDownloadSide = vi.fn(async () => 'gallery' as const)
     const onViewSide = vi.fn()
     render(
       <MagicLookPanel
@@ -181,9 +182,13 @@ describe('MagicLookPanel', () => {
         onBackToSketch={() => undefined}
       />,
     )
-    expect(screen.getByAltText('Magic fashion look (front)')).toBeTruthy()
+    expect(screen.getByTestId('magic-dual-hero')).toBeTruthy()
+    expect(screen.getAllByAltText('Magic fashion look (front)').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Download front' }))
     expect(onDownloadSide).toHaveBeenCalledWith('front')
+    expect(await screen.findByTestId('magic-download-notice')).toHaveTextContent(
+      'Saved to your gallery ✓',
+    )
     fireEvent.click(screen.getByRole('tab', { name: /Back/i }))
     expect(onViewSide).toHaveBeenCalledWith('back')
   })

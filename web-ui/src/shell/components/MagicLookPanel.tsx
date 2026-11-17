@@ -1,10 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Share2, X } from 'lucide-react'
 import { requestShare, type SharePayload } from '@/lib/sharePromo'
 import type { MagicLookResult } from '@/services/ai/aiJobTypes'
 import type { TryOnExperimentVerdict } from '@/services/ai/magicApi'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MagicLookPanel.module.css'
+
+type DownloadMethod = 'web' | 'gallery' | 'share'
+
+function downloadSuccessCopy(method: DownloadMethod): string {
+  if (method === 'gallery') return 'Saved to your gallery ✓'
+  if (method === 'share') return 'Opened the system share sheet — save from there to finish.'
+  return 'Download started.'
+}
 
 export type MagicPhase = 'idle' | 'capturing' | 'submitting' | 'polling' | 'ready' | 'failed'
 
@@ -26,7 +34,7 @@ export type MagicDualPanelState = {
   front: MagicSidePanelState
   back: MagicSidePanelState
   onRetrySide: (side: 'front' | 'back') => void
-  onDownloadSide: (side: 'front' | 'back') => void
+  onDownloadSide: (side: 'front' | 'back') => void | Promise<DownloadMethod>
 }
 
 export type MagicResultMode = 'fashion' | 'try_on'
@@ -51,7 +59,7 @@ type Props = {
   experimentVerdictBusy?: boolean
   onClose: () => void
   onCancel: () => void
-  onDownload: () => void
+  onDownload: () => void | Promise<DownloadMethod>
   onRecover: () => void
   onBackToSketch: () => void
   onViewInMyLooks?: () => void
@@ -95,6 +103,74 @@ export function MagicLookPanel({
   const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState(false)
+  const downloadInFlight = useRef(false)
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
+  const [downloadNoticeTone, setDownloadNoticeTone] = useState<'ok' | 'info' | 'error'>('ok')
+  const downloadNoticeTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (downloadNoticeTimer.current != null) window.clearTimeout(downloadNoticeTimer.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) {
+      setDownloadBusy(false)
+      downloadInFlight.current = false
+      setDownloadNotice(null)
+      if (downloadNoticeTimer.current != null) {
+        window.clearTimeout(downloadNoticeTimer.current)
+        downloadNoticeTimer.current = null
+      }
+    }
+  }, [open])
+
+  function showDownloadNotice(message: string, tone: 'ok' | 'info' | 'error') {
+    if (downloadNoticeTimer.current != null) window.clearTimeout(downloadNoticeTimer.current)
+    setDownloadNoticeTone(tone)
+    setDownloadNotice(message)
+    if (tone !== 'error') {
+      downloadNoticeTimer.current = window.setTimeout(() => {
+        setDownloadNotice(null)
+        downloadNoticeTimer.current = null
+      }, 4500)
+    }
+  }
+
+  async function runDownload(action: () => void | Promise<DownloadMethod>) {
+    if (downloadBusy || downloadInFlight.current) return
+    downloadInFlight.current = true
+    setDownloadBusy(true)
+    setDownloadNotice(null)
+    try {
+      const method = await Promise.resolve(action())
+      if (method === 'share') showDownloadNotice(downloadSuccessCopy('share'), 'info')
+      else if (method === 'gallery' || method === 'web') {
+        showDownloadNotice(downloadSuccessCopy(method), 'ok')
+      } else {
+        // Sync void handlers (tests / legacy) — still confirm the tap completed.
+        showDownloadNotice('Saved ✓', 'ok')
+      }
+    } catch (err) {
+      const cancelled =
+        (err instanceof Error && err.name === 'SaveCancelledError') ||
+        (err instanceof Error && /cancel|dismiss/i.test(err.message))
+      if (cancelled) {
+        showDownloadNotice('Download cancelled', 'info')
+      } else {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Could not download the look image.'
+        showDownloadNotice(message, 'error')
+      }
+    } finally {
+      setDownloadBusy(false)
+      downloadInFlight.current = false
+    }
+  }
 
   if (!open) return null
 
@@ -284,43 +360,72 @@ export function MagicLookPanel({
           ) : null}
 
           {dualActive && dual && phase === 'ready' ? (
-            <div className={styles.dualStageGrid}>
-              {(['front', 'back'] as const).map((side) => {
-                const state = side === 'front' ? dual.front : dual.back
-                const url = state.lookObjectUrl
-                return (
-                  <div
-                    key={side}
-                    className={`${styles.dualPane} ${dual.viewSide === side ? styles.dualPaneActive : ''}`}
-                  >
-                    <div className={styles.dualPaneHead}>
-                      <strong>{side === 'front' ? 'Front' : 'Back'}</strong>
-                      <span>{sideStatusLabel(state)}</span>
-                    </div>
-                    {state.phase === 'failed' ? (
-                      <div className={styles.dualPaneError}>
-                        <span>{state.error || 'This side did not finish.'}</span>
-                        {state.canRetry ? (
-                          <button type="button" onClick={() => dual.onRetrySide(side)}>
-                            Retry {side}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : url ? (
-                      <img
-                        className={styles.dualImage}
-                        src={url}
-                        alt={`Magic fashion look (${side})`}
-                      />
-                    ) : (
-                      <div className={styles.dualPanePending}>
-                        {state.phase === 'polling' ? 'Still working…' : 'No preview yet.'}
-                      </div>
-                    )}
+            <>
+              {/* Mobile: one full-bleed active side (tabs switch). Desktop: dual compare grid. */}
+              <div className={styles.dualHero} data-testid="magic-dual-hero">
+                {activeSideState?.phase === 'failed' ? (
+                  <div className={styles.dualPaneError}>
+                    <span>{activeSideState.error || 'This side did not finish.'}</span>
+                    {activeSideState.canRetry ? (
+                      <button type="button" onClick={() => dual.onRetrySide(activeSide)}>
+                        Retry {activeSide}
+                      </button>
+                    ) : null}
                   </div>
-                )
-              })}
-            </div>
+                ) : comparing && activeSketchUrl ? (
+                  <img
+                    className={styles.sketchPreview}
+                    src={activeSketchUrl}
+                    alt={`Original sketch (${activeSide})`}
+                  />
+                ) : activeLookUrl ? (
+                  <img
+                    className={styles.image}
+                    src={activeLookUrl}
+                    alt={`Magic fashion look (${activeSide})`}
+                  />
+                ) : (
+                  <div className={styles.dualPanePending}>
+                    {activeSideState?.phase === 'polling' ? 'Still working…' : 'No preview yet.'}
+                  </div>
+                )}
+              </div>
+              <div className={styles.dualStageGrid} data-testid="magic-dual-compare">
+                {(['front', 'back'] as const).map((side) => {
+                  const state = side === 'front' ? dual.front : dual.back
+                  const url = state.lookObjectUrl
+                  return (
+                    <button
+                      key={side}
+                      type="button"
+                      className={`${styles.dualPane} ${dual.viewSide === side ? styles.dualPaneActive : ''}`}
+                      onClick={() => dual.onViewSide(side)}
+                      aria-label={`Show ${side} look`}
+                    >
+                      <div className={styles.dualPaneHead}>
+                        <strong>{side === 'front' ? 'Front' : 'Back'}</strong>
+                        <span>{sideStatusLabel(state)}</span>
+                      </div>
+                      {state.phase === 'failed' ? (
+                        <div className={styles.dualPaneError}>
+                          <span>{state.error || 'This side did not finish.'}</span>
+                        </div>
+                      ) : url ? (
+                        <img
+                          className={styles.dualImage}
+                          src={url}
+                          alt={`Magic fashion look (${side})`}
+                        />
+                      ) : (
+                        <div className={styles.dualPanePending}>
+                          {state.phase === 'polling' ? 'Still working…' : 'No preview yet.'}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
           ) : null}
 
           {!dualActive && showLook && activeLookUrl ? (
@@ -441,27 +546,46 @@ export function MagicLookPanel({
         </div>
 
         <div className={styles.actions}>
+          {downloadBusy || downloadNotice ? (
+            <p
+              className={
+                downloadNoticeTone === 'error'
+                  ? styles.downloadToastError
+                  : downloadNoticeTone === 'info'
+                    ? styles.downloadToastInfo
+                    : styles.downloadToastOk
+              }
+              role="status"
+              aria-live="polite"
+              data-testid="magic-download-notice"
+            >
+              {downloadBusy ? 'Saving image…' : downloadNotice}
+            </p>
+          ) : null}
           {phase === 'ready' && dualActive && dual ? (
             <>
               <button
                 type="button"
                 onClick={() => setCompareSketch((v) => !v)}
-                disabled={!activeSketchUrl}
+                disabled={!activeSketchUrl || downloadBusy}
               >
                 {comparing ? 'Show look' : 'Compare sketch'}
               </button>
               <button
                 type="button"
                 className={styles.primary}
-                onClick={() => dual.onDownloadSide(activeSide)}
-                disabled={!activeLookUrl}
+                onClick={() => {
+                  void runDownload(() => dual.onDownloadSide(activeSide))
+                }}
+                disabled={!activeLookUrl || downloadBusy}
+                data-testid="magic-download-side"
               >
-                Download {activeSide}
+                {downloadBusy ? 'Saving…' : `Download ${activeSide}`}
               </button>
               <button
                 type="button"
                 onClick={onShareLook}
-                disabled={!activeLookUrl}
+                disabled={!activeLookUrl || downloadBusy}
                 data-testid="magic-share-look"
                 title="Share look — pick WhatsApp, Instagram, Facebook, or another app"
               >
@@ -469,17 +593,17 @@ export function MagicLookPanel({
                 Share
               </button>
               {canViewInLooks ? (
-                <button type="button" onClick={onViewInMyLooks}>
+                <button type="button" onClick={onViewInMyLooks} disabled={downloadBusy}>
                   View in My Looks
                 </button>
               ) : null}
               {dual.front.canRetry ? (
-                <button type="button" onClick={() => dual.onRetrySide('front')}>
+                <button type="button" onClick={() => dual.onRetrySide('front')} disabled={downloadBusy}>
                   Retry front
                 </button>
               ) : null}
               {dual.back.canRetry ? (
-                <button type="button" onClick={() => dual.onRetrySide('back')}>
+                <button type="button" onClick={() => dual.onRetrySide('back')} disabled={downloadBusy}>
                   Retry back
                 </button>
               ) : null}
@@ -491,7 +615,7 @@ export function MagicLookPanel({
                 <button
                   type="button"
                   onClick={cycleTryOnCompare}
-                  disabled={!originalPhotoUrl && !sketchObjectUrl}
+                  disabled={(!originalPhotoUrl && !sketchObjectUrl) || downloadBusy}
                 >
                   {tryOnCompareLabel}
                 </button>
@@ -499,17 +623,30 @@ export function MagicLookPanel({
                 <button
                   type="button"
                   onClick={() => setCompareSketch((v) => !v)}
-                  disabled={!sketchObjectUrl}
+                  disabled={!sketchObjectUrl || downloadBusy}
                 >
                   {compareLabel}
                 </button>
               )}
-              <button type="button" className={styles.primary} onClick={onDownload}>
-                {tryOn ? 'Download preview' : 'Download look'}
+              <button
+                type="button"
+                className={styles.primary}
+                onClick={() => {
+                  void runDownload(onDownload)
+                }}
+                disabled={downloadBusy}
+                data-testid="magic-download"
+              >
+                {downloadBusy
+                  ? 'Saving…'
+                  : tryOn
+                    ? 'Download preview'
+                    : 'Download look'}
               </button>
               <button
                 type="button"
                 onClick={onShareLook}
+                disabled={downloadBusy}
                 data-testid="magic-share-look"
                 title="Share look — pick WhatsApp, Instagram, Facebook, or another app"
               >
@@ -517,7 +654,7 @@ export function MagicLookPanel({
                 Share
               </button>
               {canViewInLooks ? (
-                <button type="button" onClick={onViewInMyLooks}>
+                <button type="button" onClick={onViewInMyLooks} disabled={downloadBusy}>
                   {tryOn ? 'Save in My Looks' : 'View in My Looks'}
                 </button>
               ) : null}

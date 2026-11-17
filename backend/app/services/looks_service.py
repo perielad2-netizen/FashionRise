@@ -321,10 +321,16 @@ def _record_runway_share_consent(
     if not expected_version or not notice:
         raise ValidationAppError("Runway share consent is not configured on this server yet.")
     if notice_version != expected_version:
-        raise ValidationAppError("Runway share notice version is not current.")
+        raise ValidationAppError(
+            "Publish terms were updated. Refresh FashionRise (or install the latest app "
+            "build) so the current Runway agreement loads, then try again."
+        )
     expected_hash = hashlib.sha256(notice.encode("utf-8")).hexdigest()
     if notice_text_hash.lower() != expected_hash.lower():
-        raise ValidationAppError("Runway share notice text does not match the approved copy.")
+        raise ValidationAppError(
+            "Publish terms were updated. Refresh FashionRise (or install the latest app "
+            "build) so the current Runway agreement loads, then try again."
+        )
 
     db.add(
         UserConsentEvent(

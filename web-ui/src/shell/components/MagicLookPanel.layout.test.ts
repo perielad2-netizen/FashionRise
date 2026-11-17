@@ -88,6 +88,16 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(css).not.toMatch(/overflow-x:\s*scroll/)
   })
 
+  it('uses a mobile dual hero and desktop compare grid (Mobbin image-first)', () => {
+    expect(css).toMatch(/\.dualHero \{[^}]*position:\s*absolute/s)
+    expect(css).toMatch(/\.dualStageGrid \{[^}]*display:\s*none/s)
+    expect(css).toContain('@media (min-width: 821px)')
+    const desktop = css.slice(css.indexOf('@media (min-width: 821px)'))
+    expect(desktop).toMatch(/\.dualHero \{[^}]*display:\s*none/s)
+    expect(desktop).toMatch(/\.dualStageGrid \{[^}]*display:\s*grid/s)
+    expect(css).toContain('.downloadToastOk')
+  })
+
   it('preserves desktop panel max width and does not force full-bleed on wide screens', () => {
     const panel = rule(css, '.panel')
     expect(panel).toContain('width: min(920px, 100%)')
