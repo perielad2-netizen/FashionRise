@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, ChevronRight, Flag, X } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Flag, Send, X } from 'lucide-react'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import {
   reportGalleryItem,
@@ -42,6 +43,8 @@ const REASONS: { id: ContentReportReason; label: string; hint: string }[] = [
   },
 ]
 
+type Step = 'reasons' | 'details' | 'thanks'
+
 type Props = {
   item: GalleryItem
   open: boolean
@@ -53,7 +56,7 @@ type Props = {
 export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
   const titleId = useId()
   const detailsId = useId()
-  const [step, setStep] = useState<'reasons' | 'thanks'>('reasons')
+  const [step, setStep] = useState<Step>('reasons')
   const [reason, setReason] = useState<ContentReportReason | null>(null)
   const [details, setDetails] = useState('')
   const [busy, setBusy] = useState(false)
@@ -80,15 +83,25 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
   if (!open) return null
 
   const designer = item.username?.trim() || 'this designer'
+  const reasonMeta = reason ? REASONS.find((row) => row.id === reason) : null
+  const detailsTrimmed = details.trim()
+  const otherNeedsDetails = reason === 'other' && !detailsTrimmed
+  const canSend = Boolean(reason) && !busy && !otherNeedsDetails
 
-  async function submit(selected: ContentReportReason) {
+  function pickReason(selected: ContentReportReason) {
     setReason(selected)
+    setError(null)
+    setStep('details')
+  }
+
+  async function sendReport() {
+    if (!reason || !canSend) return
     setBusy(true)
     setError(null)
     try {
       await reportGalleryItem(item.id, {
-        reason: selected,
-        details: details.trim() || undefined,
+        reason,
+        details: detailsTrimmed || undefined,
       })
       setStep('thanks')
       onReported(item.id)
@@ -102,6 +115,9 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
       setBusy(false)
     }
   }
+
+  const titleText =
+    step === 'thanks' ? 'Thanks for reporting' : step === 'details' ? 'Add details' : 'Report look'
 
   return createPortal(
     <div
@@ -122,7 +138,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
           <div className={styles.chatHeadText}>
             <p className={styles.chatEyebrow}>Safety</p>
             <h3 id={titleId} className={styles.chatTitle}>
-              {step === 'thanks' ? 'Thanks for reporting' : 'Report look'}
+              {titleText}
             </h3>
           </div>
           <button
@@ -147,7 +163,9 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                 your feed. We won’t tell the designer who reported them.
               </p>
             </div>
-          ) : (
+          ) : null}
+
+          {step === 'reasons' ? (
             <>
               <p className={styles.reportIntro}>
                 Why are you reporting this look
@@ -161,7 +179,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                       className={styles.reportReasonBtn}
                       disabled={busy}
                       data-testid={`report-reason-${row.id}`}
-                      onClick={() => void submit(row.id)}
+                      onClick={() => pickReason(row.id)}
                     >
                       <span className={styles.reportReasonText}>
                         <span className={styles.reportReasonLabel}>{row.label}</span>
@@ -172,20 +190,43 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                   </li>
                 ))}
               </ul>
+            </>
+          ) : null}
+
+          {step === 'details' && reasonMeta ? (
+            <>
+              <p className={styles.reportIntro}>
+                Confirm before sending. You can add context for the moderation team.
+              </p>
+              <div className={styles.reportSelectedReason} data-testid="report-selected-reason">
+                <span className={styles.reportReasonLabel}>{reasonMeta.label}</span>
+                <span className={styles.reportReasonHint}>{reasonMeta.hint}</span>
+              </div>
               <label className={styles.reportDetailsLabel} htmlFor={detailsId}>
-                Optional details
+                {reason === 'other' ? 'Details (required)' : 'Details (optional)'}
               </label>
               <textarea
                 id={detailsId}
                 className={styles.reportDetails}
                 value={details}
                 maxLength={2000}
-                rows={3}
-                placeholder="Add context if it helps (optional)"
+                rows={4}
+                placeholder={
+                  reason === 'other'
+                    ? 'Tell us what happened…'
+                    : 'Add context if it helps (optional)'
+                }
                 disabled={busy}
+                data-testid="report-details"
                 onChange={(event) => setDetails(event.target.value)}
+                onFocus={(event) => onAndroidEditableFocus(event.currentTarget)}
               />
-              {reason && busy ? (
+              {otherNeedsDetails ? (
+                <p className={styles.commentsStatus} role="status">
+                  Add a short note so we know what to review.
+                </p>
+              ) : null}
+              {busy ? (
                 <p className={styles.commentsStatus} role="status">
                   Sending report…
                 </p>
@@ -196,7 +237,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                 </p>
               ) : null}
             </>
-          )}
+          ) : null}
         </div>
 
         {step === 'thanks' ? (
@@ -205,12 +246,42 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
               Done
             </button>
           </div>
-        ) : (
+        ) : null}
+
+        {step === 'details' ? (
+          <div className={styles.reportFooterActions}>
+            <button
+              type="button"
+              className={styles.reportBackBtn}
+              disabled={busy}
+              data-testid="report-back"
+              onClick={() => {
+                setError(null)
+                setStep('reasons')
+              }}
+            >
+              <ChevronLeft size={16} aria-hidden />
+              Back
+            </button>
+            <button
+              type="button"
+              className={styles.reportSendBtn}
+              disabled={!canSend}
+              data-testid="report-send"
+              onClick={() => void sendReport()}
+            >
+              <Send size={16} aria-hidden />
+              Send report
+            </button>
+          </div>
+        ) : null}
+
+        {step === 'reasons' ? (
           <div className={styles.reportFooterHint}>
             <Flag size={14} aria-hidden />
             <span>Reports go to FashionRise moderation — not the designer.</span>
           </div>
-        )}
+        ) : null}
       </div>
     </div>,
     document.body,

@@ -1,7 +1,8 @@
 """Signed email links for FashionRise Social content-report decisions.
 
 Reporting only hides the look from the reporter's client feed. The gallery row
-and image stay until a moderator chooses Discard (soft-hide via moderation_status).
+and image stay until a moderator chooses Discard (soft-hide via moderation_status
+rejected — owner keeps the paid look privately and cannot republish to Social).
 Keep dismisses the report and leaves the look public.
 """
 
@@ -160,7 +161,10 @@ def keep_reported_look(db: Session, report: ContentReport) -> ContentReport:
 
 
 def discard_reported_look(db: Session, report: ContentReport) -> ContentReport:
-    """Soft-hide the look from all feeds. Does not delete the row or image files."""
+    """Hide from Social feeds; keep the paid look for the owner (no file delete).
+
+    Republish is blocked while moderation_status stays ``rejected``.
+    """
     item = get_gallery_item_for_moderation(db, report.gallery_item_id)
     item.moderation_status = MODERATION_REJECTED
     labels = list(item.moderation_labels or []) if isinstance(item.moderation_labels, list) else []
@@ -169,7 +173,9 @@ def discard_reported_look(db: Session, report: ContentReport) -> ContentReport:
             "source": "content_report",
             "report_id": str(report.id),
             "reason": report.reason,
+            "details": (report.details or "")[:500] or None,
             "action": "discard",
+            "publish_blocked": True,
         }
     )
     item.moderation_labels = labels
@@ -234,18 +240,26 @@ def render_view_page(
         f'<p class="meta">Look status: <strong>{escape(item.moderation_status)}</strong> · '
         f'Report: <strong>{escape(report.status)}</strong></p>'
     )
+    details_raw = (report.details or "").strip()
+    details_html = (
+        f'<p class="meta"><strong>Reporter details:</strong> {escape(details_raw)}</p>'
+        if details_raw
+        else '<p class="meta"><strong>Reporter details:</strong> (none)</p>'
+    )
     body = f"""
     <h1>Review reported look</h1>
     <p class="meta">{escape(item.title or "Untitled look")}</p>
     <p class="meta">Author: @{escape((author.username if author else "?") or "?")}</p>
     <p class="meta">Reason: {escape(report.reason)}</p>
+    {details_html}
     {status_note}
     <p><img src="{escape(image_url)}" alt="Reported look" /></p>
     <div class="actions">
       <a class="btn keep" href="{escape(keep_url)}">Keep design (it's OK)</a>
       <a class="btn discard" href="{escape(discard_url)}">Discard design (real abuse)</a>
     </div>
-    <p class="meta">Discard hides the look from FashionRise Social. It does not permanently delete the files until you choose a later cleanup.</p>
+    <p class="meta">Discard hides the look from FashionRise Social and blocks republish.
+    The owner keeps the look privately (they paid for it) — files are not deleted.</p>
     """
     return _html_page("FashionRise report review", body)
 
@@ -264,8 +278,9 @@ def render_discard_result(report: ContentReport, item: GalleryItem) -> HTMLRespo
     body = f"""
     <h1 class="bad">Discarded</h1>
     <p>Report <code>{escape(str(report.id))}</code> marked actioned.</p>
-    <p>Look “{escape(item.title or "Untitled")}” is hidden from all feeds
-    (moderation_status=<code>rejected</code>). The design row and image files were
+    <p>Look “{escape(item.title or "Untitled")}” is hidden from FashionRise Social
+    (moderation_status=<code>rejected</code>) and <strong>cannot be published again</strong>.</p>
+    <p>The owner still has the look in My Looks (paid Magic kept). Image files were
     <strong>not</strong> deleted.</p>
     """
     return _html_page("Report actioned — discard", body)

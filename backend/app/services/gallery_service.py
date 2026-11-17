@@ -229,6 +229,12 @@ def publish_look(
     if existing is not None:
         if existing.user_id != user.id:
             raise ConflictError("Look is already on the Runway")
+        if existing.moderation_status == "rejected":
+            # Moderator Discard: owner keeps the paid look privately, but cannot
+            # put it back on FashionRise Social / Runway.
+            raise ForbiddenError(
+                "This look was removed from FashionRise Social after a report and can’t be published again."
+            )
         # Idempotent re-publish updates title / keeps the same item.
         existing.title = title[:300]
         if design_id is not None:
@@ -288,8 +294,14 @@ def gallery_item_id_for_look(db: Session, look_id: uuid.UUID) -> uuid.UUID | Non
 def map_runway_ids(db: Session, look_ids: list[uuid.UUID]) -> dict[uuid.UUID, uuid.UUID]:
     if not look_ids:
         return {}
+    # Rejected (moderator Discard) stays in DB for the owner’s private look, but
+    # must not appear as “On Runway” / Social.
     rows = db.execute(
-        select(GalleryItem.look_id, GalleryItem.id).where(GalleryItem.look_id.in_(look_ids))
+        select(GalleryItem.look_id, GalleryItem.id).where(
+            GalleryItem.look_id.in_(look_ids),
+            GalleryItem.moderation_status == "ok",
+            GalleryItem.visibility == "public",
+        )
     ).all()
     out: dict[uuid.UUID, uuid.UUID] = {}
     for look_id, item_id in rows:
@@ -954,7 +966,7 @@ def _notify_content_report(
             f"Submitted (UTC): {report.created_at}",
             "",
             "The look is only hidden from the reporter’s feed until you decide.",
-            "Nothing is deleted until you choose Discard.",
+            "Discard hides it from Social and blocks republish; the owner keeps it privately.",
             "",
             "View the look:",
             view_url,
@@ -962,7 +974,7 @@ def _notify_content_report(
             "Keep design (it's OK):",
             keep_url,
             "",
-            "Discard design (real abuse — hide from Social, keep files):",
+            "Discard design (real abuse — hide from Social, block republish, keep owner look):",
             discard_url,
             "",
             "Links expire in 14 days.",

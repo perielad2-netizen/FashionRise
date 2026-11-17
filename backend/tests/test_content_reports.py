@@ -69,7 +69,8 @@ def test_report_look_persists_and_emails_moderation_inbox(
     assert "/view?t=" in captured[0].body_text
     assert "/keep?t=" in captured[0].body_text
     assert "/discard?t=" in captured[0].body_text
-    assert "Nothing is deleted until you choose Discard" in captured[0].body_text
+    assert "Inappropriate image" in captured[0].body_text
+    assert "blocks republish" in captured[0].body_text.lower() or "block republish" in captured[0].body_text.lower()
 
     dup = client.post(
         f"/api/v1/gallery/{look_id}/report",
@@ -147,18 +148,103 @@ def test_moderation_discard_hides_without_deleting(client, db_session, monkeypat
     assert discard.status_code == 200
     assert b"Discarded" in discard.content
     assert b"not" in discard.content.lower()
+    assert b"cannot be published again" in discard.content.lower()
 
     report = db_session.get(ContentReport, uuid.UUID(report_id))
     item = db_session.get(GalleryItem, uuid.UUID(look_id))
     assert report is not None and report.status == "actioned"
     assert item is not None
     assert item.moderation_status == "rejected"
-    # Row still exists — soft hide only.
+    # Row still exists — soft hide only; owner keeps the paid look privately.
     assert db_session.get(GalleryItem, uuid.UUID(look_id)) is not None
 
     feed = client.get("/api/v1/gallery?sort=newest&limit=50")
     assert feed.status_code == 200
     assert look_id not in [row["id"] for row in feed.json()]
+
+
+def test_moderation_view_shows_reporter_details(client, db_session, monkeypatch):
+    monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("CONTENT_REPORT_NOTIFY_EMAIL", "mod@fashionrise.test")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    email_delivery.clear_captured_emails()
+
+    viewer = register_with_invite(client, db_session, "rpt_det_v@example.com", "rptDetV")
+    author = register_with_invite(client, db_session, "rpt_det_a@example.com", "rptDetA")
+    look_id = _publish(client, db_session, author, "details look")
+    res = client.post(
+        f"/api/v1/gallery/{look_id}/report",
+        headers=_auth(viewer),
+        json={"reason": "other", "details": "Weird violence vibe in the boots"},
+    )
+    assert res.status_code == 201, res.text
+    report_id = res.json()["id"]
+    body = email_delivery.captured_emails()[0].body_text
+    assert "Weird violence vibe in the boots" in body
+    marker = f"/api/v1/moderation/reports/{report_id}/view?t="
+    start = body.index(marker)
+    end = body.find("\n", start)
+    view_url = body[start:end].strip()
+    if view_url.startswith("http"):
+        from urllib.parse import urlparse
+
+        parsed = urlparse(view_url)
+        view_url = parsed.path + ("?" + parsed.query if parsed.query else "")
+    view = client.get(view_url)
+    assert view.status_code == 200
+    assert b"Weird violence vibe in the boots" in view.content
+    assert b"Reporter details" in view.content
+
+
+def test_discard_blocks_owner_republish(client, db_session, monkeypatch):
+    from app.models.gallery_item import GalleryItem
+
+    monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("CONTENT_REPORT_NOTIFY_EMAIL", "mod@fashionrise.test")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    email_delivery.clear_captured_emails()
+
+    viewer = register_with_invite(client, db_session, "rpt_block_v@example.com", "rptBlockV")
+    author = register_with_invite(client, db_session, "rpt_block_a@example.com", "rptBlockA")
+    gallery_id = _publish(client, db_session, author, "blocked republish look")
+    res = client.post(
+        f"/api/v1/gallery/{gallery_id}/report",
+        headers=_auth(viewer),
+        json={"reason": "spam"},
+    )
+    assert res.status_code == 201, res.text
+    body = email_delivery.captured_emails()[0].body_text
+    report_id = res.json()["id"]
+    marker = f"/api/v1/moderation/reports/{report_id}/discard?t="
+    start = body.index(marker)
+    end = body.find("\n", start)
+    discard_url = body[start:end].strip()
+    if discard_url.startswith("http"):
+        from urllib.parse import urlparse
+
+        parsed = urlparse(discard_url)
+        discard_url = parsed.path + ("?" + parsed.query if parsed.query else "")
+    assert client.get(discard_url).status_code == 200
+
+    item = db_session.get(GalleryItem, uuid.UUID(gallery_id))
+    assert item is not None and item.look_id is not None and item.moderation_status == "rejected"
+
+    republish = client.post(
+        f"/api/v1/looks/{item.look_id}/publish",
+        headers=_auth(author),
+        json=runway_publish_body(),
+    )
+    assert republish.status_code == 403, republish.text
+    detail = str(republish.json().get("detail") or "").lower()
+    assert "publish" in detail and "report" in detail
 
 
 def test_cannot_report_own_look(client, db_session, monkeypatch):

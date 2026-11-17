@@ -39,7 +39,7 @@ describe('ReportLookSheet', () => {
     })
   })
 
-  it('submits a reason and thanks the reporter', async () => {
+  it('picks a reason then requires Send with optional details', async () => {
     const onReported = vi.fn()
     const onClose = vi.fn()
     render(
@@ -49,10 +49,17 @@ describe('ReportLookSheet', () => {
     expect(screen.getByTestId('report-look-sheet')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('report-reason-harassment'))
 
+    expect(reportGalleryItem).not.toHaveBeenCalled()
+    expect(screen.getByTestId('report-selected-reason')).toHaveTextContent(/Harassment/i)
+    fireEvent.change(screen.getByTestId('report-details'), {
+      target: { value: 'Cursing in the comments' },
+    })
+    fireEvent.click(screen.getByTestId('report-send'))
+
     await waitFor(() => {
       expect(reportGalleryItem).toHaveBeenCalledWith('look-1', {
         reason: 'harassment',
-        details: undefined,
+        details: 'Cursing in the comments',
       })
     })
     expect(onReported).toHaveBeenCalledWith('look-1')
@@ -60,5 +67,17 @@ describe('ReportLookSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('requires details for Something else before Send', async () => {
+    render(
+      <ReportLookSheet item={item} open onClose={() => undefined} onReported={() => undefined} />,
+    )
+    fireEvent.click(screen.getByTestId('report-reason-other'))
+    expect(screen.getByTestId('report-send')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('report-details'), {
+      target: { value: 'Weird violence vibe' },
+    })
+    expect(screen.getByTestId('report-send')).not.toBeDisabled()
   })
 })
