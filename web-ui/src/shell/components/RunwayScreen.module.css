@@ -439,6 +439,7 @@
 .immersiveActions .likeBtnOn,
 .immersiveActions .commentBtn,
 .immersiveActions .commentBtnOn,
+.immersiveActions .reportBtn,
 .immersiveActions .statChip {
   display: inline-flex;
   flex-direction: column;
@@ -459,6 +460,10 @@
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
   backdrop-filter: none;
   box-shadow: none;
+}
+
+.immersiveActions .reportBtn {
+  color: #fecaca;
 }
 
 .actionCount {
@@ -1439,6 +1444,176 @@
   border-color: rgba(125, 211, 252, 0.45);
   background: rgba(14, 116, 144, 0.22);
   color: #bae6fd;
+}
+
+.reportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.reportBtn:hover {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fee2e2;
+}
+
+.reportBtn:focus-visible {
+  outline: 2px solid #fca5a5;
+  outline-offset: 2px;
+}
+
+.reportIntro {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fr-muted, #c4c4c4);
+}
+
+.reportReasonList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.reportReasonBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reportReasonBtn:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.reportReasonBtn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.reportReasonText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reportReasonLabel {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.reportReasonHint {
+  font-size: 12px;
+  color: var(--fr-muted, #a3a3a3);
+}
+
+.reportDetailsLabel {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--fr-muted, #a3a3a3);
+}
+
+.reportDetails {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.reportDetails:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.reportThanks {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px 8px 8px;
+  text-align: center;
+}
+
+.reportThanksIcon {
+  color: #86efac;
+}
+
+.reportThanksLead {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.reportThanksBody {
+  margin: 0;
+  max-width: 36ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fr-muted, #a3a3a3);
+}
+
+.reportFooter {
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.reportDoneBtn {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(135deg, #db2777, #be185d);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reportDoneBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.reportFooterHint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fr-muted, #a3a3a3);
 }
 
 .chatScrim {

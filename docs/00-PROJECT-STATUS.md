@@ -7,6 +7,7 @@
 
 | Field | Value |
 | --- | --- |
+| PR | **#427** · branch `cursor/web-ai-workers-x3-77c6` |
 | Change | Parallel AI workers via systemd template `fashionrise-ai-worker@{1,2,3}` (replaces single `fashionrise-ai-worker`) |
 | Why | One worker = Magics run one-by-one (~15–20 min for 25th user). Three workers ≈ 3 Magics at once (~5–7 min for 25th) |
 | Script | `deploy/enable_ai_worker_instances.sh` · unit `deploy/systemd/fashionrise-ai-worker@.service` |
@@ -15,6 +16,33 @@
 | Vultr 8/16 | High Performance **~$96/mo**; CPU Optimized **~$160–180/mo** (OpenAI $ separate) |
 | Rollback | `bash deploy/enable_ai_worker_instances.sh 1` on VPS |
 | Verify | `systemctl is-active fashionrise-ai-worker@{1,2,3}` → all active |
+
+## Deployed — Social look report / moderation intake (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#425** → `main` @ **`342d96db`** |
+| Tip | FE **`ada9adf`** · BE tip with signed moderation links · Alembic **037** |
+| Change | FashionRise Social **Report** → reasons → thank you; look hidden from reporter only (not deleted) |
+| Email | View look · **Keep design (OK)** · **Discard design (abuse)** — signed `/api/v1/moderation/reports/{id}/…` links (14d TTL) |
+| Discard | Sets `moderation_status=rejected` (hidden from all feeds); **does not delete** gallery row/images |
+| Keep | Marks report `dismissed`; look stays `ok` |
+| Nginx | gallery report POST + moderation `(view\|image\|keep\|discard)` GET |
+| Not yet | Block/mute · admin inbox UI |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/556348e9-camera-back /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
+## Ops — Free capacity wins on current VPS (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#426** → `main` |
+| Cost | **$0** (same Vultr box) |
+| Nginx | Allowlisted `POST /api/v1/gallery/impressions` + `GET /api/v1/push/native/capability` (were **403** → client retries / “slow” feel) |
+| API | `fashionrise-api` uvicorn **`--workers 2`** (was 1) |
+| Kernel | `vm.swappiness=10` (prefer RAM over swap when possible) |
+| Not fixed by this | Shared box with PickWise · OpenAI Magic latency · need paid scale for 1M downloads |
+| Rollback API | set `--workers 1` in `/etc/systemd/system/fashionrise-api.service` · `daemon-reload` · `restart fashionrise-api` |
+| Rollback nginx | restore `/var/backups/fashionrise/nginx-free-capacity-*.conf` |
 
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)
 
