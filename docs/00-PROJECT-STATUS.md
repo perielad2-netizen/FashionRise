@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Runway login streak strip only LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | branch `cursor/web-runway-streak-only-77c6` @ **`cd581710`** |
+| Tip | FE **`cd581710`** · `/var/www/fashionrise/releases/cd581710-streak-only` |
+| Change | CompetitionStrip shows only `Login streak x/7` (no week date / Hebrew month, no days left, no Group) |
+| Verify | `/version.json` → `cd581710` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/9ad718c1-android-tester /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Native | Hard-refresh / SW clear; Capacitor rebuild picks up with next shell build |
+| Rewards | **OFF** |
+
 ## Deployed — Android tester batch LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
