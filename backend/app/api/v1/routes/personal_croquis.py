@@ -115,6 +115,27 @@ def consent_ai(
     return consent_to_read(row)
 
 
+@router.post("/consent/upload", response_model=ConsentEventRead)
+@limiter.limit("30/minute")
+def consent_create_model_upload(
+    request: Request,
+    body: ConsentAcknowledgeRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> ConsentEventRead:
+    """Record the complete Create Model short checkbox + seven-point upload agreement."""
+    _ = request.url
+    row = pcs.record_create_model_upload_consent(
+        db,
+        user,
+        acknowledged=body.acknowledged,
+        adults_attested=body.adults_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
+    return consent_to_read(row)
+
+
 @router.post("/photos", response_model=PersonalCroquisRead, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
 def upload_photo(

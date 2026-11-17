@@ -31,6 +31,11 @@ import {
   RUNWAY_SHARE_NOTICE_TEXT,
   RUNWAY_SHARE_NOTICE_VERSION,
 } from '@/lib/runwayShareConsent'
+import {
+  PUBLIC_PUBLISH_FULL_TERMS_INTRO,
+  PUBLIC_PUBLISH_FULL_TERMS_POINTS,
+} from '@/lib/publicPublishConsent'
+import { LegalConsentField } from '@/components/LegalConsentField'
 import { requestShare } from '@/lib/sharePromo'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MyLooksScreen.module.css'
@@ -567,18 +572,20 @@ function LookDetailDialog({
         >
           <p>
             Publishing makes this look visible to other FashionRise users on the Runway community
-            feed.
+            feed. This is separate from private Create Model upload — upload consent does not
+            authorize public publishing.
           </p>
-          <label className={styles.runwayCheck}>
-            <input
-              type="checkbox"
-              checked={runwayShareAgreed}
-              disabled={busy}
-              onChange={(e) => setRunwayShareAgreed(e.target.checked)}
-              data-testid="runway-share-consent"
-            />
-            <span>{RUNWAY_SHARE_CHECKBOX_LABEL}</span>
-          </label>
+          <LegalConsentField
+            className={styles.runwayConsent}
+            checked={runwayShareAgreed}
+            onCheckedChange={setRunwayShareAgreed}
+            disabled={busy}
+            shortLabel={RUNWAY_SHARE_CHECKBOX_LABEL}
+            intro={PUBLIC_PUBLISH_FULL_TERMS_INTRO}
+            points={PUBLIC_PUBLISH_FULL_TERMS_POINTS}
+            checkboxTestId="runway-share-consent"
+            termsTestId="runway-share-terms"
+          />
           {error ? (
             <p className={styles.errorInline} role="alert">
               {error}

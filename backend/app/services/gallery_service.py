@@ -130,6 +130,49 @@ def to_gallery_reads_for_viewer(
     ]
 
 
+def _record_public_publish_consent_for_gallery(
+    db: Session,
+    user: User,
+    *,
+    attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> None:
+    """Reuse Runway public-publish notice/version/hash for legacy POST /gallery."""
+    import hashlib
+
+    from app.core.config import get_settings
+    from app.models.user_consent_event import PURPOSE_RUNWAY_SHARE, UserConsentEvent
+
+    settings = get_settings()
+    if not attested:
+        raise ValidationAppError(
+            "Confirm you have the rights to publish this content and authorize "
+            "FashionRise to display it publicly."
+        )
+    expected_version = (settings.runway_share_consent_version or "").strip()
+    notice = (settings.runway_share_notice_text or "").strip()
+    if not expected_version or not notice:
+        raise ValidationAppError("Public-publish consent is not configured on this server yet.")
+    if notice_version != expected_version:
+        raise ValidationAppError("Public-publish notice version is not current.")
+    expected_hash = hashlib.sha256(notice.encode("utf-8")).hexdigest()
+    if (notice_text_hash or "").lower() != expected_hash.lower():
+        raise ValidationAppError("Public-publish notice text does not match the approved copy.")
+
+    db.add(
+        UserConsentEvent(
+            id=uuid.uuid4(),
+            owner_id=user.id,
+            purpose=PURPOSE_RUNWAY_SHARE,
+            consent_version=expected_version,
+            adults_attested=False,
+            text_hash=expected_hash,
+        )
+    )
+    db.flush()
+
+
 def create_gallery_item(db: Session, user: User, data: GalleryCreate) -> GalleryItem:
     if data.look_id is not None:
         raise ValidationAppError("Publish looks via POST /looks/{id}/publish")
@@ -138,15 +181,24 @@ def create_gallery_item(db: Session, user: User, data: GalleryCreate) -> Gallery
     design = db.get(GarmentDesign, data.design_id)
     if not design or design.user_id != user.id:
         raise ForbiddenError("You can only publish your own designs")
+    visibility = (data.visibility or "public").strip().lower() or "public"
+    if visibility == "public":
+        _record_public_publish_consent_for_gallery(
+            db,
+            user,
+            attested=bool(data.public_publish_attested),
+            notice_version=(data.notice_version or "").strip(),
+            notice_text_hash=(data.notice_text_hash or "").strip(),
+        )
     item = GalleryItem(
         design_id=data.design_id,
         user_id=user.id,
         title=data.title,
         image_url=data.image_url,
-        visibility=data.visibility,
+        visibility=visibility,
     )
     db.add(item)
-    if (data.visibility or "public") == "public":
+    if visibility == "public":
         from app.services.competition_groups import enroll_on_activity
 
         enroll_on_activity(db, user.id)

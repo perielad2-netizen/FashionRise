@@ -24,7 +24,7 @@ def test_adults_attestation_default_max_age_is_durable():
 
 def test_latest_adults_attestation_ignores_age_when_max_age_zero(monkeypatch):
     monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS", "0")
-    monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_VERSION", "adults-beta-2026-11-01")
+    monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_VERSION", "adults-beta-2026-11-17")
     monkeypatch.setenv("MY_CROQUIS_ADULTS_NOTICE_TEXT", "Approved adults notice for durable test.")
     _clear()
 
@@ -34,7 +34,7 @@ def test_latest_adults_attestation_ignores_age_when_max_age_zero(monkeypatch):
         owner_id=uuid.uuid4(),
         purpose=PURPOSE_ADULTS_BETA,
         adults_attested=True,
-        consent_version="adults-beta-2026-11-01",
+        consent_version="adults-beta-2026-11-17",
         text_hash=expected_hash,
         created_at=pcs._utcnow() - timedelta(days=30),
     )
@@ -59,7 +59,7 @@ def test_latest_adults_attestation_ignores_age_when_max_age_zero(monkeypatch):
 
 def test_latest_adults_attestation_still_honors_positive_max_age(monkeypatch):
     monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS", "60")
-    monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_VERSION", "adults-beta-2026-11-01")
+    monkeypatch.setenv("MY_CROQUIS_ADULTS_ATTESTATION_VERSION", "adults-beta-2026-11-17")
     monkeypatch.setenv("MY_CROQUIS_ADULTS_NOTICE_TEXT", "Approved adults notice for aged test.")
     _clear()
 

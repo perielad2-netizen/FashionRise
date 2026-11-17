@@ -116,6 +116,18 @@ export async function acknowledgeAiConsent(
   })
 }
 
+/** Complete Create Model short+seven-point upload agreement (auditable). */
+export async function acknowledgeCreateModelUploadConsent(
+  body: ConsentAcknowledgeRequest,
+  signal?: AbortSignal,
+): Promise<ConsentEventRead> {
+  return apiRequest<ConsentEventRead>(`${BASE}/consent/upload`, {
+    method: 'POST',
+    body,
+    signal,
+  })
+}
+
 export async function listPersonalCroquis(signal?: AbortSignal): Promise<PersonalCroquisRead[]> {
   return apiRequest<PersonalCroquisRead[]>(BASE, { signal })
 }

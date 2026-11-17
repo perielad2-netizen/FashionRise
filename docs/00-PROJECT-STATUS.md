@@ -3,6 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## PR — Legal consent UX (upload vs public publish) — **NOT DEPLOYED** (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-legal-consent-ux-77c6` · PR **#411** |
+| Change | One short checkbox + expandable **Read full terms** for (A) Create Model private upload and (B) public publish; auditable `create_model_upload` event; close public `POST /gallery` consent bypass |
+| Create Model versions | `adults-beta-2026-11-17` · `storage-2026-11-17` · `ai-provider-2026-11-17` · **`create-model-upload-2026-11-17`** (Alembic **036**) |
+| Create Model SHA256 | adults `579a9d61…` · storage `0bf393b8…` · AI `5cdb56d7…` · upload agreement `1134d156…` |
+| Public publish versions | `runway-share-2026-11-17` · `croquis-public-share-2026-11-17` (hash `bac02828…`); legacy public gallery create reuses same notice |
+| Entry points | Create Model wizard · My Looks → Runway · `POST /gallery` public · My Models publish API/constants |
+| Native | **Old store builds rejected** after BE deploy (stale versions / missing upload consent). Roll out FE+BE together, then rebuild Android/iOS — do not weaken enforcement |
+| Docs | `docs/deploy/LEGAL-CONSENT-NOTICE-ROTATION-2026-11-17.md` |
+| Legal gaps | **No Terms of Service page** · **No in-product content-reporting/takedown process** documented |
+| Verification | FE vitest focused pass · BE upload-consent + gallery-consent + croquis/user-flow pass · `tsc` · prod build notices pass · FE/BE upload hash `1134d156…` match |
+| Production | Unchanged until PM merge + Alembic 036 + notice env rotate + FE deploy |
+| Next | Final PM merge review → deploy FE+BE together → native rebuild from same tip |
+
 ## Preview — My Looks Look Details Mobbin polish (2026-11-16 23:45 Asia/Jerusalem)
 
 | Field | Value |
@@ -240,9 +257,9 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**Runway Mobbin polish LIVE** · tip **`38648d70`** · rewards **OFF**.)
+**Last updated:** 2026-11-17 (**Legal consent UX PR open — not deployed** · live tip still production prior tip · rewards **OFF**.)
 
-**Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
+**Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**. Legal consent upload vs publish standardization awaits PM deploy approval on `cursor/web-legal-consent-ux-77c6`.
 
 ## Discover all-published #366 — BE LIVE (2026-11-16)
 

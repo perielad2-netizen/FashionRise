@@ -58,7 +58,7 @@ export function PrivacyPolicyPage() {
               <a href="#ai">5. AI processing</a>
             </li>
             <li>
-              <a href="#runway">6. Social Runway</a>
+              <a href="#runway">6. Social publishing (Runway and related public surfaces)</a>
             </li>
             <li>
               <a href="#stars">7. Stars and in-app purchases</a>
@@ -119,18 +119,26 @@ export function PrivacyPolicyPage() {
           <h2>3. Uploaded photos (Create Model)</h2>
           <p>
             Create Model lets you upload a photo to generate a personal studio model (croquis). Those
-            photos and generated model images are stored as owner-private media — they are not served
-            as a public website gallery unless you later publish related looks to Runway.
+            photos and generated model images are stored as owner-private media. Uploading an image
+            does not make it public. Publishing generated or related content to FashionRise (for
+            example Runway) requires a separate public-publish agreement.
           </p>
-          <p>Before upload and generation, FashionRise asks you to confirm notices covering:</p>
+          <p>
+            Before upload and generation, you must agree to a short rights-and-permissions checkbox
+            and may expand the full upload terms. FashionRise still records distinct consent events
+            for:
+          </p>
           <ul>
-            <li>Adults-only attestation for the current notice version</li>
+            <li>Adults-only / fully clothed pose attestation for the current notice version</li>
             <li>Private storage of your photo</li>
-            <li>AI processing needed to generate the model</li>
+            <li>AI processing needed to generate the model (including authorized providers)</li>
           </ul>
           <p>
             FashionRise keeps consent records (purpose, notice version, and a hash of the notice
-            text) so we can show that you agreed to the then-current notices.
+            text) for the then-current notices. FashionRise does not verify that you own every image
+            or have obtained every third-party permission; you remain responsible for your
+            submissions. FashionRise may reject or remove content that violates its policies or
+            applicable law.
           </p>
         </section>
 
@@ -186,23 +194,34 @@ export function PrivacyPolicyPage() {
         </section>
 
         <section className={styles.section} id="runway">
-          <h2>6. Social Runway</h2>
+          <h2>6. Social publishing (Runway and related public surfaces)</h2>
           <p>
-            Runway is FashionRise’s social feed. Publishing a look makes that look visible to other
-            FashionRise users according to feed rules (for example circle/friends and broader Runway
-            rankings).
+            Runway is FashionRise’s social feed experience. FashionRise Social discovery surfaces
+            (for example Discover) can show published looks according to feed rules. Publishing a
+            look makes that look visible to other FashionRise users. Runway and FashionRise Social
+            remain separate product experiences; both rely on an explicit public-publish agreement
+            that is separate from Create Model upload consent.
           </p>
-          <p>Before publish, you must check a consent confirming that:</p>
+          <p>Before publish, you must check a consent confirming that you:</p>
           <ul>
             <li>
-              You have the rights to share the design and images with other FashionRise users
+              Have the rights and permissions to publish the content, including images and any
+              people shown
             </li>
-            <li>You grant FashionRise permission to display that content on the Runway</li>
+            <li>
+              Authorize FashionRise to display the content publicly as needed to operate feeds,
+              profiles, previews, rankings, sharing, and competitions
+            </li>
           </ul>
           <p>
-            FashionRise records that Runway share consent. Published cards can show your look image,
-            title, and username. Other users may like, score, and comment. You can remove a look from
-            Runway (unpublish), which deletes that public gallery listing.
+            FashionRise records that public-publish consent (purpose, notice version, and notice
+            text hash). The platform license is limited to operating FashionRise as described in the
+            publish terms — it is not a grant for unrelated advertising or endorsements. FashionRise
+            does not claim to verify ownership or to obtain permissions on your behalf. Published
+            cards can show your look image, title, and username. Other users may like, score, and
+            comment. You can remove a look from Runway (unpublish), which deletes that public gallery
+            listing. FashionRise may also restrict or remove published content in response to
+            policy violations, legal complaints, or applicable law.
           </p>
           <p>
             Friend connections use FashionRise usernames so you can build a private circle feed of

@@ -91,10 +91,13 @@ def _iso(monkeypatch, db_session):
 
 
 def _upload_ready(client, tokens, monkeypatch):
+    from tests.croquis_test_fixtures import record_upload_rights
+
     _enable_upload(monkeypatch)
     assert client.post(f"{BASE}/attestations/adults", headers=_auth(tokens), json=adults_body()).status_code == 200
     c = client.post(f"{BASE}/consent/storage", headers=_auth(tokens), json=storage_body())
     assert c.status_code == 200
+    record_upload_rights(client, tokens)
     up = client.post(
         f"{BASE}/photos",
         headers=_auth(tokens),

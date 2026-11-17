@@ -4,10 +4,11 @@
  * UI gate `VITE_MY_CROQUIS_UI_ENABLED` must be ON for this to mount.
  * Upload/AI backend gates remain independent and default OFF.
  *
- * Single visible checkbox covers photo rights, private storage, and AI
+ * Single short checkbox + expandable full terms for private upload / AI
  * processing. Distinct backend consent events (adults / storage / AI) are
  * still recorded with versioned notice hashes and source binding — bytes
- * are not uploaded before the agreement.
+ * are not uploaded before the agreement. Upload consent never authorizes
+ * public publishing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/client'
@@ -15,6 +16,7 @@ import {
   acceptPersonalCroquisVersion,
   acceptedVersionNumber,
   acknowledgeAiConsent,
+  acknowledgeCreateModelUploadConsent,
   acknowledgeStorageConsent,
   attestAdults,
   fetchCroquisAssetBlob,
@@ -30,8 +32,17 @@ import {
   croquisNoticesAuthorized,
   sha256Hex,
 } from '@/lib/personalCroquisNotices'
+import {
+  CREATE_MODEL_UPLOAD_CHECKBOX_LABEL,
+  CREATE_MODEL_UPLOAD_FULL_TERMS_INTRO,
+  CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS,
+  CREATE_MODEL_UPLOAD_NOTICE_VERSION,
+  formatCreateModelUploadNoticeText,
+} from '@/lib/createModelUploadConsent'
 import { prepareCroquisUpload } from '@/lib/prepareCroquisUpload'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import { LegalConsentField } from '@/components/LegalConsentField'
+import fieldStyles from '@/components/LegalConsentField.module.css'
 import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './CreateMyCroquisWizard.module.css'
@@ -44,9 +55,6 @@ export type CreateMyCroquisWizardProps = {
 }
 
 type Step = 'compose' | 'generating' | 'preview' | 'reconciliation' | 'blocked'
-
-const COMBINED_AGREEMENT_LABEL =
-  'I have permission to use this photo and agree to private storage and AI processing to create my model.'
 
 function newIdempotencyKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -69,7 +77,6 @@ export function CreateMyCroquisWizard({
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [agreed, setAgreed] = useState(false)
-  const [showDetails, setShowDetails] = useState(false)
   const [busy, setBusy] = useState(false)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -133,7 +140,8 @@ export function CreateMyCroquisWizard({
       const uploadFile = await prepareCroquisUpload(localFile)
       setBusyLabel('Uploading…')
       // Distinct auditable backend records from one UI agreement. Order matters:
-      // adults → storage → upload (bytes) → AI consent bound to croquis → generate.
+      // adults → storage → create_model_upload (short+7-point) → upload bytes →
+      // AI consent bound to croquis → generate.
       await attestAdults({
         adults_attested: true,
         notice_version: croquisNoticeVersion('adults'),
@@ -144,6 +152,12 @@ export function CreateMyCroquisWizard({
         adults_attested: true,
         notice_version: croquisNoticeVersion('storage'),
         notice_text_hash: await sha256Hex(storageNotice),
+      })
+      await acknowledgeCreateModelUploadConsent({
+        acknowledged: true,
+        adults_attested: true,
+        notice_version: CREATE_MODEL_UPLOAD_NOTICE_VERSION,
+        notice_text_hash: await sha256Hex(formatCreateModelUploadNoticeText()),
       })
       const created = await uploadPersonalCroquisPhoto(uploadFile, storageEvent.id)
       setCroquisId(created.id)
@@ -367,30 +381,40 @@ export function CreateMyCroquisWizard({
                 }}
               />
 
-              <label className={styles.check}>
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  disabled={busy || !localFile}
-                />
-                <span>{COMBINED_AGREEMENT_LABEL}</span>
-              </label>
-
-              <button
-                type="button"
-                className={styles.detailsToggle}
-                onClick={() => setShowDetails((v) => !v)}
-              >
-                {showDetails ? 'Hide details' : 'Show details'}
-              </button>
-              {showDetails ? (
-                <div className={styles.notice}>
-                  <p>{adultsNotice}</p>
-                  <p>{storageNotice}</p>
-                  <p>{aiNotice}</p>
-                </div>
-              ) : null}
+              <LegalConsentField
+                checked={agreed}
+                onCheckedChange={setAgreed}
+                disabled={busy || !localFile}
+                shortLabel={CREATE_MODEL_UPLOAD_CHECKBOX_LABEL}
+                intro={CREATE_MODEL_UPLOAD_FULL_TERMS_INTRO}
+                points={CREATE_MODEL_UPLOAD_FULL_TERMS_POINTS}
+                checkboxTestId="create-model-upload-consent"
+                termsTestId="create-model-upload-terms"
+                expandedExtra={
+                  <>
+                    <a
+                      className={fieldStyles.privacyLink}
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Privacy Policy
+                    </a>
+                    <div className={fieldStyles.approvedNotices}>
+                      <h3>Approved notices on record</h3>
+                      <p>
+                        <strong>Adults:</strong> {adultsNotice}
+                      </p>
+                      <p>
+                        <strong>Private storage:</strong> {storageNotice}
+                      </p>
+                      <p>
+                        <strong>AI processing:</strong> {aiNotice}
+                      </p>
+                    </div>
+                  </>
+                }
+              />
 
               {error ? (
                 <p className={styles.errorInline} role="alert">

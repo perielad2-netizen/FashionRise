@@ -10,9 +10,9 @@
  * as empty — that regression blocked Create My Croquis (#158).
  */
 
-export const CROQUIS_ADULTS_NOTICE_VERSION = 'adults-beta-2026-11-01'
-export const CROQUIS_STORAGE_NOTICE_VERSION = 'storage-2026-11-01'
-export const CROQUIS_AI_NOTICE_VERSION = 'ai-provider-2026-11-01'
+export const CROQUIS_ADULTS_NOTICE_VERSION = 'adults-beta-2026-11-17'
+export const CROQUIS_STORAGE_NOTICE_VERSION = 'storage-2026-11-17'
+export const CROQUIS_AI_NOTICE_VERSION = 'ai-provider-2026-11-17'
 
 /** Vitest / offline-only synthetic bodies (must match backend croquis_test_fixtures). */
 export const SYNTHETIC_ADULTS_NOTICE = 'SYNTHETIC_TEST_ADULTS_NOTICE_V1'

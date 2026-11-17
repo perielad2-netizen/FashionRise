@@ -13,6 +13,7 @@ from app.core.config import get_settings
 SYNTHETIC_ADULTS_NOTICE = "SYNTHETIC_TEST_ADULTS_NOTICE_V1"
 SYNTHETIC_STORAGE_NOTICE = "SYNTHETIC_TEST_STORAGE_NOTICE_V1"
 SYNTHETIC_AI_NOTICE = "SYNTHETIC_TEST_AI_NOTICE_V1"
+SYNTHETIC_UPLOAD_NOTICE = "SYNTHETIC_TEST_CREATE_MODEL_UPLOAD_NOTICE_V1"
 
 
 def _sha(text: str) -> str:
@@ -25,6 +26,7 @@ def enable_synthetic_croquis_notices(monkeypatch) -> None:
     monkeypatch.setenv("MY_CROQUIS_ADULTS_NOTICE_TEXT", SYNTHETIC_ADULTS_NOTICE)
     monkeypatch.setenv("MY_CROQUIS_STORAGE_NOTICE_TEXT", SYNTHETIC_STORAGE_NOTICE)
     monkeypatch.setenv("MY_CROQUIS_AI_NOTICE_TEXT", SYNTHETIC_AI_NOTICE)
+    monkeypatch.setenv("CREATE_MODEL_UPLOAD_NOTICE_TEXT", SYNTHETIC_UPLOAD_NOTICE)
     get_settings.cache_clear()
 
 
@@ -33,6 +35,7 @@ def clear_synthetic_croquis_notices(monkeypatch) -> None:
     monkeypatch.delenv("MY_CROQUIS_ADULTS_NOTICE_TEXT", raising=False)
     monkeypatch.delenv("MY_CROQUIS_STORAGE_NOTICE_TEXT", raising=False)
     monkeypatch.delenv("MY_CROQUIS_AI_NOTICE_TEXT", raising=False)
+    monkeypatch.delenv("CREATE_MODEL_UPLOAD_NOTICE_TEXT", raising=False)
     get_settings.cache_clear()
 
 
@@ -55,6 +58,17 @@ def storage_body() -> dict:
     }
 
 
+def upload_rights_body() -> dict:
+    """Complete Create Model upload agreement (short + seven-point) synthetic body."""
+    settings = get_settings()
+    return {
+        "acknowledged": True,
+        "adults_attested": True,
+        "notice_version": settings.create_model_upload_consent_version,
+        "notice_text_hash": _sha(settings.create_model_upload_notice_text),
+    }
+
+
 def ai_body(*, croquis_id: str | None = None) -> dict:
     """AI consent body. Stage C requires croquis_id to bind consent to the source photo."""
     settings = get_settings()
@@ -67,3 +81,36 @@ def ai_body(*, croquis_id: str | None = None) -> dict:
     if croquis_id is not None:
         body["croquis_id"] = croquis_id
     return body
+
+
+def _auth_headers(tokens: dict) -> dict[str, str]:
+    token = tokens.get("access_token") or tokens.get("accessToken") or ""
+    return {"Authorization": f"Bearer {token}"}
+
+
+def record_upload_rights(client, tokens: dict) -> None:
+    """Record create_model_upload after adults (+ usually storage) are already done."""
+    r = client.post(
+        "/api/v1/personal-croquis/consent/upload",
+        headers=_auth_headers(tokens),
+        json=upload_rights_body(),
+    )
+    assert r.status_code == 200, r.text
+
+
+def attest_storage_and_upload_rights(client, tokens: dict) -> str:
+    """Adults → storage → create_model_upload. Returns storage consent id."""
+    a = client.post(
+        "/api/v1/personal-croquis/attestations/adults",
+        headers=_auth_headers(tokens),
+        json=adults_body(),
+    )
+    assert a.status_code == 200, a.text
+    c = client.post(
+        "/api/v1/personal-croquis/consent/storage",
+        headers=_auth_headers(tokens),
+        json=storage_body(),
+    )
+    assert c.status_code == 200, c.text
+    record_upload_rights(client, tokens)
+    return c.json()["id"]

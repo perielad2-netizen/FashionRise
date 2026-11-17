@@ -16,7 +16,11 @@ describe('PrivacyPolicyPage', () => {
     expect(screen.getByRole('heading', { name: /Account information/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Uploaded photos/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /AI processing/i })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: /Social Runway/i })).toBeTruthy()
+    expect(
+      screen.getByRole('heading', { name: /Social publishing \(Runway and related public surfaces\)/i }),
+    ).toBeTruthy()
+    expect(screen.getByText(/does not make it public/i)).toBeTruthy()
+    expect(screen.getByText(/does not claim to verify ownership/i)).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Stars and in-app purchases/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Data retention/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Your privacy rights/i })).toBeTruthy()
