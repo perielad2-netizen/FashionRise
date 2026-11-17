@@ -25,10 +25,7 @@ import { fetchJobImageBlob } from '@/services/ai/magicApi'
 import { pollAiJobUntilSettled } from '@/services/ai/pollAiJob'
 import { ApiError } from '@/services/api/client'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
-import {
-  armNativeFilePickerFocusClear,
-  markNativeFilePickerOpen,
-} from '@/services/native/filePickerGuard'
+import { armNativeFilePickerForInput } from '@/services/native/filePickerGuard'
 import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './FittingRoomScreen.module.css'
@@ -90,10 +87,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
 
   const openNativePicker = (el: HTMLInputElement | null, opts: { camera: boolean }) => {
     if (!el) return
-    if (opts.camera) {
-      markNativeFilePickerOpen()
-      armNativeFilePickerFocusClear()
-    }
+    // Always arm on Android camera/gallery sheets — Back during CAMERA permission
+    // must not finish the Activity (crash + stuck file-chooser loop).
+    armNativeFilePickerForInput(el, { camera: opts.camera })
     el.click()
   }
 
@@ -578,7 +574,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               type="button"
               className={styles.btn}
               data-testid="fitting-room-person-gallery"
-              onClick={() => personRef.current?.click()}
+              onClick={() => openNativePicker(personRef.current, { camera: false })}
             >
               {personUrl ? 'Replace from gallery' : 'Choose photo'}
             </button>
