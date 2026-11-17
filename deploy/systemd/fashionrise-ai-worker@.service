@@ -1,0 +1,27 @@
+[Unit]
+Description=FashionRise AI job worker #%i (standalone, off API event loop)
+After=network.target postgresql.service fashionrise-api.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=fashionriseapp
+Group=fashionriseapp
+WorkingDirectory=/opt/fashionrise/src/backend
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Instance id is for systemd only — workers share the same DB queue via SKIP LOCKED.
+ExecStart=/opt/fashionrise/.venv/bin/python -B -m app.ai_worker
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fashionrise/storage /opt/fashionrise/src/backend
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

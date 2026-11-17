@@ -3,6 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Ops — Magic AI workers ×3 (option A) LIVE (2026-11-17 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#427** · branch `cursor/web-ai-workers-x3-77c6` |
+| Change | Parallel AI workers via systemd template `fashionrise-ai-worker@{1,2,3}` (replaces single `fashionrise-ai-worker`) |
+| Why | One worker = Magics run one-by-one (~15–20 min for 25th user). Three workers ≈ 3 Magics at once (~5–7 min for 25th) |
+| Script | `deploy/enable_ai_worker_instances.sh` · unit `deploy/systemd/fashionrise-ai-worker@.service` |
+| Guide | `docs/deploy/AI-WORKER-PARALLEL-CAPACITY.md` (A now · B when downloads/Magic wait grow) |
+| Option B trigger | ~**10k+ downloads** *or* regular **10+ Magics at once** / P95 wait **&gt; ~3–4 min** → Vultr **8 vCPU / 16 GB ~$96/mo** dedicated workers |
+| Vultr 8/16 | High Performance **~$96/mo**; CPU Optimized **~$160–180/mo** (OpenAI $ separate) |
+| Rollback | `bash deploy/enable_ai_worker_instances.sh 1` on VPS |
+| Verify | `systemctl is-active fashionrise-ai-worker@{1,2,3}` → all active |
+
 ## Deployed — Social look report / moderation intake (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
@@ -21,6 +35,7 @@
 
 | Field | Value |
 | --- | --- |
+| PR | **#426** → `main` |
 | Cost | **$0** (same Vultr box) |
 | Nginx | Allowlisted `POST /api/v1/gallery/impressions` + `GET /api/v1/push/native/capability` (were **403** → client retries / “slow” feel) |
 | API | `fashionrise-api` uvicorn **`--workers 2`** (was 1) |
