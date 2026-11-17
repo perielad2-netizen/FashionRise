@@ -10,6 +10,7 @@
   background: rgba(4, 6, 12, 0.78);
   box-sizing: border-box;
   max-height: 100dvh;
+  max-height: var(--fr-visible-height, 100dvh);
   overflow: hidden;
   animation: createRise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -17,6 +18,7 @@
 .dialog {
   width: min(28rem, 100%);
   max-height: min(88dvh, 40rem);
+  max-height: min(88dvh, var(--fr-visible-height, 88dvh), 40rem);
   display: flex;
   flex-direction: column;
   min-height: 0;

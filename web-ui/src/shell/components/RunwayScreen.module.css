@@ -1635,6 +1635,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(100%, 520px);
   max-height: min(88dvh, 720px);
+  max-height: min(88dvh, var(--fr-visible-height, 88dvh), 720px);
   margin: 0 auto;
   border-radius: 22px 22px 18px 18px;
   border: 1px solid rgba(244, 114, 182, 0.22);

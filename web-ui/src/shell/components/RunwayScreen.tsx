@@ -48,6 +48,7 @@ import {
   requestFriendByUsername,
   type Friendship,
 } from '@/services/friendsApi'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { isNativeShell } from '@/services/native/platform'
@@ -1243,9 +1244,9 @@ function FriendsPanel({
             onChange={(e) => onUsernameChange(e.target.value)}
             onFocus={() => {
               // nearest — center scroll left a black empty band above the keyboard.
+              onAndroidEditableFocus(inputRef.current)
               window.setTimeout(() => {
                 formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
-                inputRef.current?.focus({ preventScroll: true })
               }, 50)
             }}
             placeholder="yanivprbk"
@@ -2090,7 +2091,7 @@ function RunwayCard({
       {!compact && commentsOpen
         ? createPortal(
             <div
-              className={styles.chatScrim}
+              className={`fr-keyboard-overlay ${styles.chatScrim}`}
               role="presentation"
               onClick={(event) => {
                 if (event.target === event.currentTarget) closeComments()

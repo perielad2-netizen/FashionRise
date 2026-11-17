@@ -520,7 +520,7 @@
 
 .dialog {
   width: min(980px, 100%);
-  /* Prefer small/dynamic viewport units so URL + home bars don't clip the modal. */
+  /* Prefer live visual viewport so Android soft keyboard cannot leave a black void. */
   max-height: min(900px, calc(100vh - var(--fr-header-h) - 24px));
   max-height: min(
     900px,
@@ -532,8 +532,8 @@
   max-height: min(
     900px,
     calc(
-      100svh - var(--fr-header-h) - 24px - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px)
+      var(--fr-visible-height, 100dvh) - var(--fr-header-h) - 24px -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
     )
   );
   margin: auto;
@@ -837,8 +837,8 @@
         env(safe-area-inset-bottom, 0px)
     );
     max-height: calc(
-      100svh - var(--fr-header-h) - 16px - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px)
+      var(--fr-visible-height, 100dvh) - var(--fr-header-h) - 16px -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
     );
   }
 

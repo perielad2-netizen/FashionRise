@@ -15,6 +15,7 @@ import {
   type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { syncFollowStatus } from '@/lib/followStatusStore'
 import {
   followCreator,
@@ -557,7 +558,7 @@ export function FriendProfilePanel({
 
       {isSelf && editing ? (
         <div
-          className={styles.sheetBackdrop}
+          className={`fr-keyboard-overlay ${styles.sheetBackdrop}`}
           role="presentation"
           data-testid="designer-profile-editor"
           onClick={() => {
@@ -611,7 +612,9 @@ export function FriendProfilePanel({
                   maxLength={120}
                   disabled={editBusy}
                   data-testid="designer-edit-name"
+                  enterKeyHint="done"
                   onChange={(e) => setEditName(e.target.value)}
+                  onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
                 />
               </label>
               <label className={styles.editLabel}>

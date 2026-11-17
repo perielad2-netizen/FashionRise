@@ -576,7 +576,7 @@ export function DetailsEditorSheet({
   )
 
   return (
-    <div className={styles.scrim} role="presentation">
+    <div className={`fr-keyboard-overlay ${styles.scrim}`} role="presentation">
       <div
         ref={dialogRef}
         className={styles.sheet}

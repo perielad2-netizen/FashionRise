@@ -19,6 +19,7 @@
     max(12px, env(safe-area-inset-left, 0px));
   /* Stay within the visible viewport; chrome offset applied via padding. */
   max-height: 100dvh;
+  max-height: var(--fr-visible-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -49,6 +50,13 @@
     )
   );
   max-height: min(92vh, calc(100vh - 24px));
+  max-height: min(
+    92dvh,
+    calc(
+      var(--fr-visible-height, 100dvh) - 24px - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - var(--fr-browser-chrome-bottom, 0px)
+    )
+  );
   display: flex;
   flex-direction: column;
   min-height: 0;

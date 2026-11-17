@@ -61,9 +61,19 @@ describe('useVisibleViewport', () => {
     renderHook(() => useVisibleViewport())
     // Layout height kept — avoids black void above Android keyboard.
     expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('800px')
+    expect(document.documentElement.style.getPropertyValue('--fr-visible-height')).toBe('420px')
     expect(document.documentElement.style.getPropertyValue('--fr-browser-chrome-bottom')).toBe(
       '0px',
     )
+    expect(document.documentElement.getAttribute('data-fr-keyboard')).toBe('1')
     input.remove()
+  })
+
+  it('always tracks true visual height for fixed dialogs even without keyboard', () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 740 })
+    renderHook(() => useVisibleViewport())
+    expect(document.documentElement.style.getPropertyValue('--fr-visible-height')).toBe('740px')
+    expect(document.documentElement.getAttribute('data-fr-keyboard')).toBeNull()
   })
 })

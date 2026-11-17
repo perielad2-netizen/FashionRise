@@ -72,7 +72,7 @@ export function StageSheet({
   if (!open) return null
 
   return (
-    <div className={styles.scrim} role="presentation">
+    <div className={`fr-keyboard-overlay ${styles.scrim}`} role="presentation">
       <div
         ref={dialogRef}
         className={styles.sheet}
