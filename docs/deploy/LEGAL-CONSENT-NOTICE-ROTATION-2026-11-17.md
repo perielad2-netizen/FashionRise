@@ -1,6 +1,6 @@
 # Legal consent notice rotation — 2026-11-17
 
-**Status:** PR ready — **DO NOT DEPLOY** without PM approval.
+**Status:** **LIVE** on production 2026-11-17 — tip `4dc61d39` · Alembic **036** · FE `/var/www/fashionrise/releases/4dc61d39-legal-consent`. Native Codemagic rebuilds still pending separate authorize.
 
 ## What changed
 
