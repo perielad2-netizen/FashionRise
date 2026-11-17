@@ -7,7 +7,7 @@
 
 | Field | Value |
 | --- | --- |
-| PR | branch `cursor/web-android-tester-batch-77c6` @ **`9ad718c1`** (includes deleted-look fix; supersedes #418 tip) |
+| PR | **#419** → `main` @ **`0e99c85c`** (code tip **`9ad718c1`**; includes deleted-look fix from #418) |
 | Tip | BE+FE **`9ad718c1`** · FE `/var/www/fashionrise/releases/9ad718c1-android-tester` |
 | Change | Top Designs plural + one look/user + hide score≤0 + clickable look thumbs · Fitting Room camera back-button guard · Runway → FashionRise Social CTA · profile published-look modal (like/rate/comment after contests) · CompetitionStrip weekly login on Runway · deleted looks stay off feed/profile |
 | Verify | `/version.json` → `9ad718c1` · API `/health` + `/ready` ok |
