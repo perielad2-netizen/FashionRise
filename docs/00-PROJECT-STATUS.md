@@ -7,7 +7,7 @@
 
 | Field | Value |
 | --- | --- |
-| PR | branch `cursor/web-android-camera-back-loop-77c6` @ **`556348e9`** |
+| PR | **#423** → `main` @ **`ce5f2933`** (code tip **`556348e9`**) |
 | Tip | FE **`556348e9`** · `/var/www/fashionrise/releases/556348e9-camera-back` |
 | Root cause | Capacitor Back handler called `exitApp()` while CAMERA permission / capture was open → Activity finished mid `filePathCallback` → next Camera tap crashed (“keeps stopping” loop) |
 | Fix | Disable Capacitor back handler while picker open · never `exitApp` on root Back (`minimizeApp`) · clear guard on input change/cancel or real resume |
