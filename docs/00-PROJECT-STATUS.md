@@ -3,15 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## In progress — Magic results Mobbin + download toast + publish stale-client copy (2026-11-17 Asia/Jerusalem)
+## Deployed — Magic results Mobbin + download toast LIVE (2026-11-17 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-magic-results-mobbin-77c6` |
-| Trigger | Android QA: cramped dual Magic results · Download no toast · Runway publish “notice version is not current” |
-| Root cause (publish) | Capacitor embeds local `dist/` — old FE sends pre-`ed89d050` Runway consent while live BE expects `runway-share-2026-11-17` |
-| Fix | Mobile Magic hero (tabs switch Front/Back) · download success toast · clearer “refresh/update app” publish error · **native rebuild still required** for Android to pick up FE |
-| Refs | [Whering](https://mobbin.com/screens/75abb546-f64b-4dc2-a79d-c97db1670a7c) · [Grok Saved to Photos](https://mobbin.com/screens/b127a05d-4e3b-4edc-8809-b6324f2a66dd) · [ChatGPT Image saved](https://mobbin.com/screens/8aee54d8-0c90-4ffd-b506-7af392dafca9) |
+| PR | **#414** → `main` @ **`5744b290`** |
+| Tip | BE+FE **`5744b290`** · FE `/var/www/fashionrise/releases/5744b290-magic-results` |
+| Change | Mobile Magic Front/Back hero · download success toast · clearer stale-consent publish error |
+| Publish root cause | Android Capacitor embeds old `dist/`; BE expects `runway-share-2026-11-17` — **rebuild Android/iOS from `5744b290`+** to publish again |
+| Verify | `/version.json` → `5744b290` · API health ok |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/4dc61d39-legal-consent /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rewards | **OFF** |
 
 ## Deployed — Legal consent UX #411 LIVE (2026-11-17 Asia/Jerusalem)
 
@@ -267,7 +269,7 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-17 (**Magic results Mobbin + download toast in flight** · #411 LIVE `4dc61d39` · Alembic **036** · native rebuild still needed for consent · rewards **OFF**.)
+**Last updated:** 2026-11-17 (**#414 LIVE** tip `5744b290` · Magic hero + download toast · Alembic **036** · Android rebuild still needed for consent · rewards **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**. Legal consent upload vs publish standardization awaits PM deploy approval on `cursor/web-legal-consent-ux-77c6`.
 
