@@ -266,30 +266,37 @@ export function MagicLookPanel({
       <div className={styles.panel}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
+            <p className={styles.eyebrow}>
+              {tryOn ? 'Try On Person' : 'FashionRise Magic'}
+            </p>
             <h2>
               {phase === 'ready'
                 ? tryOn
-                  ? 'Try On Person'
+                  ? 'Your preview'
                   : 'Your Look'
-                : tryOn
-                  ? 'Try On Person'
-                  : 'Magic'}
+                : busy
+                  ? tryOn
+                    ? 'Creating preview'
+                    : 'Creating your look'
+                  : tryOn
+                    ? 'Try On Person'
+                    : 'Magic'}
             </h2>
             <p>
               {busy
                 ? dualActive
-                  ? 'Polishing Front and Back…'
+                  ? 'Polishing Front and Back together — stay on this screen or come back anytime.'
                   : tryOn
-                    ? 'Creating a photorealistic preview on your original photo…'
+                    ? 'Building a photorealistic preview on your original photo…'
                     : 'Turning your sketch into a finished fashion illustration…'
                 : phase === 'ready'
                   ? dualActive
-                    ? 'Both sides stay in Studio. These looks are private results for you.'
+                    ? 'Private Studio results — switch Front / Back, then download or share.'
                     : tryOn
                       ? structureRejected
                         ? 'Private review only — this preview is not accepted as a faithful try-on or My Look.'
-                        : 'Concept preview only — not a fit guarantee. Your photo and sketch stay private and unchanged.'
-                      : 'Your original sketch stays in Studio. This look is a private result for you.'
+                        : 'Concept preview only — not a fit guarantee. Your photo and sketch stay private.'
+                      : 'Private Studio result — your sketch stays unchanged.'
                   : tryOn
                     ? 'FashionRise Try On Person'
                     : 'FashionRise Magic'}
@@ -334,8 +341,12 @@ export function MagicLookPanel({
 
         <div className={styles.stage}>
           {busy ? (
-            <div className={styles.statusBox}>
-              <div className={styles.spinner} aria-hidden />
+            <div className={styles.statusBox} data-testid="magic-generating">
+              <div className={styles.generatingVisual} aria-hidden>
+                <span className={styles.pulseRing} />
+                <span className={styles.pulseRingDelayed} />
+                <div className={styles.spinner} />
+              </div>
               <strong>
                 {tryOn
                   ? // #178 — normal try-on never exposes provider/stage/cost text.
@@ -344,7 +355,7 @@ export function MagicLookPanel({
                       statusHint,
                     )
                     ? statusHint
-                    : 'Generating your try-on preview...'
+                    : 'Generating your try-on preview…'
                   : statusHint
                     ? statusHint
                     : phase === 'capturing'
@@ -352,10 +363,19 @@ export function MagicLookPanel({
                       : phase === 'submitting'
                         ? 'Starting Magic…'
                         : dualActive
-                          ? 'Creating your looks…'
+                          ? 'Creating Front & Back…'
                           : 'Creating your look…'}
               </strong>
-              <span>You can leave this open — we recover the same job if the network blips.</span>
+              <span className={styles.statusPill} data-testid="magic-status-pill">
+                {phase === 'capturing'
+                  ? 'Capturing'
+                  : phase === 'submitting'
+                    ? 'Queued'
+                    : dualActive
+                      ? 'Rendering both sides'
+                      : 'Rendering'}
+              </span>
+              <span>Hang tight — you can leave this open. We recover the same job if the network blips.</span>
             </div>
           ) : null}
 

@@ -14,9 +14,20 @@
     max(8px, env(safe-area-inset-bottom, 0px))
     max(8px, env(safe-area-inset-left, 0px));
   box-sizing: border-box;
-  background: rgba(8, 12, 22, 0.72);
-  backdrop-filter: blur(6px);
+  background: rgba(4, 6, 12, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   overflow: hidden;
+  animation: magicOverlayIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes magicOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Native iOS: sheet is edge-to-edge (no dark band under status bar).
@@ -45,14 +56,33 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 14px 14px 0;
-  border-radius: var(--fr-radius-lg, 18px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(165deg, #1a2438 0%, #10182a 100%);
-  box-shadow: var(--fr-shadow, 0 18px 48px rgba(0, 0, 0, 0.45));
-  color: #f4efe8;
+  padding: 16px 16px 0;
+  border-radius: 22px;
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  background:
+    radial-gradient(720px 280px at 12% -10%, rgba(214, 51, 132, 0.28), transparent 55%),
+    radial-gradient(520px 220px at 92% 8%, rgba(192, 132, 252, 0.12), transparent 50%),
+    linear-gradient(180deg, rgba(28, 18, 32, 0.98), rgba(10, 12, 22, 0.98));
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.5),
+    0 0 32px rgba(214, 51, 132, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--fr-text, #f5f0ea);
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
   overflow: hidden;
   box-sizing: border-box;
+  animation: magicCardIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes magicCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .header {
@@ -61,36 +91,56 @@
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
-  padding-bottom: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(244, 114, 182, 0.14);
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fr-pink-soft, #f472b6);
 }
 
 .titleBlock h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: clamp(1.45rem, 4.8vw, 1.85rem);
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: #fff;
 }
 
 .titleBlock p {
-  margin: 4px 0 0;
-  color: rgba(244, 239, 232, 0.72);
-  font-size: 0.85rem;
-  line-height: 1.35;
+  margin: 6px 0 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
 .close {
   width: 40px;
   height: 40px;
-  border: 0;
-  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
-  color: inherit;
+  color: rgba(226, 232, 240, 0.9);
   cursor: pointer;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
 }
 
 .close:hover {
   background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(244, 114, 182, 0.35);
 }
 
 .panelBody {
@@ -100,15 +150,21 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding-top: 12px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 
+/* Segmented Front/Back — Grok Ask/Imagine track + FashionRise pink active. */
 .dualTabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   flex-shrink: 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dualTab,
@@ -116,32 +172,41 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 2px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
 }
 
 .dualTabActive {
-  border-color: rgba(236, 72, 153, 0.45);
-  background: rgba(236, 72, 153, 0.12);
+  background: linear-gradient(135deg, rgba(214, 51, 132, 0.95), rgba(190, 24, 93, 0.92));
+  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.28);
+  color: #fff;
 }
 
 .dualTabLabel {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 
 .dualTabStatus {
-  font-size: 0.75rem;
-  opacity: 0.8;
+  font-size: 0.72rem;
+  opacity: 0.78;
+}
+
+.dualTabActive .dualTabStatus {
+  opacity: 0.92;
 }
 
 /* Mobile-first hero: full figure for the active Front/Back tab. */
@@ -164,6 +229,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .panel,
   .dualHero {
     animation: none;
   }
@@ -194,9 +261,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.28);
   overflow: hidden;
   color: inherit;
   font: inherit;
@@ -206,14 +273,19 @@
 }
 
 .dualPaneActive {
-  border-color: rgba(236, 72, 153, 0.35);
+  border-color: rgba(244, 114, 182, 0.45);
+  box-shadow: 0 0 0 1px rgba(214, 51, 132, 0.2);
 }
 
 .dualPaneHead {
   display: flex;
   justify-content: space-between;
-  padding: 6px 10px;
-  font-size: 0.75rem;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #f9a8d4;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -241,10 +313,10 @@
 
 .dualPaneError button {
   font: inherit;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: rgba(214, 51, 132, 0.18);
   color: inherit;
   cursor: pointer;
 }
@@ -257,12 +329,14 @@
   min-height: min(42dvh, 360px);
   height: min(58dvh, 640px);
   max-height: min(58dvh, 640px);
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 70% 50% at 30% 20%, rgba(236, 72, 153, 0.12), transparent 60%),
-    #0b1220;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+    radial-gradient(ellipse 80% 55% at 50% 18%, rgba(214, 51, 132, 0.18), transparent 62%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(192, 132, 252, 0.1), transparent 55%),
+    #080b14;
+  border: 1px solid rgba(244, 114, 182, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   display: block;
 }
 
@@ -284,7 +358,6 @@
   background: #f8f4f0;
 }
 
-
 .compareGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -301,20 +374,20 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.24);
   overflow: hidden;
 }
 
 .comparePane figcaption {
   padding: 6px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  color: rgba(244, 239, 232, 0.78);
+  color: #f9a8d4;
 }
 
 .comparePane img {
@@ -332,12 +405,11 @@
   }
 }
 
-
 .fidelityBanner {
   flex-shrink: 0;
   margin: 0;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(248, 113, 113, 0.45);
   background: rgba(127, 29, 29, 0.45);
   color: #fef2f2;
@@ -358,15 +430,145 @@
 }
 
 .statusBox {
-  padding: 28px 20px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 22px;
   text-align: center;
-  color: rgba(244, 239, 232, 0.88);
+  color: rgba(244, 239, 232, 0.92);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(214, 51, 132, 0.16), transparent 52%),
+    linear-gradient(180deg, rgba(8, 10, 18, 0.15), rgba(8, 10, 18, 0.55));
 }
 
 .statusBox strong {
   display: block;
-  margin-bottom: 8px;
-  font-size: 1.05rem;
+  margin: 0;
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: clamp(1.15rem, 3.6vw, 1.4rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.statusBox > span {
+  max-width: 22rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+/* Shop / Lapse Mobbin: compact status chip under the hero spinner. */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: linear-gradient(135deg, rgba(214, 51, 132, 0.28), rgba(190, 24, 93, 0.18));
+  box-shadow: 0 8px 20px rgba(214, 51, 132, 0.16);
+  color: #fce7f3 !important;
+  font-size: 0.78rem !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  max-width: none !important;
+}
+
+.statusPill::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f472b6;
+  box-shadow: 0 0 10px rgba(244, 114, 182, 0.9);
+  animation: magicDotPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes magicDotPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusPill::before {
+    animation: none;
+  }
+}
+
+.generatingVisual {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 6px;
+  display: grid;
+  place-items: center;
+}
+
+.pulseRing,
+.pulseRingDelayed {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  animation: magicPulse 2.2s ease-out infinite;
+}
+
+.pulseRingDelayed {
+  animation-delay: 0.7s;
+}
+
+@keyframes magicPulse {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid rgba(244, 114, 182, 0.22);
+  border-top-color: #f472b6;
+  border-right-color: #d63384;
+  animation: spin 0.85s linear infinite;
+  box-shadow: 0 0 24px rgba(214, 51, 132, 0.35);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulseRing,
+  .pulseRingDelayed,
+  .spinner {
+    animation: none;
+  }
+
+  .spinner {
+    border-top-color: #f472b6;
+  }
 }
 
 .errorText {
@@ -379,22 +581,6 @@
   line-height: 1.4;
   font-size: 0.9rem;
   -webkit-overflow-scrolling: touch;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  border: 3px solid rgba(236, 72, 153, 0.25);
-  border-top-color: #ec4899;
-  animation: spin 0.85s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .details {
@@ -412,12 +598,13 @@
   align-self: flex-start;
   border: 0;
   background: transparent;
-  color: rgba(244, 239, 232, 0.72);
+  color: var(--fr-pink-soft, #f472b6);
   font-size: 0.8rem;
+  font-weight: 600;
   padding: 0;
   cursor: pointer;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
 }
 
 .summary {
@@ -444,10 +631,10 @@
   position: sticky;
   bottom: 0;
   z-index: 2;
-  margin-top: 8px;
-  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(16, 24, 42, 0.92) 0%, #10182a 35%);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 10px;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(12, 10, 18, 0.2) 0%, rgba(12, 10, 18, 0.96) 28%);
+  border-top: 1px solid rgba(244, 114, 182, 0.14);
 }
 
 .downloadToastOk,
@@ -455,7 +642,7 @@
 .downloadToastError {
   flex: 1 1 100%;
   margin: 0;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 999px;
   font-size: 0.85rem;
   font-weight: 650;
@@ -502,18 +689,21 @@
 }
 
 .actions button {
-  min-height: 42px;
-  padding: 0 14px;
-  border-radius: 12px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
   font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
 }
 
 .actions button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(244, 114, 182, 0.28);
 }
 
 .actions button:disabled {
@@ -522,16 +712,17 @@
 }
 
 .primary {
-  background: linear-gradient(135deg, #ec4899, #db2777) !important;
+  background: linear-gradient(135deg, var(--fr-pink, #d63384), var(--fr-pink-soft, #f472b6)) !important;
   border-color: transparent !important;
   color: #fff !important;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(214, 51, 132, 0.28);
 }
 
 .error {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 14px;
   background: rgba(248, 113, 113, 0.12);
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #fecaca;
@@ -548,7 +739,7 @@
 
 @media (max-width: 820px) {
   .panel {
-    padding: 10px 10px 0;
+    padding: 12px 12px 0;
     width: 100%;
     max-height: min(
       calc(
@@ -560,7 +751,7 @@
           env(safe-area-inset-bottom, 0px) - 12px
       )
     );
-    border-radius: 14px;
+    border-radius: 18px;
   }
 
   :global(html.fr-native-shell) .panel {
@@ -601,34 +792,16 @@
     flex: 1 1 100%;
     order: -1;
   }
-
-  .dualTabs {
-    gap: 6px;
-  }
-
-  .dualTab,
-  .dualTabActive {
-    align-items: center;
-    text-align: center;
-    border-radius: 999px;
-    padding: 8px 12px;
-  }
-
-  .titleBlock h2 {
-    font-family: var(--fr-serif, "Playfair Display", Georgia, serif);
-    font-size: 1.35rem;
-    letter-spacing: 0.01em;
-  }
 }
 
 @media (max-width: 430px) {
   .titleBlock h2 {
-    font-size: 1.05rem;
+    font-size: 1.35rem;
   }
 
   .actions button {
     font-size: 0.85rem;
-    min-height: 40px;
+    min-height: 42px;
   }
 }
 
@@ -655,9 +828,13 @@
     padding: 16px 12px;
   }
 
+  .generatingVisual {
+    width: 64px;
+    height: 64px;
+  }
+
   .spinner {
     width: 28px;
     height: 28px;
-    margin-bottom: 10px;
   }
 }
