@@ -2,7 +2,10 @@ import { App } from '@capacitor/app'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { installNativeDeepLinkRouter } from './deepLinks'
-import { isNativeFilePickerOpen } from './filePickerGuard'
+import {
+  isNativeFilePickerOpen,
+  wasNativeFilePickerRecentlyOpen,
+} from './filePickerGuard'
 import {
   isNativeIosStarsShop,
   recoverPendingStarsPurchases,
@@ -34,11 +37,18 @@ export async function bootstrapNativeShell(): Promise<void> {
     /* ignore */
   }
   void App.addListener('backButton', ({ canGoBack }) => {
-    // Android: Back during CAMERA permission / capture Activity must not navigate
-    // or exit — that was crashing Fitting Room “Take photo”.
-    if (isNativeFilePickerOpen()) return
-    if (canGoBack) window.history.back()
-    else void App.exitApp()
+    // Android Fitting Room: Back during CAMERA permission / capture must not
+    // navigate or finish the Activity — that crashed and left a file-chooser loop.
+    if (isNativeFilePickerOpen() || wasNativeFilePickerRecentlyOpen()) return
+    if (canGoBack) {
+      window.history.back()
+      return
+    }
+    // Never App.exitApp() here — finishing MainActivity mid permission callback
+    // caused "FashionRise keeps stopping" on the next Camera tap.
+    void App.minimizeApp().catch(() => {
+      /* ignore */
+    })
   })
 
   // FashionRise-owned deep links + click guard (incl. Android Google OAuth handoff).

@@ -1,14 +1,35 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@capacitor/app', () => ({
+  App: {
+    toggleBackButtonHandler: vi.fn(async () => undefined),
+  },
+}))
+
+vi.mock('./platform', () => ({
+  isNativeShell: () => true,
+  nativePlatform: () => 'android',
+}))
+
+import { App } from '@capacitor/app'
 import {
-  armNativeFilePickerFocusClear,
+  __resetNativeFilePickerGuardForTests,
+  armNativeFilePickerForInput,
   isNativeFilePickerOpen,
   markNativeFilePickerClosed,
   markNativeFilePickerOpen,
+  wasNativeFilePickerRecentlyOpen,
 } from './filePickerGuard'
 
 describe('filePickerGuard', () => {
+  beforeEach(() => {
+    __resetNativeFilePickerGuardForTests()
+    vi.mocked(App.toggleBackButtonHandler).mockClear()
+  })
+
   afterEach(() => {
-    while (isNativeFilePickerOpen()) markNativeFilePickerClosed()
+    __resetNativeFilePickerGuardForTests()
+    vi.useRealTimers()
   })
 
   it('tracks open/close count for native camera/file pickers', () => {
@@ -19,16 +40,30 @@ describe('filePickerGuard', () => {
     markNativeFilePickerClosed()
     expect(isNativeFilePickerOpen()).toBe(true)
     markNativeFilePickerClosed()
-    expect(isNativeFilePickerOpen()).toBe(false)
+    // sticky window keeps open briefly
+    expect(isNativeFilePickerOpen()).toBe(true)
   })
 
-  it('clears after focus returns from the system sheet', () => {
+  it('disables Capacitor back handler while camera input is armed', async () => {
     vi.useFakeTimers()
+    const input = document.createElement('input')
+    input.type = 'file'
+    armNativeFilePickerForInput(input, { camera: true })
+    expect(App.toggleBackButtonHandler).toHaveBeenCalledWith({ enabled: false })
+    expect(isNativeFilePickerOpen()).toBe(true)
+
+    input.dispatchEvent(new Event('cancel'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(App.toggleBackButtonHandler).toHaveBeenCalledWith({ enabled: true })
+  })
+
+  it('keeps a recent grace after close so Back does not exitApp', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
     markNativeFilePickerOpen()
-    armNativeFilePickerFocusClear(10)
-    window.dispatchEvent(new Event('focus'))
-    vi.advanceTimersByTime(20)
-    expect(isNativeFilePickerOpen()).toBe(false)
-    vi.useRealTimers()
+    markNativeFilePickerClosed()
+    expect(wasNativeFilePickerRecentlyOpen()).toBe(true)
+    vi.setSystemTime(1_000_000 + 10_000)
+    expect(wasNativeFilePickerRecentlyOpen()).toBe(false)
   })
 })
