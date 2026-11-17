@@ -18,6 +18,7 @@ from app.models.user_follow import UserFollow
 from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
 from app.models.user_profile import UserProfile
 from app.schemas.gallery import (
+    ContentReportCreate,
     GalleryCommentCreate,
     GalleryCommentRead,
     GalleryCreate,
@@ -858,3 +859,108 @@ def remove_comment_like(db: Session, user: User, comment_id: uuid.UUID) -> Galle
     db.commit()
     db.refresh(row)
     return get_gallery_comment(db, row.id)
+
+
+_REPORT_REASON_LABELS = {
+    "sexual_content": "Nudity or sexual content",
+    "harassment": "Harassment, threats, or abusive language",
+    "hate": "Hate or discrimination",
+    "spam": "Spam or misleading",
+    "impersonation": "Impersonation or fake identity",
+    "other": "Something else",
+}
+
+
+def report_gallery_item(
+    db: Session, user: User, gallery_item_id: uuid.UUID, data: ContentReportCreate
+):
+    """Record a Social look report and best-effort email the moderation inbox."""
+    from app.models.content_report import ContentReport
+
+    item = get_gallery_item(db, gallery_item_id)
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t report your own look")
+
+    existing = db.scalar(
+        select(ContentReport).where(
+            ContentReport.reporter_id == user.id,
+            ContentReport.gallery_item_id == item.id,
+        )
+    )
+    if existing:
+        raise ConflictError("You already reported this look")
+
+    details = (data.details or "").strip() or None
+    if details and len(details) > 2000:
+        raise ValidationAppError("Details must be 2000 characters or fewer")
+
+    row = ContentReport(
+        reporter_id=user.id,
+        gallery_item_id=item.id,
+        reported_user_id=item.user_id,
+        reason=data.reason,
+        details=details,
+        status="open",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    _notify_content_report(db, reporter=user, item=item, report=row)
+    return row
+
+
+def _notify_content_report(
+    db: Session, *, reporter: User, item: GalleryItem, report
+) -> None:
+    """Best-effort moderation email — never fails the report submission."""
+    import logging
+
+    from app.core.config import get_settings
+    from app.services import email_delivery
+
+    _log = logging.getLogger(__name__)
+    settings = get_settings()
+    to_email = (settings.content_report_notify_email or "").strip()
+    if not to_email:
+        _log.warning("content_report_skipped_notify reason=no_notify_email report_id=%s", report.id)
+        return
+
+    reported = db.get(User, item.user_id)
+    reason_label = _REPORT_REASON_LABELS.get(report.reason, report.reason)
+    subject = f"[FashionRise] Report: {reason_label}"
+    body = "\n".join(
+        [
+            "A FashionRise Social look was reported.",
+            "",
+            f"Report id: {report.id}",
+            f"Reason: {reason_label} ({report.reason})",
+            f"Details: {report.details or '(none)'}",
+            "",
+            f"Look id: {item.id}",
+            f"Look title: {item.title or '(untitled)'}",
+            f"Look author: @{(reported.username if reported else '?')} ({item.user_id})",
+            f"Reporter: @{reporter.username} ({reporter.id}) <{reporter.email}>",
+            f"Submitted (UTC): {report.created_at}",
+            "",
+            "Review in the database (content_reports) or hide the look via moderation_status.",
+        ]
+    )
+    try:
+        email_delivery.send_email(
+            to_email=to_email,
+            subject=subject,
+            body_text=body,
+            meta={
+                "kind": "content_report",
+                "report_id": str(report.id),
+                "gallery_item_id": str(item.id),
+                "reason": report.reason,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 — report already persisted
+        _log.warning(
+            "content_report_email_failed report_id=%s err=%s",
+            report.id,
+            type(exc).__name__,
+        )

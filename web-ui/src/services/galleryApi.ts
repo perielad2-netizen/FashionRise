@@ -164,6 +164,38 @@ export async function unlikeGalleryComment(commentId: string): Promise<void> {
   })
 }
 
+/** FashionRise Social report reasons (server CHECK + FE sheet). */
+export type ContentReportReason =
+  | 'sexual_content'
+  | 'harassment'
+  | 'hate'
+  | 'spam'
+  | 'impersonation'
+  | 'other'
+
+export type ContentReport = {
+  id: string
+  gallery_item_id: string
+  reported_user_id: string
+  reason: ContentReportReason
+  status: string
+  created_at: string
+}
+
+/** Report a Social look for moderation review (auth required). */
+export async function reportGalleryItem(
+  id: string,
+  input: { reason: ContentReportReason; details?: string },
+): Promise<ContentReport> {
+  return apiRequest<ContentReport>(`/gallery/${encodeURIComponent(id)}/report`, {
+    method: 'POST',
+    body: {
+      reason: input.reason,
+      details: input.details?.trim() || undefined,
+    },
+  })
+}
+
 /** Authenticated Runway thumbnail bytes for a published gallery item. */
 export async function fetchGalleryImageBlob(
   galleryItemId: string,

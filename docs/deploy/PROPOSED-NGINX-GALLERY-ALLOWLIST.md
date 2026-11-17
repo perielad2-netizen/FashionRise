@@ -32,6 +32,12 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    # FashionRise Social — report look / designer (moderation inbox email)
+    location ~ "^/api/v1/gallery/[0-9a-fA-F-]{36}/report$" {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/gallery/[0-9a-fA-F-]{36}/image$" {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
