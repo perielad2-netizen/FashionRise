@@ -38,6 +38,12 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    # Signed email links: view / keep / discard reported looks (no auth cookie)
+    location ~ "^/api/v1/moderation/reports/[0-9a-fA-F-]{36}/(view|image|keep|discard)$" {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/gallery/[0-9a-fA-F-]{36}/image$" {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;

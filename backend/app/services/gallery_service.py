@@ -917,6 +917,7 @@ def _notify_content_report(
     import logging
 
     from app.core.config import get_settings
+    from app.services import content_report_moderation as crm
     from app.services import email_delivery
 
     _log = logging.getLogger(__name__)
@@ -928,6 +929,15 @@ def _notify_content_report(
 
     reported = db.get(User, item.user_id)
     reason_label = _REPORT_REASON_LABELS.get(report.reason, report.reason)
+    view_url = crm.build_moderation_url(
+        report_id=report.id, gallery_item_id=item.id, action="view"
+    )
+    keep_url = crm.build_moderation_url(
+        report_id=report.id, gallery_item_id=item.id, action="keep"
+    )
+    discard_url = crm.build_moderation_url(
+        report_id=report.id, gallery_item_id=item.id, action="discard"
+    )
     subject = f"[FashionRise] Report: {reason_label}"
     body = "\n".join(
         [
@@ -943,7 +953,19 @@ def _notify_content_report(
             f"Reporter: @{reporter.username} ({reporter.id}) <{reporter.email}>",
             f"Submitted (UTC): {report.created_at}",
             "",
-            "Review in the database (content_reports) or hide the look via moderation_status.",
+            "The look is only hidden from the reporter’s feed until you decide.",
+            "Nothing is deleted until you choose Discard.",
+            "",
+            "View the look:",
+            view_url,
+            "",
+            "Keep design (it's OK):",
+            keep_url,
+            "",
+            "Discard design (real abuse — hide from Social, keep files):",
+            discard_url,
+            "",
+            "Links expire in 14 days.",
         ]
     )
     try:

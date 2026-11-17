@@ -7,14 +7,14 @@
 
 | Field | Value |
 | --- | --- |
-| PR | **#425** · branch `cursor/web-social-report-77c6` · tip **`ada9adf`** |
-| Tip | FE **`ada9adf`** · `/var/www/fashionrise/releases/ada9adf-social-report` · BE src detached at `ada9adf` · Alembic **037** |
-| Change | FashionRise Social **Report** (flag on immersive + browse cards) → reasons → thank you; look hidden for reporter |
-| API | `POST /api/v1/gallery/{id}/report` · `content_reports` · email `CONTENT_REPORT_NOTIFY_EMAIL` → Fashionriseapp@gmail.com |
-| Reasons | sexual_content · harassment · hate · spam · impersonation · other |
-| Nginx | `…/gallery/{uuid}/report` POST allowlisted |
-| Verify | `/version.json` → `ada9adf` · report sheet on others’ looks |
-| Not yet | Block/mute · admin review UI · auto-hide for all viewers |
+| PR | **#425** · branch `cursor/web-social-report-77c6` |
+| Tip | FE **`ada9adf`** · BE tip with signed moderation links (see latest commit on branch) · Alembic **037** |
+| Change | FashionRise Social **Report** → reasons → thank you; look hidden from reporter only (not deleted) |
+| Email | View look · **Keep design (OK)** · **Discard design (abuse)** — signed `/api/v1/moderation/reports/{id}/…` links (14d TTL) |
+| Discard | Sets `moderation_status=rejected` (hidden from all feeds); **does not delete** gallery row/images |
+| Keep | Marks report `dismissed`; look stays `ok` |
+| Nginx | gallery report POST + moderation `(view\|image\|keep\|discard)` GET |
+| Not yet | Block/mute · admin inbox UI |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/556348e9-camera-back /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Android camera Back crash-loop fix (2026-11-17 Asia/Jerusalem)

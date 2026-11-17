@@ -11,6 +11,7 @@ from app.api.v1.routes import (
     gallery,
     looks,
     materials,
+    moderation,
     palettes,
     personal_croquis,
     profiles,
@@ -32,6 +33,7 @@ api_router.include_router(materials.router, prefix="/materials", tags=["material
 api_router.include_router(templates.router, prefix="/templates", tags=["templates"])
 api_router.include_router(palettes.router, prefix="/palettes", tags=["palettes"])
 api_router.include_router(gallery.router, prefix="/gallery", tags=["gallery"])
+api_router.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 api_router.include_router(ratings.router, prefix="/ratings", tags=["ratings"])
 api_router.include_router(
     competitions.router, prefix="/competitions", tags=["competitions"]

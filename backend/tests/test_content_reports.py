@@ -65,6 +65,11 @@ def test_report_look_persists_and_emails_moderation_inbox(
     assert captured[0].to_email == "mod@fashionrise.test"
     assert "sexual" in captured[0].subject.lower() or "Nudity" in captured[0].subject
     assert look_id in captured[0].body_text
+    assert "/api/v1/moderation/reports/" in captured[0].body_text
+    assert "/view?t=" in captured[0].body_text
+    assert "/keep?t=" in captured[0].body_text
+    assert "/discard?t=" in captured[0].body_text
+    assert "Nothing is deleted until you choose Discard" in captured[0].body_text
 
     dup = client.post(
         f"/api/v1/gallery/{look_id}/report",
@@ -72,6 +77,88 @@ def test_report_look_persists_and_emails_moderation_inbox(
         json={"reason": "spam"},
     )
     assert dup.status_code == 409
+
+
+def _report_and_links(client, db_session, monkeypatch):
+    monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("CONTENT_REPORT_NOTIFY_EMAIL", "mod@fashionrise.test")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    email_delivery.clear_captured_emails()
+
+    viewer = register_with_invite(client, db_session, "rpt_mod_v@example.com", "rptModV")
+    author = register_with_invite(client, db_session, "rpt_mod_a@example.com", "rptModA")
+    look_id = _publish(client, db_session, author, "moderation look")
+    res = client.post(
+        f"/api/v1/gallery/{look_id}/report",
+        headers=_auth(viewer),
+        json={"reason": "harassment"},
+    )
+    assert res.status_code == 201, res.text
+    report_id = res.json()["id"]
+    body = email_delivery.captured_emails()[0].body_text
+    links = {}
+    for action in ("view", "keep", "discard"):
+        marker = f"/api/v1/moderation/reports/{report_id}/{action}?t="
+        assert marker in body
+        start = body.index(marker)
+        end = body.find("\n", start)
+        links[action] = body[start:end].strip() if end != -1 else body[start:].strip()
+        # Email body stores absolute URLs; TestClient needs path+query.
+        if links[action].startswith("http"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(links[action])
+            links[action] = parsed.path + ("?" + parsed.query if parsed.query else "")
+    return look_id, report_id, links
+
+
+def test_moderation_keep_leaves_look_public(client, db_session, monkeypatch):
+    from app.models.gallery_item import GalleryItem
+
+    look_id, report_id, links = _report_and_links(client, db_session, monkeypatch)
+    view = client.get(links["view"])
+    assert view.status_code == 200
+    assert b"Keep design" in view.content
+    assert b"Discard design" in view.content
+
+    keep = client.get(links["keep"])
+    assert keep.status_code == 200
+    assert b"Kept" in keep.content
+
+    report = db_session.get(ContentReport, uuid.UUID(report_id))
+    item = db_session.get(GalleryItem, uuid.UUID(look_id))
+    assert report is not None and report.status == "dismissed"
+    assert item is not None and item.moderation_status == "ok"
+    # Look still listed on public gallery.
+    feed = client.get("/api/v1/gallery?sort=newest&limit=50")
+    assert feed.status_code == 200
+    assert look_id in [row["id"] for row in feed.json()]
+
+
+def test_moderation_discard_hides_without_deleting(client, db_session, monkeypatch):
+    from app.models.gallery_item import GalleryItem
+
+    look_id, report_id, links = _report_and_links(client, db_session, monkeypatch)
+    discard = client.get(links["discard"])
+    assert discard.status_code == 200
+    assert b"Discarded" in discard.content
+    assert b"not" in discard.content.lower()
+
+    report = db_session.get(ContentReport, uuid.UUID(report_id))
+    item = db_session.get(GalleryItem, uuid.UUID(look_id))
+    assert report is not None and report.status == "actioned"
+    assert item is not None
+    assert item.moderation_status == "rejected"
+    # Row still exists — soft hide only.
+    assert db_session.get(GalleryItem, uuid.UUID(look_id)) is not None
+
+    feed = client.get("/api/v1/gallery?sort=newest&limit=50")
+    assert feed.status_code == 200
+    assert look_id not in [row["id"] for row in feed.json()]
 
 
 def test_cannot_report_own_look(client, db_session, monkeypatch):
