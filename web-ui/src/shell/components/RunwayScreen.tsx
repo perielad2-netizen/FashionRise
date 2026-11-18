@@ -2193,15 +2193,16 @@ function RunwayCard({
         <button
           type="button"
           className={styles.tryOnBtn}
-          aria-label="Try on me in Fitting Room"
+          aria-label={busy === 'tryon' ? 'Opening Fitting Room' : 'Try on me in Fitting Room'}
           data-testid={`runway-try-on-${item.id}`}
           disabled={busy === 'tryon'}
           onClick={() => void onTryOnMe()}
         >
           <Shirt size={immersive ? 24 : 12} aria-hidden />
-          <span className={immersive ? styles.actionCount : undefined}>
-            {busy === 'tryon' ? '…' : immersive ? 'Try on' : 'Try on me'}
-          </span>
+          {/* Immersive feed: icon only in the action rail (no duplicate text pill). */}
+          {!immersive ? (
+            <span>{busy === 'tryon' ? '…' : 'Try on me'}</span>
+          ) : null}
         </button>
       ) : null}
       {!isOwn && viewerId ? (
@@ -2293,18 +2294,6 @@ function RunwayCard({
               </div>
               {item.title?.trim() ? (
                 <p className={styles.immersiveCaption}>{item.title.trim()}</p>
-              ) : null}
-              {canTryOn ? (
-                <button
-                  type="button"
-                  className={styles.tryOnPill}
-                  data-testid={`runway-try-on-pill-${item.id}`}
-                  disabled={busy === 'tryon'}
-                  onClick={() => void onTryOnMe()}
-                >
-                  <Shirt size={15} aria-hidden />
-                  {busy === 'tryon' ? 'Opening…' : 'Try on me'}
-                </button>
               ) : null}
               {actionError && !commentsOpen ? (
                 <p className={styles.cardError} role="alert">

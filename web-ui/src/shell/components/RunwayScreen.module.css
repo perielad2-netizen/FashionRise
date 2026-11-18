@@ -475,6 +475,7 @@
   color: #fecaca;
 }
 
+/* Reserved: immersive feed used a text "Try on me" pill; removed — rail icon only. */
 .tryOnPill {
   display: inline-flex;
   align-items: center;

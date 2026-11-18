@@ -1104,8 +1104,8 @@ describe('RunwayScreen', () => {
         onOpenFittingRoom={onOpenFittingRoom}
       />,
     )
-    const pill = await screen.findByTestId('runway-try-on-pill-tryon-1')
-    fireEvent.click(pill)
+    const tryOn = await screen.findByTestId('runway-try-on-tryon-1')
+    fireEvent.click(tryOn)
     await waitFor(() => expect(fetchGalleryImageBlob).toHaveBeenCalledWith('tryon-1'))
     await waitFor(() => expect(blobToFittingRoomDataUrl).toHaveBeenCalled())
     await waitFor(() =>
