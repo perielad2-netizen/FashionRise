@@ -108,6 +108,10 @@ workflows:
             grep -E 'CODE_SIGN_|PROVISIONING_PROFILE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_ENTITLEMENTS' || true
           echo "=== Release entitlements ==="
           cat "$CM_BUILD_DIR/web-ui/ios/App/App/AppRelease.entitlements" || true
+          # Fail closed before a long archive when FashionRise_AppStore_Distribution
+          # (or any App Store profile) lacks Push / Associated Domains.
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-assert-ios-appstore-profile.sh"
+          "$CM_BUILD_DIR/scripts/codemagic-assert-ios-appstore-profile.sh" "$BUNDLE_ID"
 
       - name: Set build number
         script: |

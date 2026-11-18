@@ -64,6 +64,25 @@ Both include Associated Domains: `applinks:fashionrise.app`, `applinks:www.fashi
 
 Static repo checks do **not** replace inspecting the Codemagic-signed IPA; do that on the next authorized native build.
 
+### Codemagic archive exit 65 — stale App Store profile
+
+If `fashionrise-ios-app-store` fails archive with:
+
+```text
+Provisioning profile "FashionRise_AppStore_Distribution" doesn't include the Associated Domains capability.
+Provisioning profile "FashionRise_AppStore_Distribution" doesn't include the Push Notifications capability.
+Provisioning profile "…" doesn't include the aps-environment and com.apple.developer.associated-domains entitlements.
+```
+
+this is **not** a CocoaPods / Xcode script warning. The installed distribution profile was created (or cached) **before** those App ID capabilities were enabled. Repo entitlements are correct; regenerate signing:
+
+1. [Apple Developer → Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `app.fashionrise.studio` → enable **Push Notifications** + **Associated Domains** → Save.
+2. [Profiles](https://developer.apple.com/account/resources/profiles/list) → App Store profile for that App ID (often `FashionRise_AppStore_Distribution`) → **Edit → Generate** (or delete + create a new App Store profile).
+3. Codemagic → **Code signing identities** → refresh/fetch App Store profiles for `app.fashionrise.studio` (remove any stale uploaded copy of the old profile).
+4. Re-run workflow **fashionrise-ios-app-store** on `main`.
+
+Codemagic preflight: `scripts/codemagic-assert-ios-appstore-profile.sh` runs after `use-profiles` and fails closed with the same checklist when the profile still lacks Push / Associated Domains.
+
 ## Security rules
 
 - Never put access/refresh/password-reset/OAuth tokens in push payloads or tap URLs.
