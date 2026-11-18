@@ -19,6 +19,35 @@ vi.mock('@/shell/components/StarsShopModal', () => ({
   StarsShopModal: () => null,
 }))
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: { id: 'u1', username: 'peri' },
+    refreshUser: vi.fn(),
+  }),
+}))
+
+vi.mock('@/services/profilesApi', () => ({
+  getMyProfile: vi.fn(async () => ({
+    id: 'p1',
+    user_id: 'u1',
+    display_name: 'Peri',
+    bio: null,
+    avatar_url: null,
+    cover_url: null,
+    style_tags: [],
+    published_count: 0,
+    followers_count: 0,
+    likes_received_count: 0,
+    rating_average: null,
+    rating_count: 0,
+    reputation_score: 0,
+    reputation_tier: 'new',
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+  })),
+  profileAvatarSrc: () => null,
+}))
+
 import { GlobalHeader } from './GlobalHeader'
 
 describe('GlobalHeader settings gear (V2-0006)', () => {

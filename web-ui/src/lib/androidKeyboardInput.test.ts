@@ -3,6 +3,7 @@ import {
   isEditableElement,
   onAndroidEditableFocus,
   scrollEditableIntoView,
+  shouldIgnoreOverlayDismiss,
 } from '@/lib/androidKeyboardInput'
 
 describe('androidKeyboardInput', () => {
@@ -47,5 +48,17 @@ describe('androidKeyboardInput', () => {
     expect(scroll).not.toHaveBeenCalled()
     vi.advanceTimersByTime(50)
     expect(scroll).toHaveBeenCalled()
+  })
+
+  it('ignores overlay dismiss while keyboard flag is set or editable focused', () => {
+    expect(shouldIgnoreOverlayDismiss()).toBe(false)
+    document.documentElement.setAttribute('data-fr-keyboard', '1')
+    expect(shouldIgnoreOverlayDismiss()).toBe(true)
+    document.documentElement.removeAttribute('data-fr-keyboard')
+
+    const area = document.createElement('textarea')
+    document.body.appendChild(area)
+    area.focus()
+    expect(shouldIgnoreOverlayDismiss()).toBe(true)
   })
 })

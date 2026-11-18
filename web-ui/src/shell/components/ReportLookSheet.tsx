@@ -1,7 +1,10 @@
 import { useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, ChevronLeft, ChevronRight, Flag, Send, X } from 'lucide-react'
-import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
+import {
+  onAndroidEditableFocus,
+  shouldIgnoreOverlayDismiss,
+} from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import {
   reportGalleryItem,
@@ -124,7 +127,10 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
       className={`fr-keyboard-overlay ${styles.chatScrim}`}
       role="presentation"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target !== event.currentTarget) return
+        // Focus → keyboard CSS reflow can turn the same tap into a scrim click.
+        if (shouldIgnoreOverlayDismiss()) return
+        onClose()
       }}
     >
       <div
@@ -133,6 +139,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="report-look-sheet"
+        onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.chatHead}>
           <div className={styles.chatHeadText}>

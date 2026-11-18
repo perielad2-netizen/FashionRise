@@ -11,6 +11,7 @@ import {
   ThumbsUp,
   Trophy,
   Users,
+  UserCheck,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
@@ -19,12 +20,25 @@ import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import {
+  applyFetchedFollowStatus,
+  followStatusCacheKey,
+  peekFollowStatus,
+  publishFollowStatus,
+  subscribeFollowStatus,
+} from '@/lib/followStatusStore'
+import {
   fetchCategoryBoard,
   fetchCompetitionStatus,
   type CategoryBoard,
   type CategoryBoardEntry,
 } from '@/services/competitionsApi'
-import { profileAvatarSrc } from '@/services/profilesApi'
+import { useAuth } from '@/services/auth/AuthProvider'
+import {
+  followCreator,
+  getFollowStatus,
+  profileAvatarSrc,
+  unfollowCreator,
+} from '@/services/profilesApi'
 import { CompetitionStrip } from './CompetitionStrip'
 import styles from './RunwayBoardScreen.module.css'
 
@@ -639,12 +653,70 @@ function RankRow({
   rank: number
   showRank: boolean
 }) {
+  const { user } = useAuth()
+  const viewerId = user?.id ?? null
+  const isOwn = Boolean(viewerId && viewerId === item.user_id)
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
   const lead = showRank && rank === 1
   const title = item.title?.trim() || 'Untitled look'
   const designer = item.username?.trim() ? `@${item.username.trim()}` : 'Designer'
   const metal = showRank ? podiumClass(rank) : ''
+  const [following, setFollowing] = useState(false)
+  const [followKnown, setFollowKnown] = useState(false)
+  const [followBusy, setFollowBusy] = useState(false)
+
+  useEffect(() => {
+    if (!viewerId || isOwn) {
+      setFollowKnown(false)
+      setFollowing(false)
+      return
+    }
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
+    const cached = peekFollowStatus(cacheKey)
+    if (cached !== undefined) {
+      setFollowing(cached)
+      setFollowKnown(true)
+    }
+    const unsubscribe = subscribeFollowStatus(cacheKey, (next) => {
+      setFollowing(next)
+      setFollowKnown(true)
+    })
+    if (cached !== undefined) return unsubscribe
+
+    let cancelled = false
+    void getFollowStatus(item.user_id)
+      .then((row) => {
+        if (cancelled) return
+        const next = applyFetchedFollowStatus(cacheKey, Boolean(row.following))
+        setFollowing(next)
+        setFollowKnown(true)
+      })
+      .catch(() => {
+        if (!cancelled) setFollowKnown(true)
+      })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [isOwn, item.user_id, viewerId])
+
+  const onToggleFollow = async () => {
+    if (!viewerId || isOwn || followBusy) return
+    const prev = following
+    const cacheKey = followStatusCacheKey(viewerId, item.user_id)
+    setFollowBusy(true)
+    publishFollowStatus(cacheKey, !prev)
+    try {
+      if (prev) await unfollowCreator(item.user_id)
+      else await followCreator(item.user_id)
+      setFollowKnown(true)
+    } catch {
+      publishFollowStatus(cacheKey, prev)
+    } finally {
+      setFollowBusy(false)
+    }
+  }
 
   return (
     <li className={lead ? `${styles.rankCard} ${styles.rankCardLead}` : styles.rankCard}>
@@ -658,7 +730,22 @@ function RankRow({
       </div>
       <div className={styles.rankBody}>
         <p className={styles.rankTitle}>{title}</p>
-        <p className={styles.rankDesigner}>{designer}</p>
+        <div className={styles.rankDesignerRow}>
+          <p className={styles.rankDesigner}>{designer}</p>
+          {viewerId && !isOwn ? (
+            <button
+              type="button"
+              className={following ? styles.rankFollowOn : styles.rankFollow}
+              data-testid={`runway-rank-follow-${item.user_id}`}
+              disabled={followBusy || !followKnown}
+              aria-pressed={following}
+              onClick={() => void onToggleFollow()}
+            >
+              {following ? <UserCheck size={14} aria-hidden /> : <UserPlus size={14} aria-hidden />}
+              {following ? 'Following' : 'Follow'}
+            </button>
+          ) : null}
+        </div>
         <div className={styles.rankStats}>
           <span>
             Likes <strong>{formatCount(item.likes_count ?? 0)}</strong>

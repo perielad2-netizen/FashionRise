@@ -52,8 +52,18 @@ vi.mock('@/services/competitionsApi', () => ({
   fetchCategoryBoard: (...args: unknown[]) => fetchCategoryBoard(...args),
 }))
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: { id: 'viewer-1', username: 'viewer' },
+    refreshUser: vi.fn(),
+  }),
+}))
+
 vi.mock('@/services/profilesApi', () => ({
   profileAvatarSrc: () => null,
+  getFollowStatus: vi.fn(async () => ({ user_id: 'u1', following: false })),
+  followCreator: vi.fn(async () => undefined),
+  unfollowCreator: vi.fn(async () => undefined),
 }))
 
 function item(id: string, title: string): Record<string, unknown> {
@@ -111,6 +121,12 @@ describe('RunwayBoardScreen', () => {
         },
       ],
     })
+  })
+
+  it('offers Follow on Top ranking designers', async () => {
+    renderBoard()
+    expect(await screen.findByText('Pink gown')).toBeInTheDocument()
+    expect(await screen.findByTestId('runway-rank-follow-u1')).toHaveTextContent(/Follow/i)
   })
 
   it('opens a weekly category profile board on click', async () => {

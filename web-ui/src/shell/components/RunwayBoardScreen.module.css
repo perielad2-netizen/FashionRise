@@ -793,10 +793,51 @@
   white-space: nowrap;
 }
 
+.rankDesignerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .rankDesigner {
   margin: 0;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.62);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rankFollow,
+.rankFollowOn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.55);
+  background: rgba(244, 114, 182, 0.14);
+  color: #fce7f3;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rankFollowOn {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.rankFollow:disabled,
+.rankFollowOn:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .rankStats {

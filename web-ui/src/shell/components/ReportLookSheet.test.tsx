@@ -80,4 +80,20 @@ describe('ReportLookSheet', () => {
     })
     expect(screen.getByTestId('report-send')).not.toBeDisabled()
   })
+
+  it('does not close the sheet when details focus triggers keyboard reflow click', () => {
+    const onClose = vi.fn()
+    render(
+      <ReportLookSheet item={item} open onClose={onClose} onReported={() => undefined} />,
+    )
+    fireEvent.click(screen.getByTestId('report-reason-harassment'))
+    const details = screen.getByTestId('report-details')
+    fireEvent.focus(details)
+    document.documentElement.setAttribute('data-fr-keyboard', '1')
+    const scrim = details.closest('[role="presentation"]')
+    expect(scrim).toBeTruthy()
+    fireEvent.click(scrim!)
+    expect(onClose).not.toHaveBeenCalled()
+    document.documentElement.removeAttribute('data-fr-keyboard')
+  })
 })

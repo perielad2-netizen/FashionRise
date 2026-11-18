@@ -15,8 +15,12 @@ import {
   type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
-import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
+import {
+  onAndroidEditableFocus,
+  shouldIgnoreOverlayDismiss,
+} from '@/lib/androidKeyboardInput'
 import { syncFollowStatus } from '@/lib/followStatusStore'
+import { publishMyProfileAvatar } from '@/lib/myProfileAvatarStore'
 import {
   followCreator,
   getFollowStatus,
@@ -133,6 +137,9 @@ export function FriendProfilePanel({
         const following = Boolean(follow?.following)
         if (viewerId && viewerId !== friend.user_id) {
           syncFollowStatus(viewerId, friend.user_id, following)
+        }
+        if (viewerId && viewerId === friend.user_id && profile) {
+          publishMyProfileAvatar(friend.user_id, profile.avatar_url)
         }
         setState({
           status: 'ready',
@@ -273,6 +280,7 @@ export function FriendProfilePanel({
       setState((prev) =>
         prev.status === 'ready' ? { ...prev, profile: { ...prev.profile!, ...next } } : prev,
       )
+      publishMyProfileAvatar(next.user_id || friend.user_id, next.avatar_url)
       setCropFile(null)
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Could not update photo')
@@ -561,8 +569,11 @@ export function FriendProfilePanel({
           className={`fr-keyboard-overlay ${styles.sheetBackdrop}`}
           role="presentation"
           data-testid="designer-profile-editor"
-          onClick={() => {
-            if (!editBusy) setEditing(false)
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) return
+            if (editBusy) return
+            if (shouldIgnoreOverlayDismiss()) return
+            setEditing(false)
           }}
         >
           <div
@@ -627,6 +638,7 @@ export function FriendProfilePanel({
                   disabled={editBusy}
                   data-testid="designer-edit-bio"
                   onChange={(e) => setEditBio(e.target.value)}
+                  onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
                 />
               </label>
               <div className={styles.sheetActions}>
