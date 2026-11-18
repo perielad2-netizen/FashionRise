@@ -1103,9 +1103,9 @@ describe('RunwayScreen', () => {
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    expect(await screen.findByText(/Deleted look reel/i)).toBeInTheDocument()
-
+    // Media 404 can win the race before the caption paints — assert the card is gone.
     await waitFor(() => {
+      expect(screen.queryByTestId('runway-double-tap-orphan-1')).not.toBeInTheDocument()
       expect(screen.queryByText(/Deleted look reel/i)).not.toBeInTheDocument()
       expect(screen.queryByText(/@NoaPeri/i)).not.toBeInTheDocument()
     })
@@ -1157,5 +1157,57 @@ describe('RunwayScreen', () => {
       ),
     )
     expect(onOpenFittingRoom).toHaveBeenCalled()
+  })
+
+  it('double-taps immersive media to like a look with a heart burst', async () => {
+    likeGalleryItem.mockResolvedValue(undefined)
+    getGalleryItem.mockResolvedValue({
+      ...circleItem,
+      id: 'dbl-1',
+      title: 'Double tap look',
+      username: 'atelier_a',
+      liked_by_me: true,
+      likes_count: 4,
+    })
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'dbl-1',
+            title: 'Double tap look',
+            username: 'atelier_a',
+            likes_count: 3,
+            liked_by_me: false,
+          },
+        ]
+      }
+      if (opts?.sort === 'circle') return []
+      if (opts?.sort === 'following') return []
+      if (opts?.sort === 'top10') return []
+      return []
+    })
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const media = await screen.findByTestId('runway-double-tap-dbl-1')
+    const tap = (x = 120, y = 240) => {
+      fireEvent.pointerDown(media, { clientX: x, clientY: y, pointerType: 'touch', button: 0 })
+      fireEvent.pointerUp(media, { clientX: x, clientY: y, pointerType: 'touch', button: 0 })
+    }
+    tap()
+    tap()
+
+    expect(await screen.findByTestId('runway-like-burst-dbl-1')).toBeInTheDocument()
+    await waitFor(() => expect(likeGalleryItem).toHaveBeenCalledWith('dbl-1'))
+    expect(unlikeGalleryItem).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: /Unlike look/i })).toBeInTheDocument()
+
+    // Second double-tap while already liked: burst again, no unlike.
+    likeGalleryItem.mockClear()
+    tap(130, 250)
+    tap(132, 252)
+    expect(await screen.findByTestId('runway-like-burst-dbl-1')).toBeInTheDocument()
+    expect(likeGalleryItem).not.toHaveBeenCalled()
+    expect(unlikeGalleryItem).not.toHaveBeenCalled()
   })
 })
