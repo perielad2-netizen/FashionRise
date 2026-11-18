@@ -322,14 +322,23 @@ def enqueue_fitting_room_try_on(
     for cat in piece_cats:
         if cat != "auto":
             hints.append(f"garment_category:{cat}")
+    look_color_lock: dict[str, Any] | None = None
     if look_plate:
+        look_color_lock = sample_look_garment_panel_colors(garment_png)
         hints.extend(
             [
                 "fashionrise_look_plate",
                 "Ignore illustrated model body/skin in garment plate; clothing only.",
-                "Keep exact multi-tone colors (bodice vs skirt); do not lighten panels.",
+                "Keep exact multi-tone colors (bodice vs skirt); do not unify or wash panels.",
             ]
         )
+        if look_color_lock:
+            hints.append(
+                "COLOR LOCK: bodice "
+                f"{look_color_lock.get('bodice_hex')} vs skirt "
+                f"{look_color_lock.get('skirt_hex')} "
+                f"({look_color_lock.get('relation')}); never average into one green."
+            )
     if len(piece_bytes) > 1:
         hints.append(
             "Apply all clothing pieces from the garment collage onto the person photo "
@@ -352,6 +361,7 @@ def enqueue_fitting_room_try_on(
             "outfit_piece_count": len(piece_bytes),
             "garment_sources": piece_sources,
             "garment_source": "fashionrise_look" if look_plate else None,
+            "look_color_lock": look_color_lock,
             "combo_warning": combo_warning,
             "stars_cost": fitting_room_cost(),
             "design_hints": hints,
@@ -434,26 +444,233 @@ FITTING_ROOM_MAX_PROMPT = (
 )
 
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
+# Keep short: FASHN Max truncates prompts at 1000 chars (color lock appends below).
 FITTING_ROOM_LOOK_PLATE_PROMPT = (
-    "The clothing reference is a FashionRise look illustration that includes a drawn model. "
-    "Ignore that illustrated body, face, hair, skin, and pose — transfer only the garments "
-    "onto the real person photo. Preserve every garment panel's exact hue and value, "
-    "including two-tone designs (bodice vs skirt, overlays, sheer layers). Do not unify, "
-    "lighten, wash, or recolor any clothing panel. Keep coverage, cut, straps, and fabric "
-    "read identical to the look. Keep the real person's identity, face, hair, pose, "
-    "proportions, lighting, background, and natural skin tone unchanged."
+    "Clothing reference is a FashionRise look illustration with a drawn model. "
+    "Ignore that body/face/hair/skin/pose — transfer only the garments onto the person. "
+    "Preserve each panel's exact hue and value (bodice vs skirt, overlays, sheer layers). "
+    "Do not unify, lighten, wash, or recolor clothing. Keep cut, straps, coverage, fabric "
+    "identical. Keep the real person's identity, face, hair, pose, lighting, background, "
+    "and natural skin tone unchanged."
 )
 
 
-def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
+def _is_fashionrise_look_plate(data: dict[str, Any]) -> bool:
     sources = data.get("garment_sources")
     if isinstance(sources, list) and any(
         str(s).strip().lower() == "fashionrise_look" for s in sources
     ):
-        return FITTING_ROOM_LOOK_PLATE_PROMPT
-    if str(data.get("garment_source") or "").strip().lower() == "fashionrise_look":
-        return FITTING_ROOM_LOOK_PLATE_PROMPT
-    return FITTING_ROOM_MAX_PROMPT
+        return True
+    return str(data.get("garment_source") or "").strip().lower() == "fashionrise_look"
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    return f"#{int(rgb[0]):02X}{int(rgb[1]):02X}{int(rgb[2]):02X}"
+
+
+def sample_look_garment_panel_colors(garment_png: bytes) -> dict[str, Any] | None:
+    """Sample upper vs lower greenish garment hues from a FashionRise look plate.
+
+    Used to lock multi-tone dresses (e.g. lighter olive bodice + darker forest skirt)
+    so try-on providers do not wash both panels into one mid-green.
+    """
+    if not garment_png:
+        return None
+    try:
+        with Image.open(io.BytesIO(garment_png)) as im:
+            im.load()
+            rgb = im.convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+
+    w, h = rgb.size
+    if w < 8 or h < 16:
+        return None
+    px = rgb.load()
+
+    def _region_mean(y0: float, y1: float, x0: float = 0.22, x1: float = 0.78) -> tuple[int, int, int] | None:
+        yy0, yy1 = int(h * y0), max(int(h * y0) + 1, int(h * y1))
+        xx0, xx1 = int(w * x0), max(int(w * x0) + 1, int(w * x1))
+        rs: list[float] = []
+        gs: list[float] = []
+        bs: list[float] = []
+        for y in range(yy0, yy1):
+            for x in range(xx0, xx1):
+                r, g, b = px[x, y]
+                mx = max(r, g, b)
+                mn = min(r, g, b)
+                if mx < 36:
+                    continue
+                sat = (mx - mn) / float(mx or 1)
+                # Prefer saturated garment greens; skip near-gray background / skin.
+                if sat < 0.12:
+                    continue
+                if g + 6 < r and g + 6 < b:
+                    continue
+                rs.append(float(r))
+                gs.append(float(g))
+                bs.append(float(b))
+        if len(rs) < 40:
+            return None
+        return (
+            int(round(sum(rs) / len(rs))),
+            int(round(sum(gs) / len(gs))),
+            int(round(sum(bs) / len(bs))),
+        )
+
+    # Upper torso / bodice vs mid–lower skirt band on a full-body look plate.
+    bodice = _region_mean(0.28, 0.46)
+    skirt = _region_mean(0.52, 0.74)
+    if bodice is None or skirt is None:
+        return None
+
+    bodice_l = 0.299 * bodice[0] + 0.587 * bodice[1] + 0.114 * bodice[2]
+    skirt_l = 0.299 * skirt[0] + 0.587 * skirt[1] + 0.114 * skirt[2]
+    delta = bodice_l - skirt_l
+    if abs(delta) < 6:
+        # No meaningful two-tone split — skip lock (solid garment).
+        return None
+    relation = "lighter_bodice" if delta > 0 else "darker_bodice"
+    return {
+        "bodice_rgb": list(bodice),
+        "skirt_rgb": list(skirt),
+        "bodice_hex": _rgb_to_hex(bodice),
+        "skirt_hex": _rgb_to_hex(skirt),
+        "luma_delta": round(delta, 1),
+        "relation": relation,
+    }
+
+
+def reinforce_look_plate_panel_colors(
+    garment_png: bytes,
+    lock: dict[str, Any] | None,
+    *,
+    strength: float = 0.42,
+) -> bytes:
+    """Mildly pull upper/lower green pixels toward measured panel means.
+
+    Helps FASHN Max see the bodice/skirt split instead of averaging to one olive.
+    No-op when lock is missing or the plate cannot be decoded.
+    """
+    if not garment_png or not isinstance(lock, dict):
+        return garment_png
+    bodice_raw = lock.get("bodice_rgb")
+    skirt_raw = lock.get("skirt_rgb")
+    if not (isinstance(bodice_raw, (list, tuple)) and isinstance(skirt_raw, (list, tuple))):
+        return garment_png
+    if len(bodice_raw) < 3 or len(skirt_raw) < 3:
+        return garment_png
+    try:
+        bt = (int(bodice_raw[0]), int(bodice_raw[1]), int(bodice_raw[2]))
+        st = (int(skirt_raw[0]), int(skirt_raw[1]), int(skirt_raw[2]))
+    except (TypeError, ValueError):
+        return garment_png
+
+    try:
+        with Image.open(io.BytesIO(garment_png)) as im:
+            im.load()
+            rgba = im.convert("RGBA")
+    except Exception:  # noqa: BLE001
+        return garment_png
+
+    w, h = rgba.size
+    if w < 8 or h < 16:
+        return garment_png
+    px = rgba.load()
+    t = max(0.0, min(0.75, float(strength)))
+    mid_y = int(h * 0.48)
+
+    for y in range(h):
+        target = bt if y < mid_y else st
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a < 24:
+                continue
+            mx = max(r, g, b)
+            mn = min(r, g, b)
+            if mx < 36:
+                continue
+            sat = (mx - mn) / float(mx or 1)
+            if sat < 0.10:
+                continue
+            # Skip non-garment (skin/hair-ish warm neutrals).
+            if g + 8 < r and b + 8 < r:
+                continue
+            if g < r - 4 and g < b - 4:
+                continue
+            nr = int(round(r * (1.0 - t) + target[0] * t))
+            ng = int(round(g * (1.0 - t) + target[1] * t))
+            nb = int(round(b * (1.0 - t) + target[2] * t))
+            px[x, y] = (
+                max(0, min(255, nr)),
+                max(0, min(255, ng)),
+                max(0, min(255, nb)),
+                a,
+            )
+
+    out = io.BytesIO()
+    rgba.save(out, format="PNG", optimize=True)
+    return out.getvalue()
+
+
+def _look_color_lock_prompt_clause(lock: dict[str, Any] | None) -> str:
+    if not isinstance(lock, dict):
+        return ""
+    bodice_hex = str(lock.get("bodice_hex") or "").strip()
+    skirt_hex = str(lock.get("skirt_hex") or "").strip()
+    if not (bodice_hex.startswith("#") and skirt_hex.startswith("#")):
+        return ""
+    relation = str(lock.get("relation") or "")
+    if relation == "lighter_bodice":
+        rel = "Bodice must stay lighter than the skirt."
+    elif relation == "darker_bodice":
+        rel = "Bodice must stay darker than the skirt."
+    else:
+        rel = "Keep the measured value difference between panels."
+    return (
+        f" COLOR LOCK: bodice {bodice_hex}, skirt {skirt_hex}. {rel} "
+        "Never average panels into one green."
+    )
+
+
+def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
+    if not _is_fashionrise_look_plate(data):
+        return FITTING_ROOM_MAX_PROMPT
+    lock = data.get("look_color_lock")
+    clause = _look_color_lock_prompt_clause(lock if isinstance(lock, dict) else None)
+    # normalize_max_prompt truncates at 1000 — keep color lock near the front.
+    return (
+        FITTING_ROOM_LOOK_PLATE_PROMPT[:720] + clause
+        if clause
+        else FITTING_ROOM_LOOK_PLATE_PROMPT
+    )
+
+
+def _ensure_look_color_lock(
+    garment_png: bytes, data: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Return look_color_lock from job data, sampling the plate when missing."""
+    if not _is_fashionrise_look_plate(data):
+        return None
+    lock = data.get("look_color_lock")
+    if (
+        isinstance(lock, dict)
+        and str(lock.get("bodice_hex") or "").startswith("#")
+        and str(lock.get("skirt_hex") or "").startswith("#")
+    ):
+        return lock
+    sampled = sample_look_garment_panel_colors(garment_png)
+    if sampled:
+        data["look_color_lock"] = sampled
+    return sampled
+
+
+def _garment_png_for_look_plate(garment_png: bytes, data: dict[str, Any]) -> bytes:
+    """Return garment bytes for providers; reinforce multi-tone look plates when locked."""
+    lock = _ensure_look_color_lock(garment_png, data)
+    if not lock:
+        return garment_png
+    return reinforce_look_plate_panel_colors(garment_png, lock)
 
 
 def _fitting_room_garment_prep(
@@ -487,14 +704,15 @@ def _generate_fitting_room_via_fashn(
     Prefers **Try-On Max** (``quality`` · ``2k``) when armed — better swimwear/lingerie
     fidelity than v1.6. Falls back to v1.6 only if Max is unavailable.
     """
-    category, prep = _fitting_room_garment_prep(garment_png=garment_png, data=data)
+    plate = _garment_png_for_look_plate(garment_png, data)
+    category, prep = _fitting_room_garment_prep(garment_png=plate, data=data)
 
     if _fashn_max_fallback_armed():
         try:
             max_provider = get_try_on_provider("fashn_max")
             png, meta = max_provider.generate(
                 photo_png=person_png,
-                garment_png=garment_png,
+                garment_png=plate,
                 prep=prep,
                 generation_mode="quality",
                 resolution="2k",
@@ -504,6 +722,8 @@ def _generate_fitting_room_via_fashn(
                 meta = {}
             meta.setdefault("provider", "fashn_tryon_max")
             meta["fitting_room_fashn_path"] = "max_quality_2k"
+            if _is_fashionrise_look_plate(data):
+                meta["look_color_lock"] = data.get("look_color_lock")
             return png, meta
         except ProviderNotAvailableError:
             logger.info("Fitting Room Max unavailable — trying FASHN v1.6")
@@ -513,7 +733,7 @@ def _generate_fitting_room_via_fashn(
     provider = get_try_on_provider("fashn")
     png, meta = provider.generate(
         photo_png=person_png,
-        garment_png=garment_png,
+        garment_png=plate,
         prep=prep,
         v16_experiment={"category": category, "mode": "quality"},
     )
@@ -568,12 +788,15 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             code="LIVE_HTTP_OFF",
         )
 
-    # Swimwear / lingerie / dresses: prefer Try-On Max quality first (skip OpenAI
-    # moderation landmines and get the better garment fidelity model).
+    look_plate = _is_fashionrise_look_plate(data)
+    # Swimwear / lingerie / product dresses: prefer Try-On Max quality first (skip
+    # OpenAI moderation landmines). Social look plates skip Max-first so OpenAI
+    # receives COLOR LOCK design_hints (Max was washing multi-tone bodice/skirt).
     prefer_max_first = (
         _fashn_max_fallback_armed()
         and _fashn_category_for_fitting_room(data) == "one-pieces"
         and _try_on_provider_override is None
+        and not look_plate
     )
     if prefer_max_first:
         try:
@@ -596,8 +819,11 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if png is None:
         try:
             provider = get_try_on_provider("openai")
+            garment_for_openai = _garment_png_for_look_plate(garment_png, data)
             png, meta = provider.generate(
-                photo_png=person_png, garment_png=garment_png, design_hints=hints
+                photo_png=person_png,
+                garment_png=garment_for_openai,
+                design_hints=hints,
             )
             if not isinstance(meta, dict):
                 meta = {}

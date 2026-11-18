@@ -365,3 +365,60 @@ def test_decode_applies_exif_orientation_before_provider(client, db_session, mon
     out = Image.open(io.BytesIO(oriented))
     assert out.size == (20, 40)
     assert out.getexif().get(274) in (None, 1)
+
+
+def _two_tone_look_png(
+    *,
+    bodice=(90, 120, 70),
+    skirt=(40, 70, 45),
+    size=(200, 400),
+) -> bytes:
+    """Synthetic FashionRise look plate: light olive bodice over darker forest skirt."""
+    im = Image.new("RGB", size, (245, 245, 245))
+    w, h = size
+    for y in range(int(h * 0.28), int(h * 0.46)):
+        for x in range(int(w * 0.30), int(w * 0.70)):
+            im.putpixel((x, y), bodice)
+    for y in range(int(h * 0.52), int(h * 0.74)):
+        for x in range(int(w * 0.25), int(w * 0.75)):
+            im.putpixel((x, y), skirt)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_sample_look_garment_panel_colors_detects_lighter_bodice():
+    from app.services.fitting_room import sample_look_garment_panel_colors
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    assert lock is not None
+    assert lock["relation"] == "lighter_bodice"
+    assert lock["bodice_hex"].startswith("#")
+    assert lock["skirt_hex"].startswith("#")
+    assert lock["luma_delta"] > 6
+
+
+def test_look_plate_max_prompt_includes_color_lock():
+    from app.services.fitting_room import (
+        _fitting_room_max_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_max_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock}
+    )
+    assert "COLOR LOCK" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert lock["skirt_hex"] in prompt
+    assert "lighter than the skirt" in prompt
+    assert len(prompt) <= 1000
+
+
+def test_look_plate_skips_max_first_flag_helper():
+    from app.services.fitting_room import _is_fashionrise_look_plate
+
+    assert _is_fashionrise_look_plate({"garment_source": "fashionrise_look"})
+    assert _is_fashionrise_look_plate({"garment_sources": ["fashionrise_look"]})
+    assert not _is_fashionrise_look_plate({"garment_source": "upload"})
+    assert not _is_fashionrise_look_plate({})
