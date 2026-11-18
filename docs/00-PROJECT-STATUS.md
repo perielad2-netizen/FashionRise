@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Fix — Reported look stayed in feed after Discard email (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | `@yanivprbk` Look · Nov 07 still in FashionRise Social; re-report → “You already reported this look” |
+| Root cause | Report `e1963b58…` stayed **`open`**; look `4bf34777…` stayed **`moderation_status=ok`**. Email was **viewed** (Gmail prefetch) but **Discard was never clicked** for that report. Reporter hide was client-only, so refresh brought the look back. |
+| Immediate | Applied Discard in prod → report **`actioned`**, look **`rejected`** (gone from all `ok` feeds) |
+| Code | Server excludes the viewer’s `content_reports` from Discover/circle/following/top/public/profile feeds; FE treats already-reported **409** as hide+thanks |
+| Tip | Pending merge/deploy of this branch |
+
 ## Deployed — Navbar avatar + Top Follow + report/bio typing (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |

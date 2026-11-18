@@ -333,6 +333,22 @@ def _not_deleted_look_clause():
     return or_(GalleryItem.look_id.is_(None), GalleryItem.look_id.notin_(deleted_look_ids))
 
 
+def _reported_by_viewer_subq(viewer_id: uuid.UUID):
+    """Gallery item ids this viewer already reported — hide from their feeds forever."""
+    from app.models.content_report import ContentReport
+
+    return select(ContentReport.gallery_item_id).where(ContentReport.reporter_id == viewer_id)
+
+
+def _viewer_reported_gallery_ids(db: Session, viewer_id: uuid.UUID) -> set[uuid.UUID]:
+    from app.models.content_report import ContentReport
+
+    rows = db.scalars(
+        select(ContentReport.gallery_item_id).where(ContentReport.reporter_id == viewer_id)
+    ).all()
+    return set(rows)
+
+
 def _public_gallery_base() -> Select:
     return select(GalleryItem).where(
         GalleryItem.visibility == "public",
@@ -342,9 +358,16 @@ def _public_gallery_base() -> Select:
 
 
 def list_public_gallery(
-    db: Session, *, limit: int = 50, offset: int = 0, sort: GallerySort = "newest"
+    db: Session,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    sort: GallerySort = "newest",
+    viewer: User | None = None,
 ) -> list[GalleryItem]:
     q = _public_gallery_base()
+    if viewer is not None:
+        q = q.where(GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)))
     if sort == "top_rated":
         q = q.order_by(GalleryItem.rating_average.desc().nulls_last(), GalleryItem.created_at.desc())
     elif sort == "trending":
@@ -365,7 +388,10 @@ def list_following_feed(
     sub = select(UserFollow.following_id).where(UserFollow.follower_id == viewer.id)
     q = (
         _public_gallery_base()
-        .where(GalleryItem.user_id.in_(sub))
+        .where(
+            GalleryItem.user_id.in_(sub),
+            GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)),
+        )
         .order_by(GalleryItem.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -398,7 +424,10 @@ def list_circle_feed(
     allowed = [viewer.id, *friend_ids]
     q = (
         _public_gallery_base()
-        .where(GalleryItem.user_id.in_(allowed))
+        .where(
+            GalleryItem.user_id.in_(allowed),
+            GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)),
+        )
         .order_by(GalleryItem.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -406,19 +435,20 @@ def list_circle_feed(
     return list(db.scalars(q).all())
 
 
-def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
+def list_top_worldwide(
+    db: Session, *, limit: int = 10, viewer: User | None = None
+) -> list[GalleryItem]:
     """Worldwide rankings board (likes, then rating). Caps at Top 50."""
     cap = max(1, min(int(limit or 10), 50))
-    q = (
-        _public_gallery_base()
-        .order_by(
-            GalleryItem.likes_count.desc(),
-            GalleryItem.rating_average.desc().nulls_last(),
-            GalleryItem.rating_count.desc(),
-            GalleryItem.created_at.desc(),
-        )
-        .limit(cap)
-    )
+    q = _public_gallery_base()
+    if viewer is not None:
+        q = q.where(GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)))
+    q = q.order_by(
+        GalleryItem.likes_count.desc(),
+        GalleryItem.rating_average.desc().nulls_last(),
+        GalleryItem.rating_count.desc(),
+        GalleryItem.created_at.desc(),
+    ).limit(cap)
     return list(db.scalars(q).all())
 
 
@@ -549,6 +579,10 @@ def list_discover_feed(
     """
     now_utc = now or datetime.now(timezone.utc)
     rank_rows = fetch_discover_candidate_rows(db, now=now_utc)
+    reported_ids: set[uuid.UUID] = set()
+    viewer_id = viewer.id if viewer is not None else None
+    if viewer_id is not None:
+        reported_ids = _viewer_reported_gallery_ids(db, viewer_id)
     candidates = [
         DiscoverCandidate(
             id=row.id,
@@ -559,9 +593,9 @@ def list_discover_feed(
             created_at=row.created_at,
         )
         for row in rank_rows
+        if row.id not in reported_ids
     ]
     seen_ids: set[uuid.UUID] = set()
-    viewer_id = viewer.id if viewer is not None else None
     if viewer_id is not None:
         seen_ids = _viewer_seen_gallery_ids(db, viewer_id, [c.id for c in candidates])
     scored = rank_discover_candidates(
@@ -681,17 +715,18 @@ def user_has_liked(db: Session, user_id: uuid.UUID, gallery_item_id: uuid.UUID) 
     return int(db.scalar(q) or 0) > 0
 
 
-def list_user_gallery(db: Session, user_id: uuid.UUID) -> list[GalleryItem]:
-    q = (
-        select(GalleryItem)
-        .where(
-            GalleryItem.user_id == user_id,
-            GalleryItem.visibility == "public",
-            GalleryItem.moderation_status == "ok",
-            _not_deleted_look_clause(),
-        )
-        .order_by(GalleryItem.created_at.desc())
+def list_user_gallery(
+    db: Session, user_id: uuid.UUID, *, viewer: User | None = None
+) -> list[GalleryItem]:
+    q = select(GalleryItem).where(
+        GalleryItem.user_id == user_id,
+        GalleryItem.visibility == "public",
+        GalleryItem.moderation_status == "ok",
+        _not_deleted_look_clause(),
     )
+    if viewer is not None:
+        q = q.where(GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)))
+    q = q.order_by(GalleryItem.created_at.desc())
     return list(db.scalars(q).all())
 
 

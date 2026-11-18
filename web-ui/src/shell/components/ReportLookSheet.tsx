@@ -127,6 +127,17 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
       setStep('thanks')
       onReported(item.id)
     } catch (err) {
+      // Duplicate report: still hide from this viewer — the first report already
+      // registered the look, and refreshes must not bring it back into their feed.
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        /already reported/i.test(err.message)
+      ) {
+        setStep('thanks')
+        onReported(item.id)
+        return
+      }
       const message =
         err instanceof ApiError
           ? err.message
