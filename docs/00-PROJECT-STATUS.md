@@ -3,6 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Hotfix — Friends search nginx allowlist (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Find friends Search showed **No designers** plus Studio toast *“sketch is unchanged”* |
+| Cause | Nginx allowlisted only list/request/accept/delete — `GET /friends/search` and `POST /friends/{id}/reject` fell through to `location /api/ { return 403 }` |
+| Fix | Live nginx allowlist for `/api/v1/friends/search` + `/reject`; FE no longer paints a fake empty Results list on search errors |
+| Note | Contains search is already case-insensitive (`ILIKE`); DB has `PeriShilat` / `NoaPeri` for `peri` |
+
+## Deployed — Friends find-by-name + scroll + entry points (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-friends-find-scroll-77c6` · tip **`2ea87567`** |
+| PR | [#437](https://github.com/perielad2-netizen/FashionRise/pull/437) |
+| Change | Friends page scrolls; **Find friends** contains search → request sent; incoming **Approve/Reject** + open profile; entry from Profile, Runway, account menu (`?friends=1`) |
+| API | `GET /friends/search?q=` · `POST /friends/{id}/reject` |
+| Tip | BE `/opt/fashionrise/src` @ **`2ea87567`** · FE `/var/www/fashionrise/releases/2ea87567-friends-find-scroll` · `/version.json` → `2ea87567` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/cd612dec-fr-wait-results /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach aa01b25d && rsync -a --delete --exclude .env --exclude __pycache__ --exclude .venv backend/ /opt/fashionrise/backend/ && systemctl restart fashionrise-api` |
+
 ## Deployed — Social Try on me photoreal normalize pipeline (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |

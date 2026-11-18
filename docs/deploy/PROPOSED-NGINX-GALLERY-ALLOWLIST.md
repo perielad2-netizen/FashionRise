@@ -91,12 +91,22 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    location = /api/v1/friends/search {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location = /api/v1/friends/request {
         limit_except POST { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }
 
     location ~ "^/api/v1/friends/[0-9a-fA-F-]{36}/accept$" {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    location ~ "^/api/v1/friends/[0-9a-fA-F-]{36}/reject$" {
         limit_except POST { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }

@@ -555,14 +555,19 @@ export function RunwayScreen({
           setFriendNotice(`No designers match “${q}”.`)
         }
       } catch (err) {
-        setFriendHits([])
-        setFriendNotice(
+        // Keep results unset on failure — do not show a fake empty "no match" list.
+        setFriendHits(null)
+        const raw =
           err instanceof ApiError
             ? err.message
             : err instanceof Error
               ? err.message
-              : 'Could not search designers.',
-        )
+              : 'Could not search designers.'
+        // Generic API 403 copy mentions Studio sketches — rewrite for Friends.
+        const message = /sketch is unchanged/i.test(raw)
+          ? 'Could not search designers right now. Please try again.'
+          : raw
+        setFriendNotice(message)
       } finally {
         setFriendSearchBusy(false)
       }
