@@ -239,10 +239,89 @@ export async function deleteSavedResult(id: string): Promise<void> {
   }
 }
 
+/** Long-edge cap — phone cameras + PNG bake otherwise blow past nginx body limits. */
+export const FITTING_ROOM_MAX_EDGE_PX = 2048
+
 /**
- * Read a Fitting Room photo/garment file as an upright PNG data URL.
+ * Soft max for one Fitting Room data URL (base64). Person + up to 4 garments travel
+ * in one JSON POST; keep each plate under ~4 MB so the payload stays under the edge.
+ */
+export const FITTING_ROOM_DATA_URL_SOFT_MAX_CHARS = 4 * 1024 * 1024
+
+function canvasToFittingRoomJpeg(
+  canvas: HTMLCanvasElement,
+): { dataUrl: string; mimeType: string } {
+  let quality = 0.88
+  let dataUrl = canvas.toDataURL('image/jpeg', quality)
+  for (let i = 0; i < 6 && dataUrl.length > FITTING_ROOM_DATA_URL_SOFT_MAX_CHARS; i++) {
+    quality = Math.max(0.5, quality - 0.08)
+    dataUrl = canvas.toDataURL('image/jpeg', quality)
+  }
+  if (!dataUrl.startsWith('data:image/')) {
+    throw new Error('Could not read that image.')
+  }
+  return { dataUrl, mimeType: 'image/jpeg' }
+}
+
+function drawFittingRoomBitmap(
+  source: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+  maxEdge: number = FITTING_ROOM_MAX_EDGE_PX,
+): HTMLCanvasElement {
+  const scale = Math.min(1, maxEdge / Math.max(srcW, srcH, 1))
+  const w = Math.max(1, Math.round(srcW * scale))
+  const h = Math.max(1, Math.round(srcH * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not prepare that image.')
+  // White fill — JPEG has no alpha; look plates with transparency stay readable.
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, w, h)
+  ctx.drawImage(source, 0, 0, w, h)
+  return canvas
+}
+
+/**
+ * Re-encode an already-saved Fitting Room data URL under the try-on payload budget.
+ * Needed for photos baked before compression existed (IndexedDB may hold huge PNGs).
+ */
+export async function compressFittingRoomDataUrl(
+  dataUrl: string,
+): Promise<{ dataUrl: string; mimeType: string }> {
+  if (!dataUrl.startsWith('data:image/')) {
+    throw new Error('Could not read that image.')
+  }
+  if (
+    dataUrl.startsWith('data:image/jpeg') &&
+    dataUrl.length <= FITTING_ROOM_DATA_URL_SOFT_MAX_CHARS
+  ) {
+    return { dataUrl, mimeType: 'image/jpeg' }
+  }
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('Could not read that image.'))
+    el.src = dataUrl
+  })
+  const srcW = img.naturalWidth || img.width
+  const srcH = img.naturalHeight || img.height
+  let edge = FITTING_ROOM_MAX_EDGE_PX
+  let out = canvasToFittingRoomJpeg(drawFittingRoomBitmap(img, srcW, srcH, edge))
+  for (let i = 0; i < 4 && out.dataUrl.length > FITTING_ROOM_DATA_URL_SOFT_MAX_CHARS; i++) {
+    edge = Math.max(1024, Math.round(edge * 0.75))
+    out = canvasToFittingRoomJpeg(drawFittingRoomBitmap(img, srcW, srcH, edge))
+  }
+  return out
+}
+
+/**
+ * Read a Fitting Room photo/garment file as an upright JPEG data URL.
  * Bakes EXIF orientation into pixels so try-on providers don't get a 90° flip
  * (browsers show EXIF-corrected <img>, but raw JPEG bytes are often sideways).
+ * JPEG + long-edge cap keeps phone photos under nginx try-on body limits.
  */
 export async function fileToFittingRoomDataUrl(
   file: File,
@@ -252,18 +331,9 @@ export async function fileToFittingRoomDataUrl(
   }
 
   const bakeFromBitmap = async (bitmap: ImageBitmap): Promise<{ dataUrl: string; mimeType: string }> => {
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, bitmap.width)
-    canvas.height = Math.max(1, bitmap.height)
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Could not prepare that image.')
-    ctx.drawImage(bitmap, 0, 0)
+    const canvas = drawFittingRoomBitmap(bitmap, bitmap.width, bitmap.height)
     bitmap.close()
-    const dataUrl = canvas.toDataURL('image/png')
-    if (!dataUrl.startsWith('data:image/')) {
-      throw new Error('Could not read that image.')
-    }
-    return { dataUrl, mimeType: 'image/png' }
+    return canvasToFittingRoomJpeg(canvas)
   }
 
   // Prefer createImageBitmap with EXIF orientation (Chrome/Android WebView).
@@ -293,21 +363,12 @@ export async function fileToFittingRoomDataUrl(
       const img = new Image()
       img.onload = () => {
         try {
-          const canvas = document.createElement('canvas')
-          canvas.width = Math.max(1, img.naturalWidth || img.width)
-          canvas.height = Math.max(1, img.naturalHeight || img.height)
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            reject(new Error('Could not prepare that image.'))
-            return
-          }
-          ctx.drawImage(img, 0, 0)
-          const baked = canvas.toDataURL('image/png')
-          if (!baked.startsWith('data:image/')) {
-            reject(new Error('Could not read that image.'))
-            return
-          }
-          resolve({ dataUrl: baked, mimeType: 'image/png' })
+          const canvas = drawFittingRoomBitmap(
+            img,
+            img.naturalWidth || img.width,
+            img.naturalHeight || img.height,
+          )
+          resolve(canvasToFittingRoomJpeg(canvas))
         } catch (err) {
           reject(err instanceof Error ? err : new Error('Could not read that image.'))
         }

@@ -7,7 +7,7 @@ describe('fileToFittingRoomDataUrl EXIF bake', () => {
     vi.restoreAllMocks()
   })
 
-  it('bakes createImageBitmap pixels into an upright PNG data URL', async () => {
+  it('bakes createImageBitmap pixels into an upright JPEG data URL', async () => {
     const close = vi.fn()
     const bitmap = {
       width: 20,
@@ -19,8 +19,9 @@ describe('fileToFittingRoomDataUrl EXIF bake', () => {
     vi.stubGlobal('createImageBitmap', createImageBitmap)
 
     const drawImage = vi.fn()
-    const toDataURL = vi.fn(() => 'data:image/png;base64,abc')
-    const getContext = vi.fn(() => ({ drawImage }))
+    const fillRect = vi.fn()
+    const toDataURL = vi.fn(() => 'data:image/jpeg;base64,abc')
+    const getContext = vi.fn(() => ({ drawImage, fillRect, fillStyle: '' }))
     const canvas = { width: 0, height: 0, getContext, toDataURL }
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       if (tag === 'canvas') return canvas as unknown as HTMLCanvasElement
@@ -33,9 +34,11 @@ describe('fileToFittingRoomDataUrl EXIF bake', () => {
     expect(createImageBitmap).toHaveBeenCalled()
     expect(canvas.width).toBe(20)
     expect(canvas.height).toBe(40)
-    expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0)
+    expect(fillRect).toHaveBeenCalled()
+    expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 20, 40)
     expect(close).toHaveBeenCalled()
-    expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', mimeType: 'image/png' })
+    expect(toDataURL).toHaveBeenCalledWith('image/jpeg', expect.any(Number))
+    expect(result).toEqual({ dataUrl: 'data:image/jpeg;base64,abc', mimeType: 'image/jpeg' })
   })
 
   it('rejects non-image files', async () => {

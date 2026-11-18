@@ -257,6 +257,10 @@ function friendlyStatus(status: number): string {
     return 'This action isn’t available right now. Your sketch is unchanged — please try again shortly.'
   }
   if (status === 409) return 'Draft was updated elsewhere. Resolve the conflict before saving again.'
+  // Nginx bare HTML 413 — Fitting Room / croquis phone photos over the edge body limit.
+  if (status === 413) {
+    return 'That photo is too large to upload. FashionRise will compress it — tap Try on again.'
+  }
   // Auth forms historically used 422 for bad credentials; elsewhere it means invalid input.
   if (status === 422) return 'Please check your input and try again.'
   if (status >= 500) return 'FashionRise is temporarily unavailable. Try again shortly.'
