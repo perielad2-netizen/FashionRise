@@ -17,7 +17,7 @@ Allow authenticated Cloudflare Access clients (with FashionRise AOP) to call **o
 - `POST /api/v1/ai/personal-try-on/fashn/garment-realism`
 - `POST /api/v1/ai/personal-try-on/fashn/garment-realism/{uuid}/accept` (#169 / #170)
 - `GET /api/v1/ai/fitting-room/preflight` (Fitting Room test tip — applied 2026-11-14)
-- `POST /api/v1/ai/fitting-room/try-on` (Fitting Room test tip — applied 2026-11-14; `client_max_body_size 20m`)
+- `POST /api/v1/ai/fitting-room/try-on` (Fitting Room — applied 2026-11-14; body limit raised **20m→48m** 2026-11-18 after Android 413s)
 - `GET /api/v1/ai/jobs/{uuid}`
 - `GET /api/v1/ai/jobs/{uuid}/image`
 
@@ -139,7 +139,8 @@ location = /api/v1/ai/fitting-room/try-on {
     proxy_set_header X-Forwarded-Proto https;
     proxy_connect_timeout 5s;
     proxy_read_timeout 120s;
-    client_max_body_size 20m;
+    # Phone JPEG→PNG bake + look plate easily exceeded 20m (~25MB live 413s on Android).
+    client_max_body_size 48m;
     add_header Cache-Control "no-store" always;
 }
 

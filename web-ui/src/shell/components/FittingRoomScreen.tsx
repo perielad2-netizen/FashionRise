@@ -6,6 +6,7 @@ import {
   consumeFittingRoomPlantedNotice,
   deleteFittingRoomAsset,
   deleteSavedResult,
+  compressFittingRoomDataUrl,
   fileToFittingRoomDataUrl,
   listSavedResults,
   newOutfitPieceId,
@@ -408,14 +409,23 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     }
     setResultJobId(null)
     try {
+      // Phone PNGs + look plates can exceed nginx body limits (~25MB seen live) —
+      // re-encode under budget right before enqueue (covers older IndexedDB assets).
+      const personCompressed = await compressFittingRoomDataUrl(personUrl)
+      const garmentCompressed = await Promise.all(
+        pieces.map(async (p) => {
+          const img = await compressFittingRoomDataUrl(p.dataUrl)
+          return {
+            imageBase64: img.dataUrl,
+            category: p.category,
+            ...(p.source ? { source: p.source } : {}),
+          }
+        }),
+      )
       const idem = `fitting_room:${userId.slice(0, 8)}:${Date.now().toString(36)}`
       const job = await enqueueFittingRoomTryOn({
-        personImageBase64: personUrl,
-        garmentPieces: pieces.map((p) => ({
-          imageBase64: p.dataUrl,
-          category: p.category,
-          ...(p.source ? { source: p.source } : {}),
-        })),
+        personImageBase64: personCompressed.dataUrl,
+        garmentPieces: garmentCompressed,
         idempotencyKey: idem,
         consentAcknowledged: true,
         consentVersion: preflight.consent_version,
