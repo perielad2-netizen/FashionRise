@@ -57,6 +57,7 @@ class MockTryOnProvider:
         self.fail = fail
         self.last_hints: list[str] = []
         self.last_prompt_override: str | None = None
+        self.last_garment_png: bytes | None = None
 
     def generate(
         self,
@@ -70,6 +71,7 @@ class MockTryOnProvider:
         self.calls += 1
         self.last_hints = list(design_hints) if design_hints else []
         self.last_prompt_override = prompt_override
+        self.last_garment_png = garment_png
         if self.fail is not None:
             raise self.fail
         out = _png_bytes((80, 120), (10, 20, 30, 255))
@@ -466,20 +468,41 @@ def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
     assert len(prompt) <= 1000
 
 
-def test_look_productize_prompt_keeps_color_lock_and_no_person():
+def test_look_tryon_prompts_replace_photo_footwear_with_look_shoes():
+    """Social looks that draw shoes must not keep the person's photo boots."""
     from app.services.fitting_room import (
-        _look_productize_prompt,
-        sample_look_garment_panel_colors,
+        FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
+        FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
+        _fitting_room_max_prompt,
+        _fitting_room_openai_prompt,
+        _look_materialized_max_prompt,
     )
+    from app.services.look_garment_normalize import LOOK_MATERIALIZE_PROMPT
 
-    lock = sample_look_garment_panel_colors(_two_tone_look_png())
-    prompt = _look_productize_prompt(
-        {"garment_source": "fashionrise_look", "look_color_lock": lock}
+    max_prompts = (
+        _fitting_room_max_prompt({"garment_source": "fashionrise_look"}),
+        _fitting_room_max_prompt(
+            {"garment_source": "fashionrise_look", "look_productized": True}
+        ),
+        FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
+        _look_materialized_max_prompt(None),
     )
-    assert "product photograph" in prompt.lower() or "commercial clothing" in prompt.lower()
-    assert "COLOR LOCK" in prompt
-    assert lock["bodice_hex"] in prompt
-    assert "No person" in prompt or "clothing only" in prompt.lower()
+    openai_prompts = (
+        _fitting_room_openai_prompt({"garment_source": "fashionrise_look"}, []),
+        _fitting_room_openai_prompt(
+            {"garment_source": "fashionrise_look", "look_normalized": True}, []
+        ),
+    )
+    for prompt in (*max_prompts, *openai_prompts, FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE):
+        assert prompt is not None
+        low = prompt.lower()
+        assert "shoe" in low or "footwear" in low
+        assert "replace" in low
+        assert "keep the person's existing footwear" not in low
+    for prompt in max_prompts:
+        assert len(prompt) <= 1000
+    assert "shoes" in LOOK_MATERIALIZE_PROMPT.lower()
+    assert "footwear" in LOOK_MATERIALIZE_PROMPT.lower() or "sneakers" in LOOK_MATERIALIZE_PROMPT.lower()
 
 
 def test_look_productized_max_prompt_is_product_fit_not_illustration():
@@ -552,29 +575,9 @@ def test_analyze_look_plate_detects_sheer_legs():
 
     solid = analyze_fashionrise_look_plate(_two_tone_look_png())
     sheer = analyze_fashionrise_look_plate(_sheer_look_png())
-    assert solid["preferred_path"] == "normalize_then_max"
+    assert solid["preferred_path"] == "materialize_then_max"
     assert sheer["sheer_legs"] is True
-    assert sheer["preferred_path"] == "normalize_then_max"
-
-
-def test_apply_openness_mask_preserves_alpha_for_sheer():
-    from app.services.look_garment_normalize import (
-        apply_openness_mask_to_product,
-        build_look_openness_mask,
-    )
-
-    sheer = _sheer_look_png()
-    # Simulate a bad opaque product (solid green skirt).
-    opaque = _two_tone_look_png()
-    openness = build_look_openness_mask(sheer)
-    assert openness is not None
-    fixed, meta = apply_openness_mask_to_product(opaque, openness, sheer_expected=True)
-    assert meta["openness_applied"] is True
-    assert meta["alpha_preserved"] is True
-    with Image.open(io.BytesIO(fixed)) as im:
-        assert im.mode == "RGBA"
-        alpha = im.split()[-1]
-        assert alpha.getextrema()[0] < 250
+    assert sheer["preferred_path"] == "materialize_then_max"
 
 
 def test_sketch_texture_score_runs_on_synthetic():
@@ -598,82 +601,446 @@ def test_soft_check_flags_opaque_skirt_when_sheer_expected():
     assert "sheer_legs_likely_covered" in quality["warnings"]
 
 
-def test_look_plate_prefers_normalize_then_max(client, db_session, monkeypatch):
-    """Social looks: alpha-preserving normalize then FASHN Max try-on."""
-    from app.services import fitting_room as fr
+# --- Social look pipeline: detect → materialize → Max → color lock -----------------
+
+DRIFT_BODICE = (95, 150, 60)
+DRIFT_SKIRT = (40, 110, 95)
+
+
+def _b64_png(png: bytes) -> str:
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+def _look_try_on_body(*, look_png: bytes, person_png: bytes, tagged: bool) -> dict:
+    piece: dict = {"image_base64": _b64_png(look_png), "category": "dresses" if tagged else "auto"}
+    if tagged:
+        piece["source"] = "fashionrise_look"
+    return {
+        "person_image_base64": _b64_png(person_png),
+        "garment_pieces": [piece],
+        "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+        "consent_acknowledged": True,
+        "consent_version": FITTING_ROOM_CONSENT_VERSION,
+    }
+
+
+def _enqueue_look_job(client, db_session, *, username: str, body: dict) -> AIJob:
+    tokens = register_with_invite(
+        client, db_session, email=f"{username}@example.com", username=username
+    )
+    _grant_stars(db_session, username, amount=40)
+    r = client.post(f"{FR}/try-on", json=body, headers=_auth(tokens))
+    assert r.status_code == 201, r.text
+    job = db_session.get(AIJob, uuid.UUID(r.json()["id"]))
+    assert job is not None
+    return job
+
+
+class _CapturingStorage:
+    saved: list[bytes] = []
+
+    def save_file(self, *, key: str, data, content_type: str) -> str:
+        _CapturingStorage.saved.append(data.read())
+        return f"/uploads/{key}"
+
+
+def test_untagged_look_plate_is_detected_at_enqueue(client, db_session, monkeypatch):
+    """Older app bundles never send source=fashionrise_look — the server must not need it."""
+    from tests.look_test_images import look_plate_png, person_photo_png
+
+    _enable_fitting_room(monkeypatch)
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_untagged",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=False
+        ),
+    )
+    data = job.input_data
+    assert data["garment_sources"] == [""]
+    assert data["garment_category"] == "auto"
+    assert data["garment_source"] == "fashionrise_look"
+    assert data["look_detected_by"] == "content"
+    assert data["look_detection"]["reason"] == "layout_match"
+    assert "fashionrise_look_plate" in data["design_hints"]
+
+
+def test_tagged_look_plate_skips_content_detection(client, db_session, monkeypatch):
+    from tests.look_test_images import look_plate_png, person_photo_png
+
+    _enable_fitting_room(monkeypatch)
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_tagged",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
+        ),
+    )
+    assert job.input_data["garment_source"] == "fashionrise_look"
+    assert job.input_data["look_detected_by"] == "client_tag"
+    assert job.input_data["look_detection"] is None
+
+
+def test_product_photo_upload_is_not_treated_as_look(client, db_session, monkeypatch):
+    from tests.look_test_images import person_photo_png, product_photo_png
+
+    _enable_fitting_room(monkeypatch)
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_product_upload",
+        body=_look_try_on_body(
+            look_png=product_photo_png(size=(600, 800)),
+            person_png=person_photo_png(),
+            tagged=False,
+        ),
+    )
+    assert job.input_data["garment_source"] is None
+    assert job.input_data["look_detected_by"] is None
+    assert job.input_data["look_detection"]["reason"] == "size"
+
+
+def test_look_detection_kill_switch(client, db_session, monkeypatch):
+    from tests.look_test_images import look_plate_png, person_photo_png
+
+    _enable_fitting_room(monkeypatch)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DETECT_ENABLED", "false")
+    get_settings.cache_clear()
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_detect_off",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=False
+        ),
+    )
+    assert job.input_data["garment_source"] is None
+    assert job.input_data["look_detection"] is None
+
+
+def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_session, monkeypatch):
+    """Full Social look path on an untagged plate; Stars stay flat 20."""
+    import json
+
     import app.services.look_garment_normalize as lgn
+    from app.models.user import User
+    from app.services import fitting_room as fr
+    from tests.look_test_images import (
+        look_plate_png,
+        person_photo_png,
+        product_photo_png,
+        tryon_result_png,
+    )
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
     monkeypatch.setattr(fr, "_fashn_fallback_armed", lambda: True)
+    _CapturingStorage.saved = []
+    monkeypatch.setattr(fr, "LocalStorageBackend", _CapturingStorage)
 
+    look_png = look_plate_png()
+    person_png = person_photo_png()
+    product_png = product_photo_png()
+    raw_max_png = tryon_result_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT)
     calls: list[str] = []
 
-    def _fake_normalize(*, garment_png: bytes, data: dict):
-        calls.append("normalize")
-        data["look_normalized"] = True
-        data["look_productized"] = True
-        data["look_color_lock"] = data.get("look_color_lock") or {
-            "bodice_hex": "#6B7757",
-            "skirt_hex": "#3D4C3A",
-            "relation": "lighter_bodice",
-            "bodice_rgb": [107, 119, 87],
-            "skirt_rgb": [61, 76, 58],
-        }
-        plate = _png_bytes((64, 96), (80, 110, 70, 255))
-        return plate, {
-            "provider": "openai_look_normalize",
-            "prompt_kind": "fitting_room_look_normalize_v1",
-            "alpha": {"alpha_preserved": True, "openness_applied": True},
+    def _fake_materialize(*, look_png: bytes, palette, color_lock: bool):
+        calls.append("materialize")
+        assert palette is not None and palette["multi_tone"] is True
+        assert color_lock is True
+        return product_png, {
+            "provider": "openai_look_materialize",
+            "prompt_kind": lgn.LOOK_MATERIALIZE_PROMPT_KIND,
+            "quality": "high",
+            "openai_calls": 1,
+            "check": {"ok": True},
+            "color_lock": {"stage": "product", "applied": False, "reason": "within_tolerance"},
         }
 
-    def _fake_fashn(*, person_png: bytes, garment_png: bytes, data: dict):
+    def _fake_max(*, person_png: bytes, product_png: bytes, palette, data: dict):
         calls.append("max")
-        assert data.get("look_normalized") is True
-        return _png_bytes((96, 128), (20, 40, 60, 255)), {
-            "provider": "fashn_tryon_max",
-            "fitting_room_fashn_path": "max_quality_2k",
-        }
+        assert product_png == _fake_max.expected_product
+        assert palette is not None
+        assert data.get("look_materialized") is True
+        return raw_max_png, {"provider": "fashn_tryon_max", "credits_used": 4}
+
+    _fake_max.expected_product = product_png
 
     def _boom_openai(*_a, **_k):
-        raise AssertionError("OpenAI try-on must not run when normalize→Max succeeds")
+        raise AssertionError("OpenAI try-on must not run when materialize→Max succeeds")
 
-    monkeypatch.setattr(lgn, "normalize_fashionrise_look_garment", _fake_normalize)
-    monkeypatch.setattr(fr, "_generate_fitting_room_via_fashn", _fake_fashn)
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
+    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _fake_max)
     monkeypatch.setattr(fr, "get_try_on_provider", _boom_openai)
     set_try_on_provider_override(None)
 
-    tokens = register_with_invite(
-        client, db_session, email="fr-look-norm@example.com", username="fr_look_norm"
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_pipeline",
+        body=_look_try_on_body(look_png=look_png, person_png=person_png, tagged=False),
     )
-    _grant_stars(db_session, "fr_look_norm", amount=40)
-    look_png = _two_tone_look_png()
-    look_b64 = "data:image/png;base64," + base64.b64encode(look_png).decode("ascii")
-    person_b64 = _data_url((40, 80, 120, 255))
-    key = f"fitting_room:{uuid.uuid4()}"
-    body = {
-        "person_image_base64": person_b64,
-        "garment_pieces": [
-            {
-                "image_base64": look_b64,
-                "category": "dresses",
-                "source": "fashionrise_look",
-            }
-        ],
-        "idempotency_key": key,
-        "consent_acknowledged": True,
-        "consent_version": FITTING_ROOM_CONSENT_VERSION,
-    }
-    r = client.post(f"{FR}/try-on", json=body, headers=_auth(tokens))
-    assert r.status_code == 201, r.text
-    job_id = r.json()["id"]
+    before = db_session.query(User).filter(User.username == "fr_look_pipeline").one().ai_stars
     assert run_magic_worker_tick(db_session) >= 1
-    job = db_session.get(AIJob, uuid.UUID(job_id))
-    assert job is not None
-    assert job.status == "completed"
-    assert calls == ["normalize", "max"]
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    assert calls == ["materialize", "max"]
+
     result = job.result_data or {}
+    assert result["fitting_room_look_path"] == "materialize_then_max"
     assert "fashn" in str(result.get("provider") or "")
-    assert result.get("fitting_room_look_path") == "normalize_then_max"
-    assert result.get("look_normalize", {}).get("provider") == "openai_look_normalize"
+    assert result["look_detected_by"] == "content"
+    assert result["look_palette"]["multi_tone"] is True
+    assert result["look_materialize"]["provider"] == "openai_look_materialize"
+    assert result["look_materialize"]["openai_calls"] == 1
+    final_lock = result["look_color_lock_final"]
+    assert final_lock["applied"] is True
+    assert final_lock["chroma_drift_after"] < final_lock["chroma_drift_before"]
     assert "look_quality" in result
+    # The stored preview is the color-locked photo, not the provider's raw output.
+    assert len(_CapturingStorage.saved) == 1
+    assert _CapturingStorage.saved[0] != raw_max_png
+
+    assert result["stars_cost"] == 20
+    after = db_session.query(User).filter(User.username == "fr_look_pipeline").one().ai_stars
+    assert after == before - 20
+    slim = job.input_data
+    assert slim["images_stripped"] is True
+    assert "garment_image_base64" not in slim
+    json.dumps(slim)
+    json.dumps(result)
+
+
+def test_look_materialize_failure_falls_back_to_openai_direct(client, db_session, monkeypatch):
+    import app.services.look_garment_normalize as lgn
+    from app.services import fitting_room as fr
+    from app.services.personal_try_on_provider import ProviderNotAvailableError
+    from tests.look_test_images import look_plate_png, person_photo_png
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+
+    def _fail_materialize(**_kwargs):
+        raise ProviderNotAvailableError("look materialize rejected: moderation_blocked")
+
+    def _no_max(**_kwargs):
+        raise AssertionError("Max must not run without a materialized product")
+
+    openai_mock = MockTryOnProvider()
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fail_materialize)
+    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _no_max)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
+    set_try_on_provider_override(None)
+
+    look_png = look_plate_png()
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_fallback",
+        body=_look_try_on_body(look_png=look_png, person_png=person_photo_png(), tagged=True),
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    assert openai_mock.calls == 1
+    result = job.result_data or {}
+    assert result["fitting_room_look_path"] == "openai_look_direct_fallback"
+    assert "look_materialize" not in result
+    # Illustration prompt (drawn model) + the measured palette, not the legacy lock.
+    prompt = openai_mock.last_prompt_override or ""
+    assert "drawn model" in prompt
+    assert "COLOR LOCK top to bottom" in prompt
+    assert job.input_data.get("look_materialized") is False
+
+
+def test_look_max_failure_hands_materialized_product_to_openai(client, db_session, monkeypatch):
+    import app.services.look_garment_normalize as lgn
+    from app.services import fitting_room as fr
+    from app.services.personal_try_on_provider import ProviderNotAvailableError
+    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    product_png = product_photo_png()
+
+    def _fake_materialize(**_kwargs):
+        return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
+
+    def _max_down(**_kwargs):
+        raise ProviderNotAvailableError("FASHN Max produced no image")
+
+    openai_mock = MockTryOnProvider()
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
+    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _max_down)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_max_down",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
+        ),
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    assert openai_mock.calls == 1
+    assert openai_mock.last_garment_png == product_png
+    prompt = openai_mock.last_prompt_override or ""
+    assert "mannequin" in prompt
+    assert "drawn model" not in prompt
+    result = job.result_data or {}
+    assert result["fitting_room_look_path"] == "materialize_then_openai"
+    assert result["look_materialize"]["provider"] == "openai_look_materialize"
+
+
+def test_look_prompts_keep_contract_and_fit_max_limit():
+    from app.services.fashn_try_on_max_provider import normalize_max_prompt
+    from app.services.fitting_room import _look_materialized_max_prompt
+    from app.services.look_color_lock import extract_design_palette
+    from app.services.look_garment_normalize import look_materialize_prompt
+    from tests.look_test_images import look_plate_png
+
+    palette = extract_design_palette(look_plate_png())
+    top_hex = palette["panels"][0]["hex"]
+    bottom_hex = palette["panels"][-1]["hex"]
+
+    for retry in (False, True):
+        prompt = look_materialize_prompt(palette, retry=retry)
+        lowered = prompt.lower()
+        # Measured in production: wording about taking clothing off is moderation-blocked.
+        assert "remove" not in lowered and "undress" not in lowered and "naked" not in lowered
+        assert "mannequin" in lowered
+        assert "no ink or pencil outlines" in lowered
+        assert top_hex in prompt and bottom_hex in prompt
+    assert "COLOR LOCK" not in look_materialize_prompt(None)
+
+    max_prompt = _look_materialized_max_prompt(palette)
+    assert "mannequin" in max_prompt
+    assert top_hex in max_prompt and bottom_hex in max_prompt
+    assert len(max_prompt) <= 1000
+    assert normalize_max_prompt(max_prompt) == " ".join(max_prompt.split())
+    assert "COLOR LOCK" not in _look_materialized_max_prompt(None)
+
+
+def test_check_materialized_product_requires_the_garment():
+    from app.services.look_color_lock import extract_design_palette
+    from app.services.look_garment_normalize import check_materialized_product
+    from tests.look_test_images import look_plate_png, product_photo_png
+
+    palette = extract_design_palette(look_plate_png())
+    assert check_materialized_product(product_photo_png(), palette)["ok"] is True
+    bare = check_materialized_product(product_photo_png(bodice=None, skirt=None), palette)
+    assert bare["ok"] is False and bare["reason"] == "garment_missing"
+    assert check_materialized_product(b"nope", palette)["reason"] == "undecodable"
+    # No measurable palette (white / nude design): accept any decodable photo.
+    assert check_materialized_product(product_photo_png(bodice=None, skirt=None), None)["ok"] is True
+
+
+def test_materialize_retries_once_then_color_locks(monkeypatch):
+    import app.services.look_garment_normalize as lgn
+    from app.services.look_color_lock import extract_design_palette
+    from tests.look_test_images import look_plate_png, product_photo_png
+
+    palette = extract_design_palette(look_plate_png())
+    outputs = [
+        product_photo_png(bodice=None, skirt=None),
+        product_photo_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT),
+    ]
+    prompts: list[str] = []
+
+    def _fake_edit(*, look_png: bytes, prompt: str, quality: str):
+        prompts.append(prompt)
+        return outputs[len(prompts) - 1], {"model": "m", "quality": quality, "size": "1024x1536"}
+
+    monkeypatch.setattr(lgn, "_assert_materialize_armed", lambda: None)
+    monkeypatch.setattr(lgn, "_images_edit_product", _fake_edit)
+
+    product, meta = lgn.materialize_fashionrise_look(look_png=look_plate_png(), palette=palette)
+    assert len(prompts) == 2
+    assert prompts[1].endswith(lgn.LOOK_MATERIALIZE_RETRY_SUFFIX)
+    assert meta["openai_calls"] == 2
+    assert meta["quality"] == "high"
+    assert meta["check"]["ok"] is True
+    assert meta["color_lock"]["applied"] is True
+    assert product != outputs[1]
+
+
+def test_materialize_color_lock_can_be_disabled(monkeypatch):
+    import app.services.look_garment_normalize as lgn
+    from app.services.look_color_lock import extract_design_palette
+    from tests.look_test_images import look_plate_png, product_photo_png
+
+    palette = extract_design_palette(look_plate_png())
+    drifted = product_photo_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT)
+    monkeypatch.setattr(lgn, "_assert_materialize_armed", lambda: None)
+    monkeypatch.setattr(
+        lgn,
+        "_images_edit_product",
+        lambda *, look_png, prompt, quality: (drifted, {"model": "m", "quality": quality}),
+    )
+    product, meta = lgn.materialize_fashionrise_look(
+        look_png=look_plate_png(), palette=palette, color_lock=False
+    )
+    assert product == drifted
+    assert meta["openai_calls"] == 1
+    assert meta["color_lock"] == {"stage": "product", "applied": False, "reason": "disabled"}
+
+
+def test_materialize_soft_keeps_product_after_one_retry(monkeypatch):
+    """Second soft garment_missing keeps the product photo instead of falling back to the look."""
+    import app.services.look_garment_normalize as lgn
+    from app.services.look_color_lock import extract_design_palette
+    from tests.look_test_images import look_plate_png, product_photo_png
+
+    palette = extract_design_palette(look_plate_png())
+    calls: list[str] = []
+    soft = product_photo_png(bodice=None, skirt=None)
+
+    def _blank_edit(*, look_png: bytes, prompt: str, quality: str):
+        calls.append(prompt)
+        return soft, {"model": "m", "quality": quality}
+
+    monkeypatch.setattr(lgn, "_assert_materialize_armed", lambda: None)
+    monkeypatch.setattr(lgn, "_images_edit_product", _blank_edit)
+    product, meta = lgn.materialize_fashionrise_look(
+        look_png=look_plate_png(), palette=palette, color_lock=False
+    )
+    assert len(calls) == 2
+    assert product == soft
+    assert meta["check"].get("accepted") == "soft_keep"
+
+
+def test_materialize_kill_switch_fails_closed_before_any_call(monkeypatch):
+    import app.services.look_garment_normalize as lgn
+    from app.services.personal_try_on_provider import ProviderNotAvailableError
+    from tests.look_test_images import look_plate_png
+
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def _no_call(**_kwargs):
+        raise AssertionError("no paid call when the stage is switched off")
+
+    monkeypatch.setattr(lgn, "_images_edit_product", _no_call)
+    with pytest.raises(ProviderNotAvailableError, match="FITTING_ROOM_LOOK_MATERIALIZE_ENABLED"):
+        lgn.materialize_fashionrise_look(look_png=look_plate_png(), palette=None)
+    get_settings.cache_clear()
+
+
+def test_native_product_prep_keeps_full_resolution():
+    from app.services.fitting_room import _native_product_prep
+    from tests.look_test_images import product_photo_png
+
+    prep = _native_product_prep(product_png=product_photo_png(), source_fingerprint="fp")
+    assert prep.layout == "one_piece" and prep.fashn_calls == 1
+    with Image.open(io.BytesIO(prep.pieces[0].png_bytes)) as im:
+        assert im.size == (1024, 1536)
+        assert im.mode == "RGB"

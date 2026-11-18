@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Fitting Room result stays in wait modal (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-look-tryon-fabric-color-77c6` · tip **`1a624210`** |
+| PR | [#439](https://github.com/perielad2-netizen/FashionRise/pull/439) |
+| Change | When Fitting Room AI try-on finishes, the open wait overlay swaps to the preview (Download / Share / View all / Close) instead of closing and forcing a scroll |
+| Tip | FE `/var/www/fashionrise/releases/1a62421-fr-preview-modal` · `/version.json` → `1a62421` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/68de2f8-friends-sent /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Hotfix — Friends search nginx allowlist (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |

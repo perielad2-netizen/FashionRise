@@ -33,6 +33,13 @@ export async function listFriendRequests(signal?: AbortSignal): Promise<Friendsh
   return apiRequest<Friendship[]>('/friends/requests', { signal })
 }
 
+/** Pending requests you sent — same path with direction=outgoing. */
+export async function listOutgoingFriendRequests(
+  signal?: AbortSignal,
+): Promise<Friendship[]> {
+  return apiRequest<Friendship[]>('/friends/requests?direction=outgoing', { signal })
+}
+
 export async function searchFriends(
   query: string,
   signal?: AbortSignal,

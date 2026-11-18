@@ -1,10 +1,21 @@
-"""Social look illustration → photoreal garment reference (alpha-preserving).
+"""Social look illustration → photoreal product photo ("materialize" stage).
 
-FashionRise published looks are illustrated design specs. Direct try-on pastes that
-art style onto a real person. This module runs one bounded OpenAI images.edit to
-produce an isolated photoreal garment reference, then post-processes alpha so
-sheer/cutaway regions from the source look are not baked opaque (the failure mode
-of the earlier productize→Max path that flattened RGBA onto gray RGB).
+FashionRise published looks are illustrated design specs. Any try-on model that is
+handed the illustration transfers its *rendering* too — painted folds, flat fills,
+wrong depth — so the dress looks stuck on. This stage runs one bounded OpenAI
+images.edit that re-creates the outfit as a real sewn garment on a white retail
+mannequin in a photo studio. The try-on provider then receives an ordinary product
+photograph, which is the input it was trained on.
+
+Design decisions (measured on production looks, see docs/00-PROJECT-STATUS.md):
+
+* Mannequin, not "garment alone": a floating garment loses drape, strap geometry
+  and sheer layering; a transparent cut-out bakes sheer skirts opaque. On a
+  mannequin the model keeps gravity, layering and true translucency.
+* Color is never left to the generator: the design palette is measured up front and
+  re-imposed deterministically afterwards (``look_color_lock``).
+* Output is verified without another paid call; one retry only when the garment is
+  missing from the result.
 """
 
 from __future__ import annotations
@@ -17,6 +28,12 @@ from typing import Any
 from PIL import Image, ImageFilter, ImageStat
 
 from app.core.config import get_settings
+from app.services.look_color_lock import (
+    lock_plate_to_palette,
+    measure_garment_bands,
+    palette_prompt_clause,
+    palette_summary,
+)
 from app.services.personal_croquis_provider import (
     ProviderNotAvailableError,
     ProviderOutcomeUnknownError,
@@ -25,243 +42,93 @@ from app.services.personal_croquis_provider import (
 
 logger = logging.getLogger(__name__)
 
-LOOK_NORMALIZE_PROMPT_KIND = "fitting_room_look_normalize_v1"
-LOOK_STUDIO_BG_RGB = (242, 242, 242)
+LOOK_MATERIALIZE_PROMPT_KIND = "fitting_room_look_materialize_v1"
+LOOK_MATERIALIZE_QUALITIES = frozenset({"low", "medium", "high"})
 
-# Structural design-spec prompt — describes WHAT to build, not "be photorealistic".
-LOOK_NORMALIZE_PROMPT = (
-    "Task: rebuild this FashionRise look as a catalog PRODUCT PHOTO of a real sewn garment. "
-    "Treat the input as a DESIGN SPECIFICATION only (silhouette, neckline, straps, wrap "
-    "waist, panel colors, hem asymmetry, sheer layering, openings). "
-    "Do NOT copy illustration style: no ink outlines, no graphic fold strokes, no flat "
-    "digital painting, no airbrushed concept-art shading, no ghost mannequin sketch. "
-    "OUTPUT: clothing alone on a clean light studio backdrop (or transparent). "
-    "No person, face, hair, hands, or drawn body silhouette. "
-    "MATERIAL: real chiffon/tulle/woven cloth with photographic micro-texture, soft "
-    "contact shadows, gravity folds, and natural specular highlights from studio light. "
-    "MULTI-TONE: keep upper vs lower panel hues distinct — never unify. "
-    "SHEER/CUTAWAY: keep translucent layers and high-low openings as open space or true "
-    "sheer cloth — never bake an opaque filled skirt. "
-    "No boots, leggings, or invented underlayers."
+# Wording note: OpenAI input moderation rejects this request when the prompt talks
+# about taking clothing off a body (measured: "add or remove garments" → blocked).
+# Describe only what to build.
+LOOK_MATERIALIZE_PROMPT = (
+    "Fashion e-commerce product photography only — a real camera photo of real cloth, never "
+    "a sketch, painting, cartoon, CGI render, or digital illustration. Re-create the outfit "
+    "from this fashion design illustration as an actual sewn garment on a matte white "
+    "full-body retail mannequin with the same body form as the figure in the illustration, "
+    "photographed full-length in a photo studio: plain "
+    "light-grey seamless backdrop, soft even lighting, natural contact shadow on the floor. "
+    "The clothing must look like physical fabric: visible textile weave and fibre "
+    "micro-texture, natural gravity drape and soft creases, photographic highlights and "
+    "shadows, true optical translucency where layers are sheer. Ban drawing artifacts: no "
+    "ink or pencil outlines, no brush or airbrush strokes, no graphic fold lines, no flat "
+    "cel fills, no illustrated shading. Keep the design identical to the illustration: same "
+    "silhouette, neckline, straps, waist construction, panel layout, number of layers, hem "
+    "shape and hem length. Include shoes, sneakers, boots, or other footwear when shown "
+    "in the illustration — same style, color, and pattern on the mannequin's feet. Do not "
+    "invent extra sleeves, linings, underlayers, or accessories that are not in the "
+    "illustration. Reproduce the garment colors exactly as in the illustration, panel by "
+    "panel — same hue, same depth, same contrast between panels. Do not brighten, "
+    "desaturate, shift hue, or merge different panels into one color. Whole outfit visible "
+    "from head/shoulders through footwear to the floor when shoes are drawn, centered, "
+    "same framing as the illustration."
+)
+
+LOOK_MATERIALIZE_RETRY_SUFFIX = (
+    " The complete garment must be clearly visible on the mannequin at the same scale as "
+    "in the illustration."
 )
 
 
-def extract_look_design_spec(
-    garment_png: bytes,
-    *,
-    look_analysis: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Offline design facts from a published look plate (no paid vision call)."""
-    from app.services.fitting_room import (
-        analyze_fashionrise_look_plate,
-        analyze_look_plate_sheer_legs,
-        sample_look_garment_panel_colors,
-    )
-
-    analysis = look_analysis if isinstance(look_analysis, dict) else analyze_fashionrise_look_plate(
-        garment_png
-    )
-    lock = analysis.get("look_color_lock")
-    if not isinstance(lock, dict):
-        lock = sample_look_garment_panel_colors(garment_png)
-    sheer = analysis.get("sheer") if isinstance(analysis.get("sheer"), dict) else {}
-    if not sheer:
-        sheer = analyze_look_plate_sheer_legs(garment_png)
-
-    bits: list[str] = [
-        "source_type: fashion_illustration_look_plate",
-        "ignore_drawn_model_body_face_hair",
-        "output_clothing_item_alone",
-    ]
-    if isinstance(lock, dict):
-        bits.append(
-            "panel_colors: bodice "
-            f"{lock.get('bodice_hex')} / skirt {lock.get('skirt_hex')} "
-            f"({lock.get('relation')})"
-        )
-        bits.append("keep_multi_tone_panels_distinct")
-    if sheer.get("sheer_legs"):
-        bits.append("coverage: sheer_or_cutaway_lower — keep legs/openings visible")
-        if sheer.get("signals", {}).get("asymmetric") or float(sheer.get("side_open_delta") or 0) >= 0.08:
-            bits.append("hem: asymmetrical_high_low")
-        bits.append("fabric_hint: layered_chiffon_or_tulle_where_translucent")
-    else:
-        bits.append("coverage: treat_lower_as_drawn — do_not_invent_extra_opacity")
-
-    return {
-        "bits": bits,
-        "look_color_lock": lock,
-        "sheer_legs": bool(sheer.get("sheer_legs")),
-        "sheer": sheer,
-        "preferred_path": "normalize_then_max",
-    }
-
-
-def build_look_openness_mask(garment_png: bytes) -> Image.Image | None:
-    """Per-pixel openness map (0=solid garment, 255=fully open) from the look plate.
-
-    Uses skin-like + pale-through-sheer heuristics in the lower garment band so
-    post-normalize alpha can re-open regions the generator filled opaque.
-    """
-    from app.services.fitting_room import _is_garment_chrominance_pixel, _is_skin_like_rgb
-
-    if not garment_png:
-        return None
-    try:
-        with Image.open(io.BytesIO(garment_png)) as im:
-            im.load()
-            rgb = im.convert("RGB")
-    except Exception:  # noqa: BLE001
-        return None
-
-    w, h = rgb.size
-    if w < 8 or h < 16:
-        return None
-    mask = Image.new("L", (w, h), 0)
-    px = rgb.load()
-    out = mask.load()
-    # Full body: mild openness on skin; strong in lower band.
-    for y in range(h):
-        lower = y >= int(h * 0.52)
-        for x in range(w):
-            r, g, b = px[x, y]
-            mx = max(r, g, b)
-            if mx < 28:
-                continue
-            luma = 0.299 * r + 0.587 * g + 0.114 * b
-            mn = min(r, g, b)
-            sat = (mx - mn) / float(mx or 1)
-            open_v = 0
-            if _is_skin_like_rgb(r, g, b):
-                open_v = 255 if lower else 200
-            elif lower and luma >= 125 and sat <= 0.40 and not (
-                _is_garment_chrominance_pixel(r, g, b) and sat > 0.28 and luma < 110
-            ):
-                # Pale / translucent overlay over legs in illustrations.
-                open_v = 170
-            elif lower and _is_garment_chrominance_pixel(r, g, b) and sat < 0.22 and luma > 140:
-                open_v = 110
-            if open_v:
-                out[x, y] = open_v
-    # Soften so alpha re-open does not look cut-out jagged.
-    return mask.filter(ImageFilter.GaussianBlur(radius=max(1, min(w, h) // 180)))
-
-
-def apply_openness_mask_to_product(
-    product_png: bytes,
-    openness: Image.Image | None,
-    *,
-    sheer_expected: bool,
-) -> tuple[bytes, dict[str, Any]]:
-    """Re-apply source openness onto a generated product so sheer is not baked opaque.
-
-    Does NOT flatten to opaque RGB. Returns PNG (RGBA when sheer/openings exist).
-    """
-    meta: dict[str, Any] = {
-        "alpha_preserved": False,
-        "openness_applied": False,
-        "sheer_expected": sheer_expected,
-    }
-    if not product_png:
-        return product_png, meta
-    try:
-        with Image.open(io.BytesIO(product_png)) as im:
-            im.load()
-            rgba = im.convert("RGBA")
-    except Exception:  # noqa: BLE001
-        return product_png, meta
-
-    if openness is not None:
-        if openness.size != rgba.size:
-            openness = openness.resize(rgba.size, Image.Resampling.BILINEAR)
-        px = rgba.load()
-        op = openness.load()
-        w, h = rgba.size
-        touched = 0
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = px[x, y]
-                open_v = int(op[x, y])
-                if open_v < 24:
-                    continue
-                # Reduce alpha where the look showed openings / sheer.
-                # Keep some fabric presence for soft tulle (not full wipe).
-                factor = 1.0 - (open_v / 255.0) * (0.92 if sheer_expected else 0.75)
-                new_a = int(round(a * max(0.0, min(1.0, factor))))
-                if new_a < a:
-                    touched += 1
-                px[x, y] = (r, g, b, new_a)
-        meta["openness_applied"] = touched > 0
-        meta["openness_pixels_adjusted"] = touched
-
-    # Detect remaining alpha.
-    alpha = rgba.split()[-1]
-    extrema = alpha.getextrema()
-    has_transparency = bool(extrema and extrema[0] < 250)
-    meta["alpha_preserved"] = has_transparency
-
-    out = io.BytesIO()
-    if has_transparency or sheer_expected:
-        rgba.save(out, format="PNG", optimize=True)
-    else:
-        # Solid garments: light studio RGB is fine for try-on / FASHN.
-        bg = Image.new("RGB", rgba.size, LOOK_STUDIO_BG_RGB)
-        bg.paste(rgba, mask=alpha)
-        bg.save(out, format="PNG", optimize=True)
-        meta["alpha_preserved"] = False
-    return out.getvalue(), meta
-
-
-def composite_look_garment_for_try_on(product_png: bytes) -> bytes:
-    """Light-studio composite for OpenAI try-on input (avoids charcoal matte holes).
-
-    Openings stay light-gray (readable as non-clothing). Opaque fabric unchanged.
-    """
-    if not product_png:
-        return product_png
-    try:
-        with Image.open(io.BytesIO(product_png)) as im:
-            im.load()
-            rgba = im.convert("RGBA")
-    except Exception:  # noqa: BLE001
-        return product_png
-    bg = Image.new("RGBA", rgba.size, (*LOOK_STUDIO_BG_RGB, 255))
-    composed = Image.alpha_composite(bg, rgba).convert("RGB")
-    out = io.BytesIO()
-    composed.save(out, format="PNG", optimize=True)
-    return out.getvalue()
-
-
-def look_normalize_prompt(spec: dict[str, Any]) -> str:
-    bits = spec.get("bits") if isinstance(spec, dict) else None
-    prompt = LOOK_NORMALIZE_PROMPT
-    if isinstance(bits, list) and bits:
-        prompt += " Design attributes: " + "; ".join(str(b) for b in bits[:12]) + "."
-    lock = spec.get("look_color_lock") if isinstance(spec, dict) else None
-    if isinstance(lock, dict):
-        bh = str(lock.get("bodice_hex") or "")
-        sh = str(lock.get("skirt_hex") or "")
-        if bh.startswith("#") and sh.startswith("#"):
-            prompt += (
-                f" COLOR LOCK: bodice {bh}, skirt {sh}. "
-                "Keep the measured value difference; never average into one mid-tone."
-            )
+def look_materialize_prompt(palette: dict[str, Any] | None, *, retry: bool = False) -> str:
+    prompt = LOOK_MATERIALIZE_PROMPT + palette_prompt_clause(palette)
+    if retry:
+        prompt += LOOK_MATERIALIZE_RETRY_SUFFIX
     return prompt
 
 
-def normalize_fashionrise_look_garment(
-    *,
-    garment_png: bytes,
-    data: dict[str, Any],
-) -> tuple[bytes, dict[str, Any]]:
-    """OpenAI images.edit: look illustration → isolated photoreal garment (alpha-aware)."""
-    from app.services.sketch_openai import (
-        SketchCompletionError,
-        assert_image_model_editable,
-        build_image_edit_kwargs,
-    )
+def look_materialize_quality() -> str:
+    raw = str(getattr(get_settings(), "fitting_room_look_materialize_quality", "") or "").strip().lower()
+    return raw if raw in LOOK_MATERIALIZE_QUALITIES else "high"
 
+
+def check_materialized_product(
+    product_png: bytes, palette: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Free structural check: is there still a garment of the design's size in frame?"""
+    out: dict[str, Any] = {"ok": False}
+    try:
+        with Image.open(io.BytesIO(product_png)) as im:
+            im.load()
+            width, height = im.size
+    except Exception:  # noqa: BLE001
+        out["reason"] = "undecodable"
+        return out
+    out["size"] = [width, height]
+    if width < 256 or height < 256:
+        out["reason"] = "too_small"
+        return out
+    if not isinstance(palette, dict):
+        # Achromatic / skin-toned design: nothing measurable — accept the photo.
+        out["ok"] = True
+        out["reason"] = "no_palette"
+        return out
+    stats = measure_garment_bands(product_png)
+    design_coverage = float(palette.get("coverage") or 0.0)
+    coverage = float((stats or {}).get("coverage") or 0.0)
+    out["coverage"] = round(coverage, 4)
+    out["coverage_ratio"] = round(coverage / design_coverage, 3) if design_coverage else None
+    # Sheer / tulle on a white mannequin measures low coverage — 0.4 was rejecting
+    # usable plates (ratio ~0.16) and falling back to the illustration.
+    if not stats or (design_coverage and coverage < 0.2 * design_coverage):
+        out["reason"] = "garment_missing"
+        return out
+    out["ok"] = True
+    out["reason"] = "garment_present"
+    return out
+
+
+def _assert_materialize_armed() -> None:
     settings = get_settings()
+    if not bool(getattr(settings, "fitting_room_look_materialize_enabled", True)):
+        raise ProviderNotAvailableError("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED is false")
     if not settings.my_croquis_ai_enabled:
         raise ProviderNotAvailableError("MY_CROQUIS_AI_ENABLED is false")
     if not settings.my_croquis_ai_live_http:
@@ -271,41 +138,45 @@ def normalize_fashionrise_look_garment(
     if not (settings.openai_api_key or "").strip():
         raise ProviderNotAvailableError("OPENAI_API_KEY missing")
 
-    analysis = data.get("look_analysis") if isinstance(data.get("look_analysis"), dict) else None
-    spec = extract_look_design_spec(garment_png, look_analysis=analysis)
-    data["look_design_spec"] = spec
-    if spec.get("look_color_lock") and not data.get("look_color_lock"):
-        data["look_color_lock"] = spec["look_color_lock"]
-    data["look_sheer_legs"] = bool(spec.get("sheer_legs"))
 
+def _usage_summary(result: Any) -> dict[str, int] | None:
+    usage = getattr(result, "usage", None)
+    if usage is None:
+        return None
+    out: dict[str, int] = {}
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        value = getattr(usage, key, None)
+        if isinstance(value, int):
+            out[key] = value
+    return out or None
+
+
+def _images_edit_product(*, look_png: bytes, prompt: str, quality: str) -> tuple[bytes, dict[str, Any]]:
+    """One OpenAI images.edit call. Raises Provider* errors; never retries on its own."""
+    from app.services.sketch_openai import (
+        SketchCompletionError,
+        assert_image_model_editable,
+        build_image_edit_kwargs,
+    )
+
+    settings = get_settings()
     model = (settings.openai_image_model or "").strip()
-    assert_image_model_editable(model)
-    size = (settings.openai_image_size or "1024x1536").strip()
-    quality = settings.openai_image_quality
-
     try:
+        assert_image_model_editable(model)
         kwargs = build_image_edit_kwargs(
             model=model,
-            prompt=look_normalize_prompt(spec),
-            sketch=(garment_png, "image/png"),
-            size=size,
+            prompt=prompt,
+            sketch=(look_png, "image/png"),
+            size=(settings.openai_image_size or "1024x1536").strip(),
             quality=quality,
             fabric_swatch=None,
         )
     except SketchCompletionError as exc:
         raise ProviderNotAvailableError(str(exc)) from exc
-
     kwargs["n"] = 1
     kwargs["output_format"] = "png"
-    # Prefer transparent product when the API accepts it (gpt-image family).
-    kwargs["background"] = "transparent"
-    # High input_fidelity preserves illustration strokes — drop it so the model can
-    # rebuild photographic fabric instead of tracing the sketch.
-    kwargs.pop("input_fidelity", None)
     extra = dict(kwargs.get("extra_body") or {})
     extra["moderation"] = "low"
-    if "input_fidelity" in extra:
-        extra.pop("input_fidelity", None)
     kwargs["extra_body"] = extra
 
     from openai import OpenAI
@@ -318,76 +189,85 @@ def normalize_fashionrise_look_garment(
     try:
         result = client.with_options(max_retries=0).images.edit(**kwargs)
     except Exception as exc:  # noqa: BLE001
-        # Retry once without background= if the model rejects the parameter.
-        summary = str(exc)[:400]
-        if "background" in summary.lower():
-            kwargs.pop("background", None)
-            try:
-                result = client.with_options(max_retries=0).images.edit(**kwargs)
-            except Exception as exc2:  # noqa: BLE001
-                raise ProviderOutcomeUnknownError(
-                    f"look normalize images.edit failed: {type(exc2).__name__}: {str(exc2)[:400]}"
-                ) from exc2
-        else:
-            raise ProviderOutcomeUnknownError(
-                f"look normalize images.edit failed: {type(exc).__name__}: {summary}"
-            ) from exc
-
-    raw_png = extract_edit_png_bytes(result)
-    # One bounded style retry if the first product still reads as illustration.
-    style = estimate_sketch_texture_score(raw_png)
-    style_retry = False
-    if style.get("illustrated_texture_suspected"):
-        style_retry = True
-        retry_prompt = (
-            look_normalize_prompt(spec)
-            + " CRITICAL RETRY: previous output still looked like a digital fashion "
-            "illustration. Emit a real-camera product photo of physical cloth only."
-        )
-        kwargs["prompt"] = retry_prompt
-        kwargs.pop("input_fidelity", None)
-        try:
-            result = client.with_options(max_retries=0).images.edit(**kwargs)
-            raw_png = extract_edit_png_bytes(result)
-            style = estimate_sketch_texture_score(raw_png)
-        except Exception:  # noqa: BLE001
-            logger.info("look normalize style retry failed — keeping first product", exc_info=True)
-
-    openness = build_look_openness_mask(garment_png) if spec.get("sheer_legs") else None
-    product, alpha_meta = apply_openness_mask_to_product(
-        raw_png,
-        openness,
-        sheer_expected=bool(spec.get("sheer_legs")),
-    )
-    # Mild color lock only on remaining opaque pixels (skip_skin already).
-    if data.get("look_color_lock") and not spec.get("sheer_legs"):
-        from app.services.fitting_room import reinforce_look_plate_panel_colors
-
-        product = reinforce_look_plate_panel_colors(
-            product, data.get("look_color_lock"), strength=0.28
-        )
-
-    try_on_plate = composite_look_garment_for_try_on(product)
-    meta = {
-        "provider": "openai_look_normalize",
+        summary = f"{type(exc).__name__}: {str(exc)[:300]}"
+        status = getattr(exc, "status_code", None)
+        if isinstance(status, int) and 400 <= status < 500:
+            # Rejected before generation (moderation / bad request) — not billed.
+            raise ProviderNotAvailableError(f"look materialize rejected: {summary}") from exc
+        raise ProviderOutcomeUnknownError(f"look materialize images.edit failed: {summary}") from exc
+    return extract_edit_png_bytes(result), {
         "model": kwargs.get("model"),
-        "prompt_kind": LOOK_NORMALIZE_PROMPT_KIND,
-        "source_sha256": hashlib.sha256(garment_png).hexdigest(),
-        "product_sha256": hashlib.sha256(product).hexdigest(),
-        "try_on_plate_sha256": hashlib.sha256(try_on_plate).hexdigest(),
-        "look_color_lock": data.get("look_color_lock"),
-        "look_design_spec": {"bits": spec.get("bits"), "sheer_legs": spec.get("sheer_legs")},
-        "alpha": alpha_meta,
-        "background_param": kwargs.get("background"),
-        "input_fidelity": kwargs.get("input_fidelity", "omit"),
-        "style_retry": style_retry,
-        "product_texture": style,
+        "quality": kwargs.get("quality"),
+        "size": kwargs.get("size"),
+        "usage": _usage_summary(result),
     }
-    # Stash try-on plate on data for the caller.
-    data["look_normalized_product_png"] = product
-    data["look_normalized_tryon_png"] = try_on_plate
-    data["look_normalized"] = True
-    return try_on_plate, meta
+
+
+def materialize_fashionrise_look(
+    *,
+    look_png: bytes,
+    palette: dict[str, Any] | None,
+    color_lock: bool = True,
+) -> tuple[bytes, dict[str, Any]]:
+    """Look illustration → color-locked studio product photo (PNG, RGB).
+
+    At most two paid images.edit calls (second only when the first lost the garment).
+    Raises ``ProviderNotAvailableError`` / ``ProviderOutcomeUnknownError``; callers
+    fall back to their direct try-on path.
+    """
+    _assert_materialize_armed()
+    quality = look_materialize_quality()
+    product, call_meta = _images_edit_product(
+        look_png=look_png, prompt=look_materialize_prompt(palette), quality=quality
+    )
+    calls = 1
+    check = check_materialized_product(product, palette)
+    if not check["ok"]:
+        logger.info("look materialize first output rejected (%s) — one retry", check.get("reason"))
+        product, call_meta = _images_edit_product(
+            look_png=look_png,
+            prompt=look_materialize_prompt(palette, retry=True),
+            quality=quality,
+        )
+        calls = 2
+        check = check_materialized_product(product, palette)
+        if not check["ok"]:
+            # Prefer a marginal product photo over falling back to the illustration —
+            # Max handles fabric better than painted folds pasted onto the person.
+            if check.get("reason") == "garment_missing" and product:
+                logger.info(
+                    "look materialize second output still soft (%s) — keeping product",
+                    check.get("reason"),
+                )
+                check = {**check, "ok": True, "accepted": "soft_keep"}
+            else:
+                raise ProviderNotAvailableError(
+                    f"look materialize produced no usable garment ({check.get('reason')})"
+                )
+
+    lock_meta: dict[str, Any] = {"stage": "product", "applied": False, "reason": "disabled"}
+    if color_lock:
+        try:
+            product, lock_meta = lock_plate_to_palette(product, palette)
+        except Exception:  # noqa: BLE001
+            logger.warning("look product color lock failed — using unlocked product", exc_info=True)
+            lock_meta = {"stage": "product", "applied": False, "reason": "error"}
+
+    meta: dict[str, Any] = {
+        "provider": "openai_look_materialize",
+        "prompt_kind": LOOK_MATERIALIZE_PROMPT_KIND,
+        "model": call_meta.get("model"),
+        "quality": call_meta.get("quality"),
+        "size": call_meta.get("size"),
+        "usage": call_meta.get("usage"),
+        "openai_calls": calls,
+        "check": check,
+        "color_lock": lock_meta,
+        "palette": palette_summary(palette),
+        "source_sha256": hashlib.sha256(look_png).hexdigest(),
+        "product_sha256": hashlib.sha256(product).hexdigest(),
+    }
+    return product, meta
 
 
 def estimate_sketch_texture_score(png: bytes) -> dict[str, Any]:

@@ -233,6 +233,18 @@ class Settings(BaseSettings):
     # Live OpenAI images.edit for Fitting Room. Even with fitting_room_enabled,
     # real HTTP requires this flag (mirrors MY_CROQUIS_AI_LIVE_HTTP discipline).
     fitting_room_live_http: bool = False
+    # Social look try-on ("Try on me") pipeline switches. Each is an independent
+    # rollback lever — no deploy needed, restart API + AI workers after changing.
+    # Recognize look plates from the image itself (clients may not send the tag).
+    # false → untagged looks take the generic product-photo Max path again.
+    fitting_room_look_detect_enabled: bool = True
+    # Illustration → studio product photo before try-on (one OpenAI images.edit).
+    # false → look plates use the direct OpenAI look prompt (no extra AI call).
+    fitting_room_look_materialize_enabled: bool = True
+    # images.edit quality for the materialize call: low | medium | high.
+    fitting_room_look_materialize_quality: str = "high"
+    # Deterministic design-palette lock on the product photo and the final result.
+    fitting_room_look_color_lock_enabled: bool = True
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
