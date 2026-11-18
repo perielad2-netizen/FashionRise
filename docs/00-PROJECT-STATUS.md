@@ -3,15 +3,30 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Deployed — FashionRise Try on me → Fitting Room (2026-11-18 Asia/Jerusalem)
+## Deployed — Social Try on me look fidelity (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | **#435** · branch `cursor/web-feed-tryon-fitting-77c6` · tip **`d367128f`** |
+| PR | **#435** merged → `main` @ **`c4a027ee`** (feature tip **`4a0e7dfb`**) |
+| Problem | Productize→FASHN Max for Social looks baked opaque skirts, washed silhouette, and still fought two-tone color |
+| Fix | Social look plates use **OpenAI direct** (`openai_look_direct`): color-agnostic COLOR LOCK, sheer/cutaway analysis + prompts, footwear lock, local soft quality meta (no extra paid retries). Productize helper kept but not used on the default path. |
+| Stars | Flat **20** on success (unchanged) |
+| AI cost | **Lower** than prior productize+Max: one OpenAI images.edit try-on per success; FASHN Max only on OpenAI moderation fallback |
+| Limitations | Illustration→photo still imperfect; sheer detection is heuristic; soft check warns in meta only (no auto-regenerate) |
+| Tip | BE `/opt/fashionrise/src` @ **`c4a027ee`** · FE `/var/www/fashionrise/releases/cd612dec-fr-wait-results` · `/version.json` → `cd612dec` |
+| Verify | `curl -sS http://127.0.0.1:8010/api/v1/ai/fitting-room/preflight` → `Not authenticated`; workers active; code contains `openai_look_direct` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach cd612dec && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/a6de9825-report-hide-feed /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
+## Deployed — FashionRise Try on me → Fitting Room UX (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#435** · branch `cursor/web-feed-tryon-fitting-77c6` · tip **`cd612dec`** (UX) / **`4a0e7dfb`** (fidelity) |
 | CTA | Immersive feed **Try on me** pill (Doji-style) + rail Shirt control; plants look image into Fitting Room outfit session |
 | Flow | Fetch `/gallery/{id}/image` → IndexedDB outfit piece → navigate `/studio/fitting-room` → user adds photo → Try on |
 | Gate | Hidden when Fitting Room UI flag is off |
-| Tip | FE `/var/www/fashionrise/releases/d367128f-feed-tryon` · `/version.json` → `d367128f` |
+| Tip | FE `/var/www/fashionrise/releases/cd612dec-fr-wait-results` · `/version.json` → `cd612dec` |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/a6de9825-report-hide-feed /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — Reported look feed leak + durable reporter hide (2026-11-18 Asia/Jerusalem)
