@@ -19,6 +19,7 @@ const unlikeGalleryComment = vi.fn()
 const reportGalleryItem = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
+const listOutgoingFriendRequests = vi.fn()
 const searchFriends = vi.fn()
 const requestFriendByUserId = vi.fn()
 const acceptFriendRequest = vi.fn()
@@ -121,6 +122,7 @@ vi.mock('@/services/competitionsApi', () => ({
 vi.mock('@/services/friendsApi', () => ({
   listFriends: (...args: unknown[]) => listFriends(...args),
   listFriendRequests: (...args: unknown[]) => listFriendRequests(...args),
+  listOutgoingFriendRequests: (...args: unknown[]) => listOutgoingFriendRequests(...args),
   searchFriends: (...args: unknown[]) => searchFriends(...args),
   requestFriendByUserId: (...args: unknown[]) => requestFriendByUserId(...args),
   requestFriendByUsername: vi.fn(),
@@ -208,6 +210,7 @@ describe('RunwayScreen', () => {
     unlikeGalleryComment.mockReset()
     listFriends.mockReset()
     listFriendRequests.mockReset()
+    listOutgoingFriendRequests.mockReset()
     searchFriends.mockReset()
     requestFriendByUserId.mockReset()
     acceptFriendRequest.mockReset()
@@ -260,6 +263,7 @@ describe('RunwayScreen', () => {
     listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
     listFriendRequests.mockResolvedValue([])
+    listOutgoingFriendRequests.mockResolvedValue([])
     listUserGallery.mockResolvedValue([])
     getPublicProfile.mockResolvedValue(null)
     getFollowStatus.mockResolvedValue({ user_id: 'friend-1', following: false })
@@ -912,6 +916,36 @@ describe('RunwayScreen', () => {
     expect(screen.getByTestId('request-open-maya')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('friend-accept-req-1'))
     await waitFor(() => expect(acceptFriendRequest).toHaveBeenCalledWith('req-1'))
+  })
+
+  it('keeps outgoing pending requests visible when returning to Friends', async () => {
+    listFriends.mockResolvedValue([])
+    listFriendRequests.mockResolvedValue([])
+    listOutgoingFriendRequests.mockResolvedValue([
+      {
+        id: 'sent-1',
+        status: 'pending',
+        requester_id: 'me',
+        addressee_id: 'noa',
+        created_at: '2026-11-07T00:00:00Z',
+        accepted_at: null,
+        friend: {
+          user_id: 'noa',
+          username: 'NoaPeri',
+          display_name: 'NoaPeri',
+          avatar_url: null,
+        },
+      },
+    ])
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await waitFor(() => expect(listGallery).toHaveBeenCalled())
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
+    expect(await screen.findByTestId('friend-sent-list')).toBeInTheDocument()
+    expect(screen.getByTestId('sent-open-noa')).toBeInTheDocument()
+    expect(screen.getByText(/Request pending/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('friend-cancel-sent-noa'))
+    await waitFor(() => expect(removeFriend).toHaveBeenCalledWith('noa'))
   })
 
   it('opens the full designer profile from a friend row (not nested in Friends chrome)', async () => {

@@ -21,9 +21,17 @@ def list_my_friends(user: CurrentUser, db: Session = Depends(get_db)) -> list[Fr
 
 
 @router.get("/requests", response_model=list[FriendshipRead])
-def list_incoming_friend_requests(
-    user: CurrentUser, db: Session = Depends(get_db)
+def list_friend_requests(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    direction: str = Query(
+        "incoming",
+        pattern="^(incoming|outgoing)$",
+        description="incoming = waiting on you; outgoing = requests you sent",
+    ),
 ) -> list[FriendshipRead]:
+    if direction == "outgoing":
+        return fs.list_outgoing_requests(db, user)
     return fs.list_incoming_requests(db, user)
 
 

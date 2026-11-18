@@ -48,6 +48,7 @@ import {
   acceptFriendRequest,
   listFriendRequests,
   listFriends,
+  listOutgoingFriendRequests,
   rejectFriendRequest,
   removeFriend,
   requestFriendByUserId,
@@ -126,7 +127,13 @@ type LoadState =
 type FriendsState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
+  | {
+      status: 'ready'
+      friends: Friendship[]
+      requests: Friendship[]
+      /** Pending requests you sent — persist when leaving/reopening Friends. */
+      sent: Friendship[]
+    }
 
 type TabId = 'discover' | 'feed' | 'following' | 'top' | 'friends'
 type BrowseSheet = 'top10' | 'circle' | 'following' | 'discover'
@@ -384,12 +391,13 @@ export function RunwayScreen({
       setFriendsState({ status: 'loading' })
       setFriendNotice(null)
       try {
-        const [friends, requests] = await Promise.all([
+        const [friends, requests, sent] = await Promise.all([
           listFriends(signal),
           listFriendRequests(signal),
+          listOutgoingFriendRequests(signal),
         ])
         if (signal?.aborted) return
-        setFriendsState({ status: 'ready', friends, requests })
+        setFriendsState({ status: 'ready', friends, requests, sent })
       } catch (err) {
         if (signal?.aborted) return
         const message =
@@ -668,6 +676,25 @@ export function RunwayScreen({
     [load],
   )
 
+  const onCancelSent = useCallback(
+    async (friendUserId: string, label: string) => {
+      setFriendBusy(true)
+      setFriendNotice(null)
+      try {
+        await removeFriend(friendUserId)
+        setFriendNotice(`Cancelled request to ${label}.`)
+        await load()
+      } catch (err) {
+        setFriendNotice(
+          err instanceof ApiError ? err.message : 'Could not cancel request.',
+        )
+      } finally {
+        setFriendBusy(false)
+      }
+    },
+    [load],
+  )
+
   const patchItem = useCallback((next: GalleryItem) => {
     setState((prev) => {
       if (prev.status !== 'ready') return prev
@@ -936,6 +963,7 @@ export function RunwayScreen({
               onRequest={(userId) => void onRequestFromSearch(userId)}
               onAccept={(id) => void onAccept(id)}
               onReject={(id, label) => void onReject(id, label)}
+              onCancelSent={(id, label) => void onCancelSent(id, label)}
               onRemove={(id, label) => void onRemove(id, label)}
               onRetry={() => void load()}
               onOpenDesigner={(designer) => setViewingDesigner(designer)}
@@ -1258,6 +1286,7 @@ function FriendsPanel({
   onRequest,
   onAccept,
   onReject,
+  onCancelSent,
   onRemove,
   onRetry,
   onOpenDesigner,
@@ -1273,6 +1302,8 @@ function FriendsPanel({
   onRequest: (userId: string) => void
   onAccept: (friendshipId: string) => void
   onReject: (friendshipId: string, label: string) => void
+  /** Cancel an outgoing pending request (same delete-pair path as Remove). */
+  onCancelSent: (friendUserId: string, label: string) => void
   onRemove: (friendUserId: string, label: string) => void
   onRetry: () => void
   /** Open the same full-screen designer profile used from Discover (not nested in Friends). */
@@ -1536,6 +1567,58 @@ function FriendsPanel({
                           Reject
                         </button>
                       </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ) : null}
+
+          {state.sent.length > 0 ? (
+            <section className={styles.friendSection} aria-label="Sent requests">
+              <div className={styles.friendSectionHead}>
+                <h2 className={styles.friendSectionTitle}>Sent requests</h2>
+                <span className={styles.friendSectionCount}>{state.sent.length}</span>
+              </div>
+              <ul className={styles.friendList} data-testid="friend-sent-list">
+                {state.sent.map((row) => {
+                  const label = row.friend.display_name || row.friend.username
+                  return (
+                    <li key={row.id} className={styles.friendCard}>
+                      <button
+                        type="button"
+                        className={styles.friendOpen}
+                        data-testid={`sent-open-${row.friend.user_id}`}
+                        onClick={() =>
+                          onOpenDesigner({
+                            user_id: row.friend.user_id,
+                            username: row.friend.username,
+                            display_name: row.friend.display_name,
+                            avatar_url: row.friend.avatar_url,
+                          })
+                        }
+                      >
+                        <DesignerAvatar
+                          userId={row.friend.user_id}
+                          label={label}
+                          avatarUrl={row.friend.avatar_url}
+                        />
+                        <span className={styles.friendText}>
+                          <strong>{label}</strong>
+                          <span>@{row.friend.username}</span>
+                          <em className={styles.friendAsk}>Request pending</em>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.friendRemove}
+                        disabled={busy}
+                        data-testid={`friend-cancel-sent-${row.friend.user_id}`}
+                        aria-label={`Cancel request to ${label}`}
+                        onClick={() => onCancelSent(row.friend.user_id, label)}
+                      >
+                        Cancel
+                      </button>
                     </li>
                   )
                 })}

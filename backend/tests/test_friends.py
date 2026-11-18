@@ -87,6 +87,14 @@ def test_search_contains_and_reject(client, db_session):
     assert pending_out.status_code == 200
     assert pending_out.json()[0]["relationship"] == "pending_out"
 
+    sent = client.get(
+        "/api/v1/friends/requests", headers=_auth(peri), params={"direction": "outgoing"}
+    )
+    assert sent.status_code == 200, sent.text
+    assert len(sent.json()) == 1
+    assert sent.json()[0]["friend"]["username"] == "MayaRose"
+    assert sent.json()[0]["status"] == "pending"
+
     pending = client.get("/api/v1/friends/requests", headers=_auth(maya))
     assert pending.status_code == 200
     assert len(pending.json()) == 1

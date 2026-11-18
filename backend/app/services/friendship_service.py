@@ -112,6 +112,19 @@ def list_incoming_requests(db: Session, user: User) -> list[FriendshipRead]:
     return [_friendship_read(db, row, user.id) for row in rows]
 
 
+def list_outgoing_requests(db: Session, user: User) -> list[FriendshipRead]:
+    """Pending requests this user sent — kept visible until accepted/rejected."""
+    rows = db.scalars(
+        select(UserFriendship)
+        .where(
+            UserFriendship.status == FRIENDSHIP_PENDING,
+            UserFriendship.requester_id == user.id,
+        )
+        .order_by(UserFriendship.created_at.desc())
+    ).all()
+    return [_friendship_read(db, row, user.id) for row in rows]
+
+
 def request_friend(
     db: Session,
     requester: User,
