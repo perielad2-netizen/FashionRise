@@ -3,6 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Navbar avatar + Top Follow + report/bio typing (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#430** merged → `main` @ **`ff763c5d`** |
+| Why bugs persisted | #430 was open/unmerged while camera work shipped; live tip never had these fixes |
+| Navbar avatar | GlobalHeader shows `/profiles/me` photo; updates via `myProfileAvatarStore` after Change photo |
+| Top 10/20/50 | Pink **Follow** under Ratings on Runway rank rows |
+| Report details | Scrim **never** dismisses safety sheet (tap-to-type no longer returns to feed); close via X/Done only |
+| Bio | `user-select: text` on studio inputs + safer edit-sheet dismiss |
+| Tip | FE **`ff763c5d`** · `/var/www/fashionrise/releases/ff763c5d-avatar-follow-report` · `/version.json` → `ff763c5d` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/0e5257be-android-camera /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Native | Web deploy covers PWA/Android WebView loading live site; store APK/AAB still need rebuild for bundled `dist/` |
+
 ## Deployed — Android CAMERA permission crash loop P0 (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
