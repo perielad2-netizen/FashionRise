@@ -234,7 +234,18 @@ describe('FittingRoomScreen', () => {
 
     resolvePoll?.({ id: 'job-fr-1', status: 'completed' })
     await waitFor(() => expect(mocks.saveFittingResult).toHaveBeenCalled())
-    await waitFor(() => expect(screen.queryByTestId('fitting-room-wait-modal')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByTestId('fitting-room-wait-modal')).not.toBeInTheDocument(),
+    )
+    // Result stays in the same overlay — no need to scroll the page.
+    expect(await screen.findByTestId('fitting-room-preview-modal')).toBeInTheDocument()
+    expect(screen.getByTestId('fitting-room-preview-card')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Your try-on/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('fitting-room-preview-close'))
+    await waitFor(() =>
+      expect(screen.queryByTestId('fitting-room-preview-modal')).not.toBeInTheDocument(),
+    )
 
     await userEvent.click(screen.getByTestId('fitting-room-results-open'))
     expect(await screen.findByTestId('fitting-room-results-modal')).toBeInTheDocument()

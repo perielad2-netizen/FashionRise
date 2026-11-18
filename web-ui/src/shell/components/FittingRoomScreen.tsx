@@ -118,6 +118,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [spendOpen, setSpendOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
   const [resultsOpen, setResultsOpen] = useState(false)
+  /** Wait modal stays open after success so the preview appears in-place (no scroll hunt). */
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [waitTick, setWaitTick] = useState(0)
   const { balance, unlimited, costs } = useAiStarsWallet()
 
@@ -357,13 +359,13 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   }, [phase])
 
   useEffect(() => {
-    if (phase !== 'running' && !resultsOpen) return
+    if (phase !== 'running' && !previewModalOpen && !resultsOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
-  }, [phase, resultsOpen])
+  }, [phase, previewModalOpen, resultsOpen])
 
   const persistResult = useCallback(
     async (jobId: string, categories: string[]) => {
@@ -397,6 +399,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     const ac = new AbortController()
     abortRef.current = ac
     setPhase('running')
+    setPreviewModalOpen(true)
     setStatusMsg('Creating your Fitting Room preview…')
     setErrorMsg(null)
     if (resultBlobUrl) {
@@ -421,6 +424,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       const settled = await pollAiJobUntilSettled({ jobId: job.id, signal: ac.signal })
       if (settled.status !== 'completed') {
         setPhase('failed')
+        setPreviewModalOpen(false)
         setErrorMsg(ownerSafeFittingRoomError(settled.error_message))
         setStatusMsg(null)
         return
@@ -443,6 +447,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     } catch (err) {
       if (ac.signal.aborted) return
       setPhase('failed')
+      setPreviewModalOpen(false)
       setStatusMsg(null)
       if (err instanceof ApiError) {
         setErrorMsg(ownerSafeFittingRoomError(err.message || 'Fitting Room request failed. No Stars were charged.'))
@@ -507,7 +512,12 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const cancelRunning = () => {
     abortRef.current?.abort()
     setPhase('idle')
+    setPreviewModalOpen(false)
     setStatusMsg(null)
+  }
+
+  const closePreviewModal = () => {
+    setPreviewModalOpen(false)
   }
 
   const onDownloadSaved = async (row: FittingRoomSavedResult) => {
@@ -888,32 +898,87 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       />
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
 
-      {phase === 'running' && typeof document !== 'undefined'
+      {(phase === 'running' ||
+        (previewModalOpen && phase === 'done' && resultBlobUrl)) &&
+      typeof document !== 'undefined'
         ? createPortal(
             <div
               className={styles.waitOverlay}
               role="dialog"
               aria-modal="true"
-              aria-labelledby="fr-wait-title"
-              data-testid="fitting-room-wait-modal"
+              aria-labelledby={phase === 'running' ? 'fr-wait-title' : 'fr-preview-title'}
+              data-testid={
+                phase === 'running'
+                  ? 'fitting-room-wait-modal'
+                  : 'fitting-room-preview-modal'
+              }
             >
-              <div className={styles.waitCard}>
-                <div className={styles.generatingVisual} aria-hidden>
-                  <span className={styles.pulseRing} />
-                  <span className={styles.pulseRingDelayed} />
-                  <div className={styles.spinner} />
+              {phase === 'running' ? (
+                <div className={styles.waitCard}>
+                  <div className={styles.generatingVisual} aria-hidden>
+                    <span className={styles.pulseRing} />
+                    <span className={styles.pulseRingDelayed} />
+                    <div className={styles.spinner} />
+                  </div>
+                  <strong id="fr-wait-title">
+                    {waitMessages[waitTick % waitMessages.length]}
+                  </strong>
+                  <span className={styles.waitPill}>Rendering</span>
+                  <p className={styles.waitHint}>
+                    Hang tight — same Magic-style wait. Your result auto-saves when ready.
+                  </p>
+                  <button type="button" className={styles.btnGhost} onClick={cancelRunning}>
+                    Cancel
+                  </button>
                 </div>
-                <strong id="fr-wait-title">
-                  {waitMessages[waitTick % waitMessages.length]}
-                </strong>
-                <span className={styles.waitPill}>Rendering</span>
-                <p className={styles.waitHint}>
-                  Hang tight — same Magic-style wait. Your result auto-saves when ready.
-                </p>
-                <button type="button" className={styles.btnGhost} onClick={cancelRunning}>
-                  Cancel
-                </button>
-              </div>
+              ) : (
+                <div className={styles.previewCard} data-testid="fitting-room-preview-card">
+                  <header className={styles.previewHead}>
+                    <h2 id="fr-preview-title">Your try-on</h2>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      data-testid="fitting-room-preview-close"
+                      onClick={closePreviewModal}
+                    >
+                      Close
+                    </button>
+                  </header>
+                  <div className={styles.previewResultStage}>
+                    <img
+                      className={styles.previewResultImg}
+                      src={resultBlobUrl || undefined}
+                      alt="AI Fitting Room concept preview"
+                    />
+                  </div>
+                  <p className={styles.waitHint}>
+                    {statusMsg || 'Preview ready — saved to your Fitting Room results.'}
+                  </p>
+                  <div className={styles.previewActions}>
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      disabled={downloadBusy}
+                      onClick={() => void onDownload()}
+                    >
+                      {downloadBusy ? 'Saving…' : 'Download'}
+                    </button>
+                    <button type="button" className={styles.btn} onClick={() => void onShare()}>
+                      Share
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnPrimary}
+                      onClick={() => {
+                        closePreviewModal()
+                        setResultsOpen(true)
+                      }}
+                    >
+                      View all results
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>,
             document.body,
           )

@@ -463,6 +463,70 @@
   color: rgba(226, 232, 240, 0.7);
 }
 
+.previewCard {
+  width: min(100%, 26rem);
+  max-height: min(92dvh, 780px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(244, 114, 182, 0.28);
+  background:
+    radial-gradient(420px 180px at 50% 0%, rgba(214, 51, 132, 0.18), transparent 70%),
+    #14121c;
+  color: #f8fafc;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.previewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.previewHead h2 {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.previewResultStage {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #101018;
+}
+
+.previewResultImg {
+  width: 100%;
+  max-height: min(58dvh, 520px);
+  object-fit: contain;
+  background: #f7f1ea;
+}
+
+.previewCard .waitHint {
+  max-width: none;
+}
+
+.previewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.previewActions > * {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+}
+
 .generatingVisual {
   position: relative;
   width: 88px;
