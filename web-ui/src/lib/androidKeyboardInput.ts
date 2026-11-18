@@ -35,3 +35,14 @@ export function onAndroidEditableFocus(el: HTMLElement | null | undefined): void
   if (!el) return
   window.setTimeout(() => scrollEditableIntoView(el), 50)
 }
+
+/**
+ * Soft-keyboard focus often reflows fixed overlays (data-fr-keyboard CSS).
+ * The same tap that focused an input can then land on the scrim as a synthetic
+ * click and dismiss the sheet — ignore backdrop dismiss while editing.
+ */
+export function shouldIgnoreOverlayDismiss(): boolean {
+  if (typeof document === 'undefined') return false
+  if (document.documentElement.getAttribute('data-fr-keyboard') === '1') return true
+  return isEditableElement(document.activeElement)
+}

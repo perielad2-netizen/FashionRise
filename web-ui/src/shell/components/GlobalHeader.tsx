@@ -12,11 +12,20 @@ import {
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { CONTACT_EMAIL, openContactMail } from '@/lib/contact'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import {
+  peekMyProfileAvatar,
+  subscribeMyProfileAvatar,
+} from '@/lib/myProfileAvatarStore'
 import { deleteAccount } from '@/services/auth/authApi'
+import { useAuth } from '@/services/auth/AuthProvider'
 import {
   isNativeAndroidShell,
   isNativeIosStarsShop,
 } from '@/services/native/iap'
+import {
+  getMyProfile,
+  profileAvatarSrc,
+} from '@/services/profilesApi'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './GlobalHeader.module.css'
 
@@ -71,9 +80,40 @@ export function GlobalHeader({
   const deleteConfirmId = useId()
   const menuWrapRef = useRef<HTMLDivElement>(null)
   const { balance, unlimited, costs, reload } = useAiStarsWallet()
+  const { user } = useAuth()
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    () => peekMyProfileAvatar().avatarUrl,
+  )
+  const [avatarBroken, setAvatarBroken] = useState(false)
 
   const nativeIos = isNativeIosStarsShop()
   const nativeAndroid = isNativeAndroidShell()
+
+  useEffect(() => {
+    return subscribeMyProfileAvatar((next) => {
+      setAvatarUrl(next)
+      setAvatarBroken(false)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAvatarUrl(null)
+      setAvatarBroken(false)
+      return
+    }
+    const controller = new AbortController()
+    void getMyProfile(controller.signal)
+      .then((profile) => {
+        if (controller.signal.aborted) return
+        setAvatarUrl(profile.avatar_url)
+        setAvatarBroken(false)
+      })
+      .catch(() => {
+        /* keep store / placeholder */
+      })
+    return () => controller.abort()
+  }, [user?.id])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -83,6 +123,23 @@ export function GlobalHeader({
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [menuOpen])
+
+  const avatarSrc =
+    user?.id && avatarUrl
+      ? profileAvatarSrc(user.id, avatarUrl, avatarUrl)
+      : null
+  const showAvatarPhoto = Boolean(avatarSrc) && !avatarBroken
+  const avatarNode = showAvatarPhoto ? (
+    <img
+      src={avatarSrc!}
+      alt=""
+      className={styles.avatarPhoto}
+      data-testid="global-header-avatar-photo"
+      onError={() => setAvatarBroken(true)}
+    />
+  ) : (
+    <UserRound size={16} aria-hidden />
+  )
 
   function openContact() {
     setMenuOpen(false)
@@ -201,11 +258,11 @@ export function GlobalHeader({
               onOpenProfile()
             }}
           >
-            <UserRound size={16} aria-hidden />
+            {avatarNode}
           </button>
         ) : (
           <span className={styles.avatar} aria-hidden>
-            <UserRound size={16} />
+            {avatarNode}
           </span>
         )}
         <div className={styles.menuWrap} ref={menuWrapRef}>

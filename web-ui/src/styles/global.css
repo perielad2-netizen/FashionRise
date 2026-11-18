@@ -89,6 +89,16 @@ img {
   -webkit-user-select: none;
 }
 
+/* Keep inputs/textareas editable — ancestor user-select:none breaks caret
+   placement / typing on some Android WebViews (profile bio, rename, etc.). */
+.studio-chrome input,
+.studio-chrome textarea,
+.studio-chrome select,
+.studio-chrome [contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .studio-draw-surface {
   touch-action: none;
 }
@@ -98,15 +108,13 @@ img {
  * profile edit, Save Design, report details, etc.).
  * While an editable is focused, clip the overlay to the true visual viewport
  * so Android soft-keyboard + scrollIntoView cannot leave a black void band.
+ *
+ * Keep the overlay's own alignment (usually bottom sheets). Changing
+ * place-items/align-items here reflows the dialog under the finger and turns
+ * the focus tap into a scrim click that closes the modal.
  */
 html[data-fr-keyboard='1'] .fr-keyboard-overlay {
-  top: 0;
-  bottom: auto;
-  height: var(--fr-visible-height, 100dvh);
   max-height: var(--fr-visible-height, 100dvh);
-  align-items: flex-start;
-  align-content: flex-start;
-  place-items: start center;
   overflow-y: auto;
   box-sizing: border-box;
 }
