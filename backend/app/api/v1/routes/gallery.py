@@ -63,11 +63,13 @@ def list_gallery(
         )
     elif sort == "top10":
         # Worldwide board supports Top 10 / 20 / 50 selectors in the Runway UI.
-        rows = gallery_service.list_top_worldwide(db, limit=min(limit, 50))
+        rows = gallery_service.list_top_worldwide(db, limit=min(limit, 50), viewer=user)
     else:
         # Full public newest/trending/top_rated stays available for Top 10 tooling,
         # but the web Runway home uses circle + top10 only.
-        rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
+        rows = gallery_service.list_public_gallery(
+            db, limit=limit, offset=offset, sort=sort, viewer=user
+        )
     return gallery_service.to_gallery_reads_for_viewer(db, rows, user)
 
 
@@ -82,9 +84,13 @@ def record_impressions(
 
 
 @router.get("/user/{user_id}", response_model=list[GalleryRead])
-def list_user_gallery(user_id: uuid.UUID, db: Session = Depends(get_db)) -> list[GalleryRead]:
-    rows = gallery_service.list_user_gallery(db, user_id)
-    return gallery_service.to_gallery_reads_for_viewer(db, rows, viewer=None)
+def list_user_gallery(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+) -> list[GalleryRead]:
+    rows = gallery_service.list_user_gallery(db, user_id, viewer=user)
+    return gallery_service.to_gallery_reads_for_viewer(db, rows, viewer=user)
 
 
 @router.post("/comments/{comment_id}/like", status_code=204)

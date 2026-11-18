@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/services/api/client'
 import { ReportLookSheet } from './ReportLookSheet'
 import type { GalleryItem } from '@/services/galleryApi'
 
@@ -108,5 +109,19 @@ describe('ReportLookSheet', () => {
     )
     fireEvent.click(screen.getByLabelText('Close report'))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides the look when Send gets already-reported 409', async () => {
+    const onReported = vi.fn()
+    reportGalleryItem.mockRejectedValueOnce(
+      new ApiError('You already reported this look', 409, null),
+    )
+    render(
+      <ReportLookSheet item={item} open onClose={() => undefined} onReported={onReported} />,
+    )
+    fireEvent.click(screen.getByTestId('report-reason-sexual_content'))
+    fireEvent.click(screen.getByTestId('report-send'))
+    await waitFor(() => expect(onReported).toHaveBeenCalledWith('look-1'))
+    expect(await screen.findByText(/Thanks for reporting/i)).toBeInTheDocument()
   })
 })

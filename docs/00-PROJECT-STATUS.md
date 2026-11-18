@@ -3,6 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Reported look feed leak + durable reporter hide (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#434** · branch `cursor/web-report-hide-feed-77c6` · tip **`a6de9825`** |
+| Symptom | `@yanivprbk` Look · Nov 07 still in FashionRise Social; re-report → “You already reported this look” |
+| Root cause | Report `e1963b58…` stayed **`open`**; look `4bf34777…` stayed **`moderation_status=ok`**. Email was **viewed** (Gmail prefetch) but **Discard was never clicked** for that report. Reporter hide was client-only, so refresh brought the look back. |
+| Immediate | Applied Discard in prod → report **`actioned`**, look **`rejected`** (gone from all `ok` feeds) |
+| Code | Server excludes the viewer’s `content_reports` from Discover/circle/following/top/public/profile feeds; FE treats already-reported **409** as hide+thanks |
+| Tip | BE `/opt/fashionrise/src` @ **`a6de9825`** · FE `/var/www/fashionrise/releases/a6de9825-report-hide-feed` · `/version.json` → `a6de9825` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/ff763c5d-avatar-follow-report /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 3e59f59 && systemctl restart fashionrise-api` |
+
 ## Deployed — Navbar avatar + Top Follow + report/bio typing (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |

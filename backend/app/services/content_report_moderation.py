@@ -1,8 +1,9 @@
 """Signed email links for FashionRise Social content-report decisions.
 
-Reporting only hides the look from the reporter's client feed. The gallery row
-and image stay until a moderator chooses Discard (soft-hide via moderation_status
-rejected — owner keeps the paid look privately and cannot republish to Social).
+Reporting hides the look from the reporter’s feeds (server-side exclude of their
+content_reports rows). The gallery row and image stay public for everyone else
+until a moderator chooses Discard (soft-hide via moderation_status rejected —
+owner keeps the paid look privately and cannot republish to Social).
 Keep dismisses the report and leaves the look public.
 """
 
