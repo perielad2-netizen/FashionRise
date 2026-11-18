@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Hotfix — Friends search nginx allowlist (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Find friends Search showed **No designers** plus Studio toast *“sketch is unchanged”* |
+| Cause | Nginx allowlisted only list/request/accept/delete — `GET /friends/search` and `POST /friends/{id}/reject` fell through to `location /api/ { return 403 }` |
+| Fix | Live nginx allowlist for `/api/v1/friends/search` + `/reject`; FE no longer paints a fake empty Results list on search errors |
+| Note | Contains search is already case-insensitive (`ILIKE`); DB has `PeriShilat` / `NoaPeri` for `peri` |
+
 ## Deployed — Friends find-by-name + scroll + entry points (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
