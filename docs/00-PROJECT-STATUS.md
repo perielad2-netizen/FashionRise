@@ -3,6 +3,30 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Social Try on me: real fabric + design colors (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | [#439](https://github.com/perielad2-netizen/FashionRise/pull/439) merged → `main` @ **`43ecb57c`** (branch `cursor/web-look-tryon-fabric-color-77c6`; last BE commit **`d3a832f1`**) |
+| Symptom | A FashionRise look tried on a real person came out sketched / painted and off-color (green two-tone dress) |
+| Root cause 1 | The look pipeline was chosen only from a client tag (`source: fashionrise_look`). Real jobs arrived untagged (`garment_category: auto`, no source), so the raw illustration went straight to generic FASHN Max, which copies the painted rendering onto the person |
+| Root cause 2 | The legacy color sampler returned nothing on real look plates, so no color lock ever ran |
+| Root cause 3 | The old normalize step still produced illustration-like fabric and downsized the reference before Max |
+| Fix — detect | `look_plate_detect.py`: the server recognises a look plate from the image itself (1024×1536 canvas, plain paper background, centred full-length figure). The client tag is no longer load-bearing |
+| Fix — real fabric | `look_garment_normalize.py`: one OpenAI edit turns the illustration into a studio product photo on a mannequin (same cut, layers, neckline, hem); FASHN Max then gets that photo at native 1024×1536 instead of the drawing |
+| Fix — colors | `look_color_lock.py`: palette is measured per garment band/panel from the design; the product photo is graded back to it deterministically (no model call), and the final photo is graded again when Max drifts. The final grade is hue/chroma only (lighting untouched), limited to pixels the try-on changed, and skips skin, including skin seen through sheer fabric |
+| Fix — final lock on real photos | First prod runs skipped the final lock (`reason: misaligned`, `median_diff` 19–29): Max answers in its own aspect bucket (1616×2512 in → 1696×2528 out) with the scene 1–2 % off. The lock now registers the person photo onto the result and compares with a shift tolerance (`d3a832f1`) |
+| Stars | Flat **20** on success (unchanged) |
+| AI cost | Look path: **1 OpenAI `images.edit` high quality (≈5.5¢)**, +1 only when the first output has no garment, then **1 FASHN Max quality 2k (4 credits ≈ 32¢)**. Both color locks are local Pillow, no cost. ≈85–90 s end to end |
+| Live evidence | Jobs `387c9fdc` (19:34 UTC, untagged → `look_detected_by: content`) and `dc51c3f9` (20:02 UTC): `materialize_then_max`, 1 OpenAI call, product lock applied (chroma drift 5.0 → 0.55 / 5.3 → 0.65), result is a sewn moss bodice over layered sheer forest tulle with the high-low hem |
+| Not verified live | No paid try-on was run after `d3a832f1`. The registered final lock was replayed offline on the stored prod results (`dc51c3f9`: `median_diff` 29 → 4, drift 7.7 → 3.6; `387c9fdc`: drift 2.2, left untouched) using stand-in person frames, because the uploaded person photo is not stored. Check `result_data.look_color_lock_final` on the next real job |
+| Limits | Color lock needs a chromatic garment: neutral / skin-toned looks get no palette (`no_palette`, e.g. job `7f4c360e`) and rely on Max alone. Detection is a layout heuristic for the 1024×1536 look export. The final lock skips itself when registration fails or the aspect gap exceeds 6 %, and does nothing when drift is under 6. Max is stochastic: silhouette details can still vary run to run. `look_quality.illustrated_texture_suspected` is telemetry only and false-positives on tulle. If Max fails, the OpenAI try-on fallback re-renders the whole person |
+| Tests | `tests/test_look_color_lock.py`, `tests/test_look_plate_detect.py`, `tests/test_fitting_room.py` (59 pass). Full backend suite: 96 failures + 2 errors, identical set before and after this work |
+| Tip | BE `/opt/fashionrise/src` @ **`d3a832f1`** (backend tree identical to `main` `43ecb57c`) · API + AI workers restarted 20:09 UTC · FE unchanged by this fix |
+| Verify | `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8010/api/v1/ai/fitting-room/preflight` → `401`; `ai_jobs.result_data` shows `fitting_room_look_path: materialize_then_max`, `look_materialize.color_lock`, `look_color_lock_final` |
+| Rollback — switches | In `/opt/fashionrise/src/backend/.env`, then `systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}`: `FITTING_ROOM_LOOK_COLOR_LOCK_ENABLED=false` (no grading), `FITTING_ROOM_LOOK_MATERIALIZE_ENABLED=false` (looks fall back to the OpenAI direct try-on, `openai_look_direct_fallback`), `FITTING_ROOM_LOOK_DETECT_ENABLED=false` (untagged looks go to generic Max as before) |
+| Rollback — final lock only | `cd /opt/fashionrise/src && sudo -u fashionriseapp git checkout --detach cf8fdaa2 && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+
 ## Deployed — Fitting Room result stays in wait modal (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
