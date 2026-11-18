@@ -42,6 +42,13 @@ class SketchPolishInputData(BaseModel):
         default=None,
         description="Which Studio face this sketch raster represents (dual Magic).",
     )
+    smart_back: bool | None = Field(
+        default=None,
+        description=(
+            "When true on a Back polish job, Image 1 is the Front sketch seed "
+            "(Smart Back) — invent the rear view of the same garment."
+        ),
+    )
     magic_operation_id: str | None = Field(
         default=None,
         description="Links front/back polish jobs from one coordinated Magic run.",
@@ -91,6 +98,10 @@ class SketchPolishSidePayload(BaseModel):
         ),
     )
     notes: str | None = None
+    smart_back: bool | None = Field(
+        default=None,
+        description="Back-only: Front sketch is the seed image for inventive rear completion.",
+    )
     idempotency_key: str = Field(min_length=1, max_length=128)
 
     model_config = ConfigDict(extra="allow")
