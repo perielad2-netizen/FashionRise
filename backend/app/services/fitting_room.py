@@ -513,10 +513,11 @@ FITTING_ROOM_LOOK_PRODUCTIZE_PROMPT = (
 # Max prompt when the garment ref is already a photoreal product from a solid look.
 FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
     "Fit only the clothing from the product photograph onto the person as real fabric. "
-    "Preserve multi-tone panel hues, cut, straps, hem, and asymmetry exactly. Do not unify "
-    "colors or paste sketch shading. Keep the person's existing footwear — do not invent "
-    "boots or shoes. Match person-photo lighting. Keep identity, face, hair, pose, "
-    "background, and natural skin tone unchanged."
+    "Preserve multi-tone panel hues, cut, straps, hem, and asymmetry exactly. Keep sheer "
+    "tulle/chiffon and high-low openings — legs must stay visible where the product shows "
+    "openings; never opaque-fill the skirt. Do not unify colors or paste sketch shading. "
+    "Keep the person's existing footwear — do not invent boots or shoes. Match person-photo "
+    "lighting. Keep identity, face, hair, pose, background, and natural skin tone unchanged."
 )
 
 # Shared footwear + coverage contract for Social look try-ons.
@@ -754,8 +755,8 @@ def analyze_fashionrise_look_plate(garment_png: bytes) -> dict[str, Any]:
         "look_color_lock": lock,
         "sheer_legs": bool(sheer.get("sheer_legs")),
         "sheer": sheer,
-        # Productize→Max regressed sheer/silhouette on Social looks — OpenAI direct is default.
-        "preferred_path": "openai_look_direct",
+        # Normalize illustration → garment plate (alpha-aware), then Max/OpenAI try-on.
+        "preferred_path": "normalize_then_max",
     }
 
 
@@ -766,8 +767,11 @@ def soft_check_look_tryon_result(
 ) -> dict[str, Any]:
     """Local quality signals after try-on — no extra provider calls.
 
-    Flags opaque skirts when the look expected visible legs through sheer layers.
+    Checks sheer coverage, color lock, and illustrated/sketch texture heuristics.
+    Passing color+legs alone is not enough to mark a result high quality.
     """
+    from app.services.look_garment_normalize import estimate_sketch_texture_score
+
     warnings: list[str] = []
     analysis = look_analysis if isinstance(look_analysis, dict) else {}
     sheer_expected = bool(analysis.get("sheer_legs"))
@@ -785,11 +789,15 @@ def soft_check_look_tryon_result(
             and float(result_lock.get("luma_delta") or 0) < -8
         ):
             warnings.append("color_lock_inverted")
+    texture = estimate_sketch_texture_score(result_png)
+    if texture.get("illustrated_texture_suspected"):
+        warnings.append("illustrated_texture_suspected")
     return {
         "ok": len(warnings) == 0,
         "warnings": warnings,
         "result_skin_ratio_lower": round(skin_ratio, 3),
         "sheer_expected": sheer_expected,
+        "texture": texture,
     }
 
 
@@ -977,7 +985,8 @@ def productize_fashionrise_look_plate(
         ) from exc
 
     png = extract_edit_png_bytes(result)
-    # Opaque RGB product plate — FASHN prefers non-transparent garment refs.
+    # LEGACY: opaque RGB flatten — do not use for sheer Social looks.
+    # Prefer normalize_fashionrise_look_garment (alpha-preserving) instead.
     with Image.open(io.BytesIO(png)) as im:
         im.load()
         rgb = Image.new("RGB", im.size, (245, 245, 245))
@@ -989,7 +998,6 @@ def productize_fashionrise_look_plate(
         rgb.save(out, format="PNG")
         product = out.getvalue()
 
-    # Re-apply color lock pull on the product so Max sees the measured split.
     product = reinforce_look_plate_panel_colors(product, data.get("look_color_lock"))
     return product, {
         "provider": "openai_look_productize",
@@ -1009,12 +1017,11 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
     clause = _look_color_lock_prompt_clause(lock if isinstance(lock, dict) else None)
     sheer = bool((data.get("look_analysis") or {}).get("sheer_legs")) if isinstance(data.get("look_analysis"), dict) else bool(data.get("look_sheer_legs"))
     sheer_boost = (
-        " SOURCE NOTE: lower garment region of image 2 shows skin through sheer/cutaway "
+        " SOURCE NOTE: lower garment region shows skin through sheer/cutaway "
         "layers — preserve that openness on the person."
         if sheer
         else ""
     )
-    # Append compact design evidence (COLOR LOCK + realism) without the full Studio prefix.
     evidence: list[str] = []
     for raw in hints:
         tip = " ".join(str(raw).split())
@@ -1023,7 +1030,21 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
         evidence.append(tip[:120])
         if len(evidence) >= 6:
             break
-    prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause + sheer_boost + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
+    if data.get("look_normalized"):
+        # Image 2 is already a photoreal product plate — fit fabric, do not re-illustrate.
+        prompt = (
+            "Create a single photograph of the person from image 1 wearing the clothing "
+            "from image 2. Image 2 is an isolated photoreal garment product reference "
+            "(not an illustration) — transfer its real fabric, cut, panel colors, hem, and "
+            "sheer/open regions onto the person. Keep the person's face, hair, pose, "
+            "proportions, background, lighting, and existing footwear. Do not invent boots, "
+            "leggings, or opaque underlayers. Do not redraw the garment as sketch/line art."
+            + clause
+            + sheer_boost
+            + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
+        )
+    else:
+        prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause + sheer_boost + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
     if evidence:
         prompt += " Design evidence: " + "; ".join(evidence) + "."
     return prompt
@@ -1186,9 +1207,9 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
 
     look_plate = _is_fashionrise_look_plate(data)
-    # Social look plates: OpenAI direct try-on (COLOR LOCK + sheer/footwear contract).
-    # Productize→Max was evaluated and regressed sheer skirts / silhouette on published looks;
-    # keep productize helper for optional/future use but do not spend an extra paid stage here.
+    # Social look plates: normalize illustration → photoreal garment (alpha-aware), then
+    # OpenAI try-on. Previous productize→Max flattened RGBA→opaque RGB and filled sheer
+    # skirts; openai_look_direct kept illustration texture on the person.
     look_analysis = data.get("look_analysis") if isinstance(data.get("look_analysis"), dict) else None
     if look_plate and look_analysis is None:
         look_analysis = analyze_fashionrise_look_plate(garment_png)
@@ -1198,17 +1219,71 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             data["look_color_lock"] = look_analysis["look_color_lock"]
     look_sheer = bool((look_analysis or {}).get("sheer_legs") or data.get("look_sheer_legs"))
 
+    look_normalize_meta: dict[str, Any] | None = None
     if look_plate and _try_on_provider_override is None:
-        meta = {
-            "fitting_room_look_path": "openai_look_direct",
-            "look_analysis": look_analysis,
-            "look_sheer_legs": look_sheer,
-        }
-        logger.info(
-            "Fitting Room job %s Social look → OpenAI direct (sheer=%s; skip productize)",
-            job.id,
-            look_sheer,
-        )
+        try:
+            from app.services.look_garment_normalize import normalize_fashionrise_look_garment
+
+            try_on_plate, look_normalize_meta = normalize_fashionrise_look_garment(
+                garment_png=garment_png, data=data
+            )
+            garment_png = try_on_plate
+            data["look_normalized"] = True
+            data["look_productized"] = True  # use product-fit Max prompt (not illustration paste)
+            meta = {
+                "fitting_room_look_path": "normalize_then_tryon",
+                "look_analysis": look_analysis,
+                "look_sheer_legs": look_sheer,
+                "look_normalize": look_normalize_meta,
+            }
+            logger.info(
+                "Fitting Room job %s Social look → normalize (sheer=%s alpha=%s)",
+                job.id,
+                look_sheer,
+                (look_normalize_meta or {}).get("alpha"),
+            )
+            # Prefer FASHN Max for photographic drape once we have a garment-only plate.
+            # Prior Max regression was opaque RGB flatten; normalize keeps openings/alpha.
+            if _fashn_max_fallback_armed():
+                try:
+                    png, max_meta = _generate_fitting_room_via_fashn(
+                        person_png=person_png, garment_png=garment_png, data=data
+                    )
+                    if not isinstance(max_meta, dict):
+                        max_meta = {}
+                    max_meta["fitting_room_look_path"] = "normalize_then_max"
+                    max_meta["look_analysis"] = look_analysis
+                    max_meta["look_normalize"] = look_normalize_meta
+                    max_meta["look_sheer_legs"] = look_sheer
+                    meta = max_meta
+                    used_provider = str(max_meta.get("provider") or "fashn_tryon_max")
+                    fallback_from = None
+                    openai_operator_detail = None
+                    logger.info(
+                        "Fitting Room job %s Social look → normalize then Max",
+                        job.id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.info(
+                        "Fitting Room job %s Max after normalize failed — OpenAI try-on next",
+                        job.id,
+                        exc_info=True,
+                    )
+                    png = None
+                    meta["fitting_room_look_path"] = "normalize_then_openai"
+        except Exception:  # noqa: BLE001
+            logger.info(
+                "Fitting Room job %s look normalize failed — falling back to OpenAI direct",
+                job.id,
+                exc_info=True,
+            )
+            data["look_normalized"] = False
+            data.pop("look_productized", None)
+            meta = {
+                "fitting_room_look_path": "openai_look_direct_fallback",
+                "look_analysis": look_analysis,
+                "look_sheer_legs": look_sheer,
+            }
 
     # Swimwear / lingerie / product dresses: prefer Try-On Max quality first (skip
     # OpenAI moderation landmines). Look plates handled above.
@@ -1239,7 +1314,10 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if png is None:
         try:
             provider = get_try_on_provider("openai")
-            garment_for_openai = _garment_png_for_look_plate(garment_png, data)
+            if data.get("look_normalized"):
+                garment_for_openai = garment_png
+            else:
+                garment_for_openai = _garment_png_for_look_plate(garment_png, data)
             openai_prompt = _fitting_room_openai_prompt(data, hints)
             generate_kwargs: dict[str, Any] = {
                 "photo_png": person_png,
@@ -1254,6 +1332,9 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             look_analysis_pref = (
                 meta.get("look_analysis") if isinstance(meta, dict) else None
             )
+            look_normalize_pref = (
+                meta.get("look_normalize") if isinstance(meta, dict) else None
+            )
             png, meta = provider.generate(**generate_kwargs)
             if not isinstance(meta, dict):
                 meta = {}
@@ -1261,6 +1342,8 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                 meta.setdefault("fitting_room_look_path", look_path_pref)
             if look_analysis_pref is not None:
                 meta.setdefault("look_analysis", look_analysis_pref)
+            if look_normalize_pref is not None:
+                meta.setdefault("look_normalize", look_normalize_pref)
             used_provider = "openai"
         except ProviderNotAvailableError as exc:
             openai_operator_detail = str(exc)[:400]
@@ -1386,6 +1469,12 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if isinstance(meta, dict):
         if meta.get("fitting_room_look_path"):
             result["fitting_room_look_path"] = meta.get("fitting_room_look_path")
+        if meta.get("look_normalize"):
+            result["look_normalize"] = {
+                "provider": (meta.get("look_normalize") or {}).get("provider"),
+                "prompt_kind": (meta.get("look_normalize") or {}).get("prompt_kind"),
+                "alpha": (meta.get("look_normalize") or {}).get("alpha"),
+            }
         if meta.get("look_productize"):
             result["look_productize"] = {
                 "provider": (meta.get("look_productize") or {}).get("provider"),
@@ -1415,6 +1504,8 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     slim = dict(data)
     slim.pop("person_image_base64", None)
     slim.pop("garment_image_base64", None)
+    slim.pop("look_normalized_product_png", None)
+    slim.pop("look_normalized_tryon_png", None)
     slim["images_stripped"] = True
     if used_provider != "openai":
         slim["provider"] = used_provider
