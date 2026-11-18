@@ -56,10 +56,20 @@ class MockTryOnProvider:
         self.calls = 0
         self.fail = fail
         self.last_hints: list[str] = []
+        self.last_prompt_override: str | None = None
 
-    def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None):
+    def generate(
+        self,
+        *,
+        photo_png: bytes,
+        garment_png: bytes,
+        design_hints=None,
+        prompt_override: str | None = None,
+        **kwargs,
+    ):
         self.calls += 1
         self.last_hints = list(design_hints) if design_hints else []
+        self.last_prompt_override = prompt_override
         if self.fail is not None:
             raise self.fail
         out = _png_bytes((80, 120), (10, 20, 30, 255))
@@ -422,3 +432,34 @@ def test_look_plate_skips_max_first_flag_helper():
     assert _is_fashionrise_look_plate({"garment_sources": ["fashionrise_look"]})
     assert not _is_fashionrise_look_plate({"garment_source": "upload"})
     assert not _is_fashionrise_look_plate({})
+
+
+def test_look_plate_openai_prompt_demands_photoreal_not_sketch():
+    from app.services.fitting_room import (
+        _fitting_room_openai_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_openai_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock},
+        [
+            "Render real fabric photo matching image-1 lighting; no sketch overlay.",
+            "1:1 look design; photoreal cloth not illustration paste.",
+        ],
+    )
+    assert prompt is not None
+    assert "photorealistic" in prompt.lower()
+    assert "sketch" in prompt.lower()
+    assert "one-to-one" in prompt.lower() or "1:1" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert "COLOR LOCK" in prompt
+
+
+def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
+    from app.services.fitting_room import _fitting_room_max_prompt
+
+    prompt = _fitting_room_max_prompt({"garment_source": "fashionrise_look"})
+    assert "REAL photographed clothing" in prompt or "real photographed" in prompt.lower()
+    assert "sketch overlay" in prompt.lower()
+    assert len(prompt) <= 1000

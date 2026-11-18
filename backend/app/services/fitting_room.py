@@ -328,8 +328,10 @@ def enqueue_fitting_room_try_on(
         hints.extend(
             [
                 "fashionrise_look_plate",
-                "Ignore illustrated model body/skin in garment plate; clothing only.",
-                "Keep exact multi-tone colors (bodice vs skirt); do not unify or wash panels.",
+                "Ignore illustrated model body/skin; clothing design only.",
+                "Render real fabric photo matching image-1 lighting; no sketch overlay.",
+                "1:1 look design; photoreal cloth not illustration paste.",
+                "Keep exact multi-tone colors (bodice vs skirt); do not unify panels.",
             ]
         )
         if look_color_lock:
@@ -446,12 +448,28 @@ FITTING_ROOM_MAX_PROMPT = (
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
 # Keep short: FASHN Max truncates prompts at 1000 chars (color lock appends below).
 FITTING_ROOM_LOOK_PLATE_PROMPT = (
-    "Clothing reference is a FashionRise look illustration with a drawn model. "
-    "Ignore that body/face/hair/skin/pose — transfer only the garments onto the person. "
-    "Preserve each panel's exact hue and value (bodice vs skirt, overlays, sheer layers). "
-    "Do not unify, lighten, wash, or recolor clothing. Keep cut, straps, coverage, fabric "
-    "identical. Keep the real person's identity, face, hair, pose, lighting, background, "
-    "and natural skin tone unchanged."
+    "FashionRise look illustration with a drawn model — ignore body/face/hair/skin/pose; "
+    "transfer only the garments onto the person as REAL photographed clothing, not a "
+    "sketch overlay. 1:1 design: cut, coverage, sheer layers, exact panel hues "
+    "(bodice vs skirt). Do not unify or wash colors. Match person-photo lighting with "
+    "natural fabric texture and soft contact shadows. Keep the real person's identity, "
+    "face, hair, pose, lighting, background, and natural skin tone unchanged."
+)
+
+# OpenAI Fitting Room path for Social looks — full photoreal + 1:1 contract (not Max-truncated).
+FITTING_ROOM_LOOK_OPENAI_PROMPT = (
+    "Create a single photorealistic photograph of the person from image 1 wearing real "
+    "clothing that matches the FashionRise look illustration in image 2 one-to-one. "
+    "Image 2 includes a drawn model — ignore that illustrated body, face, hair, skin, and "
+    "pose; use only the garment design. Keep cut, silhouette, neckline, straps, coverage, "
+    "sheer layers, and every panel color exact (including two-tone bodice vs skirt — do not "
+    "unify hues). "
+    "CRITICAL REALISM: render the garments as real fabric in a real photo — natural cloth "
+    "texture, weave, folds, and sheerness that respond to image 1 lighting with soft "
+    "contact shadows at skin edges. Do NOT paste sketch strokes, flat illustrated fills, "
+    "airbrushed concept-art shading, or a translucent sketched overlay. "
+    "Preserve the person's exact identity, face, hair, pose, proportions, background, "
+    "and natural skin tone. Output one realistic photograph."
 )
 
 
@@ -646,6 +664,27 @@ def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
     )
 
 
+def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str | None:
+    """Look-plate OpenAI prompt override; None → provider default try-on prompt."""
+    if not _is_fashionrise_look_plate(data):
+        return None
+    lock = data.get("look_color_lock")
+    clause = _look_color_lock_prompt_clause(lock if isinstance(lock, dict) else None)
+    # Append compact design evidence (COLOR LOCK + realism) without the full Studio prefix.
+    evidence: list[str] = []
+    for raw in hints:
+        text = " ".join(str(raw).split())
+        if not text:
+            continue
+        evidence.append(text[:120])
+        if len(evidence) >= 6:
+            break
+    prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause
+    if evidence:
+        prompt += " Design evidence: " + "; ".join(evidence) + "."
+    return prompt
+
+
 def _ensure_look_color_lock(
     garment_png: bytes, data: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -820,11 +859,15 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         try:
             provider = get_try_on_provider("openai")
             garment_for_openai = _garment_png_for_look_plate(garment_png, data)
-            png, meta = provider.generate(
-                photo_png=person_png,
-                garment_png=garment_for_openai,
-                design_hints=hints,
-            )
+            openai_prompt = _fitting_room_openai_prompt(data, hints)
+            generate_kwargs: dict[str, Any] = {
+                "photo_png": person_png,
+                "garment_png": garment_for_openai,
+                "design_hints": hints,
+            }
+            if openai_prompt:
+                generate_kwargs["prompt_override"] = openai_prompt
+            png, meta = provider.generate(**generate_kwargs)
             if not isinstance(meta, dict):
                 meta = {}
             used_provider = "openai"

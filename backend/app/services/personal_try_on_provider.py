@@ -517,6 +517,7 @@ class OpenAITryOnImagesEditAdapter:
         photo_png: bytes,
         garment_png: bytes,
         design_hints: list[str] | None = None,
+        prompt_override: str | None = None,
     ) -> dict[str, Any]:
         from app.services.sketch_openai import (
             SketchCompletionError,
@@ -540,11 +541,13 @@ class OpenAITryOnImagesEditAdapter:
 
         garment_for_edit, _vis_meta = prepare_openai_try_on_garment_visibility(garment_png)
 
+        prompt_text = (prompt_override or "").strip() or build_try_on_prompt(design_hints)
+
         try:
             # Reuse shared builder: image[0]=photo, image[1]=garment (via fabric_swatch slot).
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=build_try_on_prompt(design_hints),
+                prompt=prompt_text,
                 sketch=(photo_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -598,6 +601,7 @@ class OpenAITryOnImagesEditAdapter:
         photo_png: bytes,
         garment_png: bytes,
         design_hints: list[str] | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[bytes, dict[str, Any]]:
         """Run one images.edit. Returns (png_bytes, usage_meta)."""
         settings = get_settings()
@@ -609,7 +613,10 @@ class OpenAITryOnImagesEditAdapter:
             raise ProviderNotAvailableError("OPENAI_API_KEY missing")
 
         kwargs = self.build_edit_kwargs(
-            photo_png=photo_png, garment_png=garment_png, design_hints=design_hints
+            photo_png=photo_png,
+            garment_png=garment_png,
+            design_hints=design_hints,
+            prompt_override=prompt_override,
         )
         from openai import OpenAI
 
