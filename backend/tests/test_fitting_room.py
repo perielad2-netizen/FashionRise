@@ -56,10 +56,20 @@ class MockTryOnProvider:
         self.calls = 0
         self.fail = fail
         self.last_hints: list[str] = []
+        self.last_prompt_override: str | None = None
 
-    def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None):
+    def generate(
+        self,
+        *,
+        photo_png: bytes,
+        garment_png: bytes,
+        design_hints=None,
+        prompt_override: str | None = None,
+        **kwargs,
+    ):
         self.calls += 1
         self.last_hints = list(design_hints) if design_hints else []
+        self.last_prompt_override = prompt_override
         if self.fail is not None:
             raise self.fail
         out = _png_bytes((80, 120), (10, 20, 30, 255))
@@ -365,3 +375,261 @@ def test_decode_applies_exif_orientation_before_provider(client, db_session, mon
     out = Image.open(io.BytesIO(oriented))
     assert out.size == (20, 40)
     assert out.getexif().get(274) in (None, 1)
+
+
+def _two_tone_look_png(
+    *,
+    bodice=(90, 120, 70),
+    skirt=(40, 70, 45),
+    size=(200, 400),
+) -> bytes:
+    """Synthetic FashionRise look plate: light olive bodice over darker forest skirt."""
+    im = Image.new("RGB", size, (245, 245, 245))
+    w, h = size
+    for y in range(int(h * 0.28), int(h * 0.46)):
+        for x in range(int(w * 0.30), int(w * 0.70)):
+            im.putpixel((x, y), bodice)
+    for y in range(int(h * 0.52), int(h * 0.74)):
+        for x in range(int(w * 0.25), int(w * 0.75)):
+            im.putpixel((x, y), skirt)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_sample_look_garment_panel_colors_detects_lighter_bodice():
+    from app.services.fitting_room import sample_look_garment_panel_colors
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    assert lock is not None
+    assert lock["relation"] == "lighter_bodice"
+    assert lock["bodice_hex"].startswith("#")
+    assert lock["skirt_hex"].startswith("#")
+    assert lock["luma_delta"] > 6
+
+
+def test_look_plate_max_prompt_includes_color_lock():
+    from app.services.fitting_room import (
+        _fitting_room_max_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_max_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock}
+    )
+    assert "COLOR LOCK" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert lock["skirt_hex"] in prompt
+    assert "lighter than the skirt" in prompt
+    assert len(prompt) <= 1000
+
+
+def test_look_plate_skips_max_first_flag_helper():
+    from app.services.fitting_room import _is_fashionrise_look_plate
+
+    assert _is_fashionrise_look_plate({"garment_source": "fashionrise_look"})
+    assert _is_fashionrise_look_plate({"garment_sources": ["fashionrise_look"]})
+    assert not _is_fashionrise_look_plate({"garment_source": "upload"})
+    assert not _is_fashionrise_look_plate({})
+
+
+def test_look_plate_openai_prompt_demands_photoreal_not_sketch():
+    from app.services.fitting_room import (
+        _fitting_room_openai_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_openai_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock},
+        [
+            "Render real fabric photo matching image-1 lighting; no sketch overlay.",
+            "1:1 look design; photoreal cloth not illustration paste.",
+        ],
+    )
+    assert prompt is not None
+    assert "photorealistic" in prompt.lower()
+    assert "sketch" in prompt.lower()
+    assert "one-to-one" in prompt.lower() or "1:1" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert "COLOR LOCK" in prompt
+    assert "footwear" in prompt.lower() or "shoes" in prompt.lower()
+
+
+def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
+    from app.services.fitting_room import _fitting_room_max_prompt
+
+    prompt = _fitting_room_max_prompt({"garment_source": "fashionrise_look"})
+    assert "REAL photographed clothing" in prompt or "real photographed" in prompt.lower()
+    assert "sketch overlay" in prompt.lower()
+    assert len(prompt) <= 1000
+
+
+def test_look_productize_prompt_keeps_color_lock_and_no_person():
+    from app.services.fitting_room import (
+        _look_productize_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _look_productize_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock}
+    )
+    assert "product photograph" in prompt.lower() or "commercial clothing" in prompt.lower()
+    assert "COLOR LOCK" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert "No person" in prompt or "clothing only" in prompt.lower()
+
+
+def test_look_productized_max_prompt_is_product_fit_not_illustration():
+    from app.services.fitting_room import (
+        FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT,
+        _fitting_room_max_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_max_prompt(
+        {
+            "garment_source": "fashionrise_look",
+            "look_productized": True,
+            "look_color_lock": lock,
+        }
+    )
+    assert prompt.startswith(FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT[:40])
+    assert "COLOR LOCK" in prompt
+    assert "drawn model" not in prompt.lower()
+    assert len(prompt) <= 1000
+
+
+def _sheer_look_png(*, size=(200, 400)) -> bytes:
+    """Synthetic sheer look: two-tone dress with skin-visible lower legs / high-low hem."""
+    im = Image.new("RGB", size, (245, 245, 245))
+    w, h = size
+    skin = (210, 160, 130)
+    bodice = (90, 120, 70)
+    skirt = (40, 70, 45)
+    for y in range(int(h * 0.28), int(h * 0.46)):
+        for x in range(int(w * 0.30), int(w * 0.70)):
+            im.putpixel((x, y), bodice)
+    for y in range(int(h * 0.52), int(h * 0.70)):
+        for x in range(int(w * 0.25), int(w * 0.55)):
+            t = 0.30
+            im.putpixel(
+                (x, y),
+                (
+                    int(skirt[0] * t + skin[0] * (1 - t)),
+                    int(skirt[1] * t + skin[1] * (1 - t)),
+                    int(skirt[2] * t + skin[2] * (1 - t)),
+                ),
+            )
+    # High-low: right side opens to skin; ankle band mostly exposed.
+    for y in range(int(h * 0.55), int(h * 0.95)):
+        for x in range(int(w * 0.55), int(w * 0.75)):
+            im.putpixel((x, y), skin)
+    for y in range(int(h * 0.72), int(h * 0.95)):
+        for x in range(int(w * 0.32), int(w * 0.55)):
+            im.putpixel((x, y), skin)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_sample_look_garment_panel_colors_works_for_non_green():
+    from app.services.fitting_room import sample_look_garment_panel_colors
+
+    lock = sample_look_garment_panel_colors(
+        _two_tone_look_png(bodice=(180, 60, 70), skirt=(40, 50, 140))
+    )
+    assert lock is not None
+    assert lock["relation"] == "lighter_bodice"
+    assert lock["bodice_hex"].startswith("#")
+
+
+def test_analyze_look_plate_detects_sheer_legs():
+    from app.services.fitting_room import analyze_fashionrise_look_plate
+
+    solid = analyze_fashionrise_look_plate(_two_tone_look_png())
+    sheer = analyze_fashionrise_look_plate(_sheer_look_png())
+    assert solid["preferred_path"] == "openai_look_direct"
+    assert sheer["sheer_legs"] is True
+    assert sheer["preferred_path"] == "openai_look_direct"
+
+
+def test_soft_check_flags_opaque_skirt_when_sheer_expected():
+    from app.services.fitting_room import (
+        analyze_fashionrise_look_plate,
+        soft_check_look_tryon_result,
+    )
+
+    analysis = analyze_fashionrise_look_plate(_sheer_look_png())
+    opaque = _two_tone_look_png()  # no legs visible
+    quality = soft_check_look_tryon_result(opaque, look_analysis=analysis)
+    assert quality["sheer_expected"] is True
+    assert "sheer_legs_likely_covered" in quality["warnings"]
+
+
+def test_look_plate_prefers_openai_direct(client, db_session, monkeypatch):
+    """Social looks: OpenAI direct try-on (productize→Max skipped after sheer QA regression)."""
+    from app.services import fitting_room as fr
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setattr(fr, "_fashn_fallback_armed", lambda: True)
+
+    calls: list[str] = []
+
+    def _boom_productize(*, garment_png: bytes, data: dict):
+        raise AssertionError("productize must not run for Social look default path")
+
+    def _boom_fashn(*, person_png: bytes, garment_png: bytes, data: dict):
+        raise AssertionError("FASHN Max must not run when OpenAI look direct succeeds")
+
+    class _OpenAIProv:
+        def generate(self, **kwargs):
+            calls.append("openai")
+            assert kwargs.get("prompt_override")
+            assert "COLOR LOCK" in kwargs["prompt_override"] or "photorealistic" in kwargs[
+                "prompt_override"
+            ].lower()
+            return _png_bytes((96, 128), (20, 40, 60, 255)), {"provider": "openai"}
+
+    monkeypatch.setattr(fr, "productize_fashionrise_look_plate", _boom_productize)
+    monkeypatch.setattr(fr, "_generate_fitting_room_via_fashn", _boom_fashn)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda name: _OpenAIProv())
+    set_try_on_provider_override(None)
+
+    tokens = register_with_invite(
+        client, db_session, email="fr-look-openai@example.com", username="fr_look_oai"
+    )
+    _grant_stars(db_session, "fr_look_oai", amount=40)
+    look_png = _two_tone_look_png()
+    look_b64 = "data:image/png;base64," + base64.b64encode(look_png).decode("ascii")
+    person_b64 = _data_url((40, 80, 120, 255))
+    key = f"fitting_room:{uuid.uuid4()}"
+    body = {
+        "person_image_base64": person_b64,
+        "garment_pieces": [
+            {
+                "image_base64": look_b64,
+                "category": "dresses",
+                "source": "fashionrise_look",
+            }
+        ],
+        "idempotency_key": key,
+        "consent_acknowledged": True,
+        "consent_version": FITTING_ROOM_CONSENT_VERSION,
+    }
+    r = client.post(f"{FR}/try-on", json=body, headers=_auth(tokens))
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    assert run_magic_worker_tick(db_session) >= 1
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None
+    assert job.status == "completed"
+    assert calls == ["openai"]
+    result = job.result_data or {}
+    assert result.get("provider") == "openai"
+    assert result.get("fitting_room_look_path") == "openai_look_direct"
+    assert "look_quality" in result

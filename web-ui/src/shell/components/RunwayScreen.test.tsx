@@ -23,7 +23,12 @@ const requestFriendByUsername = vi.fn()
 const listUserGallery = vi.fn()
 const getPublicProfile = vi.fn()
 const removeFriend = vi.fn()
-const fetchGalleryImageBlob = vi.fn(async () => new Blob())
+const fetchGalleryImageBlob = vi.fn(async () => new Blob(['look'], { type: 'image/png' }))
+const plantFittingRoomGarment = vi.fn(async () => undefined)
+const blobToFittingRoomDataUrl = vi.fn(async () => ({
+  dataUrl: 'data:image/png;base64,look',
+  mimeType: 'image/png',
+}))
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
@@ -39,6 +44,15 @@ vi.mock('@/services/galleryApi', () => ({
   reportGalleryItem: (...args: unknown[]) => reportGalleryItem(...args),
   listUserGallery: (...args: unknown[]) => listUserGallery(...args),
   fetchGalleryImageBlob: (...args: unknown[]) => fetchGalleryImageBlob(...args),
+}))
+
+vi.mock('@/config/fittingRoomUi', () => ({
+  isFittingRoomUiEnabled: () => true,
+}))
+
+vi.mock('@/lib/fittingRoomStore', () => ({
+  plantFittingRoomGarment: (...args: unknown[]) => plantFittingRoomGarment(...args),
+  blobToFittingRoomDataUrl: (...args: unknown[]) => blobToFittingRoomDataUrl(...args),
 }))
 
 const getFollowStatus = vi.fn()
@@ -203,7 +217,14 @@ describe('RunwayScreen', () => {
     runwayPushIsEnabled.mockReset()
     ensureDefaultRunwayPush.mockReset()
     fetchGalleryImageBlob.mockReset()
-    fetchGalleryImageBlob.mockResolvedValue(new Blob())
+    fetchGalleryImageBlob.mockResolvedValue(new Blob(['look'], { type: 'image/png' }))
+    plantFittingRoomGarment.mockReset()
+    plantFittingRoomGarment.mockResolvedValue(undefined)
+    blobToFittingRoomDataUrl.mockReset()
+    blobToFittingRoomDataUrl.mockResolvedValue({
+      dataUrl: 'data:image/png;base64,look',
+      mimeType: 'image/png',
+    })
     runwayPushIsEnabled.mockResolvedValue(false)
     enableRunwayPush.mockResolvedValue('granted')
     disableRunwayPush.mockResolvedValue(undefined)
@@ -987,5 +1008,53 @@ describe('RunwayScreen', () => {
       expect(screen.queryByText(/Deleted look reel/i)).not.toBeInTheDocument()
       expect(screen.queryByText(/@NoaPeri/i)).not.toBeInTheDocument()
     })
+  })
+
+  it('plants the look into Fitting Room and navigates on Try on me', async () => {
+    const onOpenFittingRoom = vi.fn()
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'tryon-1',
+            title: 'Try me look',
+            username: 'yanivprbk',
+            look_id: 'look-tryon',
+          },
+        ]
+      }
+      if (opts?.sort === 'circle') return []
+      if (opts?.sort === 'following') return []
+      if (opts?.sort === 'top10') return []
+      return []
+    })
+
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        onOpenFittingRoom={onOpenFittingRoom}
+      />,
+    )
+    const pill = await screen.findByTestId('runway-try-on-pill-tryon-1')
+    fireEvent.click(pill)
+    await waitFor(() => expect(fetchGalleryImageBlob).toHaveBeenCalledWith('tryon-1'))
+    await waitFor(() => expect(blobToFittingRoomDataUrl).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(plantFittingRoomGarment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'viewer-1',
+          dataUrl: 'data:image/png;base64,look',
+          category: 'dresses',
+          source: 'fashionrise_look',
+          notice: expect.objectContaining({
+            galleryItemId: 'tryon-1',
+            title: 'Try me look',
+          }),
+        }),
+      ),
+    )
+    expect(onOpenFittingRoom).toHaveBeenCalled()
   })
 })

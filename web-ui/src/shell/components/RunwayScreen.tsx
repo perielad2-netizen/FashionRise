@@ -19,6 +19,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   RefreshCw,
+  Shirt,
   Sparkles,
   Star,
   User,
@@ -27,6 +28,7 @@ import {
   X,
 } from 'lucide-react'
 import {
+  fetchGalleryImageBlob,
   getGalleryItem,
   likeGalleryItem,
   listGallery,
@@ -59,7 +61,12 @@ import {
   pushSupported,
   runwayPushIsEnabled,
 } from '@/services/pushApi'
+import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
+import {
+  blobToFittingRoomDataUrl,
+  plantFittingRoomGarment,
+} from '@/lib/fittingRoomStore'
 import {
   followCreator,
   getFollowStatus,
@@ -83,6 +90,8 @@ export { __followStatusCacheTestUtils, followStatusCacheKey }
 type Props = {
   onOpenCreate: () => void
   onOpenLooks: () => void
+  /** Open Fitting Room after planting a Social look as clothing. */
+  onOpenFittingRoom?: () => void
   /** Deep-link from Home header avatar → open own editable profile. */
   openOwnProfile?: boolean
   onOwnProfileConsumed?: () => void
@@ -158,6 +167,7 @@ function formatCount(n: number): string {
 export function RunwayScreen({
   onOpenCreate,
   onOpenLooks,
+  onOpenFittingRoom,
   openOwnProfile = false,
   onOwnProfileConsumed,
   onImmersiveFeedChange,
@@ -903,6 +913,7 @@ export function RunwayScreen({
                   onMediaUnavailable={removeUnavailableItem}
                   onHideReported={removeUnavailableItem}
                   onOpenDesigner={(designer) => setViewingDesigner(designer)}
+                  onOpenFittingRoom={onOpenFittingRoom}
                   onVisibleImpression={
                     tab === 'discover' && viewerId && item.user_id !== viewerId
                       ? reportDiscoverImpression
@@ -947,6 +958,7 @@ export function RunwayScreen({
           onHideReported={removeUnavailableItem}
           onClose={() => setBrowseSheet(null)}
           onOpenLooks={onOpenLooks}
+          onOpenFittingRoom={onOpenFittingRoom}
           onOpenFriends={() => {
             setBrowseSheet(null)
             setTab('friends')
@@ -973,6 +985,7 @@ function RunwayBrowseSheet({
   onHideReported,
   onClose,
   onOpenLooks,
+  onOpenFittingRoom,
   onOpenFriends,
   onOpenDesigner,
   onVisibleImpression,
@@ -985,6 +998,7 @@ function RunwayBrowseSheet({
   onHideReported?: (galleryItemId: string) => void
   onClose: () => void
   onOpenLooks: () => void
+  onOpenFittingRoom?: () => void
   onOpenFriends: () => void
   onOpenDesigner: (designer: DesignerRef) => void
   onVisibleImpression?: (galleryItemId: string) => void
@@ -1120,6 +1134,7 @@ function RunwayBrowseSheet({
                   onItemChange={onItemChange}
                   onHideReported={onHideReported}
                   onOpenDesigner={onOpenDesigner}
+                  onOpenFittingRoom={onOpenFittingRoom}
                   onVisibleImpression={
                     onVisibleImpression && viewerId && item.user_id !== viewerId
                       ? onVisibleImpression
@@ -1456,6 +1471,7 @@ function RunwayCard({
   onMediaUnavailable,
   onHideReported,
   onOpenDesigner,
+  onOpenFittingRoom,
   onVisibleImpression,
 }: {
   item: GalleryItem
@@ -1471,6 +1487,7 @@ function RunwayCard({
   /** Hide look after the viewer reports it (moderation). */
   onHideReported?: (galleryItemId: string) => void
   onOpenDesigner?: (designer: DesignerRef) => void
+  onOpenFittingRoom?: () => void
   /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
   onVisibleImpression?: (galleryItemId: string) => void
 }) {
@@ -1480,7 +1497,9 @@ function RunwayCard({
     Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
   const cardRef = useRef<HTMLLIElement | null>(null)
   const impressionSentRef = useRef(false)
-  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | null>(null)
+  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | 'tryon' | null>(
+    null,
+  )
   const [actionError, setActionError] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -1798,6 +1817,63 @@ function RunwayCard({
     [busy, viewerId],
   )
 
+  const canTryOn =
+    Boolean(viewerId) &&
+    isFittingRoomUiEnabled() &&
+    Boolean(onOpenFittingRoom) &&
+    Boolean(item.look_id || item.image_url) &&
+    !mediaGone
+
+  const onTryOnMe = useCallback(async () => {
+    if (!viewerId || !onOpenFittingRoom || busy === 'tryon' || !canTryOn) return
+    setBusy('tryon')
+    setActionError(null)
+    try {
+      let blob: Blob
+      if (item.look_id) {
+        blob = await fetchGalleryImageBlob(item.id)
+      } else if (item.image_url) {
+        const res = await fetch(item.image_url)
+        if (!res.ok) throw new Error('Could not load look image')
+        blob = await res.blob()
+      } else {
+        throw new Error('This look has no image to try on')
+      }
+      const { dataUrl, mimeType } = await blobToFittingRoomDataUrl(blob)
+      await plantFittingRoomGarment({
+        userId: viewerId,
+        dataUrl,
+        mimeType,
+        category: 'dresses',
+        source: 'fashionrise_look',
+        notice: {
+          title: item.title?.trim() || 'FashionRise look',
+          galleryItemId: item.id,
+        },
+      })
+      onOpenFittingRoom()
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not open Fitting Room with this look.',
+      )
+    } finally {
+      setBusy(null)
+    }
+  }, [
+    busy,
+    canTryOn,
+    item.id,
+    item.image_url,
+    item.look_id,
+    item.title,
+    onOpenFittingRoom,
+    viewerId,
+  ])
+
   const ranked = layout === 'rank' && rank != null
   const cardClass = immersive
     ? styles.immersiveCard
@@ -1920,6 +1996,21 @@ function RunwayCard({
           {followingDesigner ? 'Following' : 'Follow'}
         </button>
       ) : null}
+      {canTryOn ? (
+        <button
+          type="button"
+          className={styles.tryOnBtn}
+          aria-label="Try on me in Fitting Room"
+          data-testid={`runway-try-on-${item.id}`}
+          disabled={busy === 'tryon'}
+          onClick={() => void onTryOnMe()}
+        >
+          <Shirt size={immersive ? 24 : 12} aria-hidden />
+          <span className={immersive ? styles.actionCount : undefined}>
+            {busy === 'tryon' ? '…' : immersive ? 'Try on' : 'Try on me'}
+          </span>
+        </button>
+      ) : null}
       {!isOwn && viewerId ? (
         <button
           type="button"
@@ -2009,6 +2100,18 @@ function RunwayCard({
               </div>
               {item.title?.trim() ? (
                 <p className={styles.immersiveCaption}>{item.title.trim()}</p>
+              ) : null}
+              {canTryOn ? (
+                <button
+                  type="button"
+                  className={styles.tryOnPill}
+                  data-testid={`runway-try-on-pill-${item.id}`}
+                  disabled={busy === 'tryon'}
+                  onClick={() => void onTryOnMe()}
+                >
+                  <Shirt size={15} aria-hidden />
+                  {busy === 'tryon' ? 'Opening…' : 'Try on me'}
+                </button>
               ) : null}
               {actionError && !commentsOpen ? (
                 <p className={styles.cardError} role="alert">

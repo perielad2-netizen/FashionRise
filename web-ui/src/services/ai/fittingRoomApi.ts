@@ -19,6 +19,8 @@ export type FittingRoomPreflight = {
 export type FittingRoomGarmentPieceInput = {
   imageBase64: string
   category?: string
+  /** fashionrise_look = Social Try on me plate (full look illustration). */
+  source?: 'fashionrise_look' | 'upload'
 }
 
 export type FittingRoomTryOnInput = {
@@ -50,6 +52,7 @@ export async function enqueueFittingRoomTryOn(
             garment_pieces: input.garmentPieces.map((p) => ({
               image_base64: p.imageBase64,
               category: p.category ?? 'auto',
+              ...(p.source ? { source: p.source } : {}),
             })),
           }
         : { garment_image_base64: input.garmentImageBase64 }),

@@ -465,6 +465,11 @@ class FittingRoomGarmentPiece(BaseModel):
 
     image_base64: str = Field(..., min_length=32)
     category: str | None = Field(default="auto", max_length=32)
+    source: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Optional plate origin — e.g. fashionrise_look for Social Try on me.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
