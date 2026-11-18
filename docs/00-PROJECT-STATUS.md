@@ -3,20 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## P0 — Android CAMERA permission crash loop (2026-11-18 Asia/Jerusalem)
+## Deployed — Android CAMERA permission crash loop P0 (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Symptom | Fitting Room → Take photo → Android CAMERA permission → Back → “FashionRise keeps stopping”; relaunch may fail until force-stop |
-| Prior PRs | **#419** / **#423** — JS Back / `exitApp` / filePickerGuard only; **did not remove CAMERA** from the native manifest; **web deploy alone does not update** installed APK/AAB `dist/` |
-| Suspected root cause | App declared `android.permission.CAMERA` while capture is HTML `capture="environment"` → Capacitor `MediaStore.ACTION_IMAGE_CAPTURE`. Capacitor prompts for CAMERA only when the permission is *defined*; Back/deny + capture without grant matches MediaStore `SecurityException` guidance. No in-app `getUserMedia` / `@capacitor/camera`. |
-| Evidence in-repo | `AndroidManifest.xml` declared CAMERA · `BridgeWebChromeClient.isMediaCaptureSupported` / `onShowFileChooser` · FittingRoom `capture="environment"` · grep shows no other CAMERA consumers · Unity AndroidManifest has no CAMERA |
-| Logcat | **Not captured this run** — no device/emulator attached (`adb devices` empty). Treat as **strong hypothesis** until Samsung Logcat confirms `SecurityException` / chooser stack. |
-| Fix | `CAMERA` → `tools:node="remove"` in `web-ui/android/app/src/main/AndroidManifest.xml` · assert script `npm run check:android-camera-perm` · local default `versionCode` **21** · Codemagic `ANDROID_VERSION_CODE_OFFSET` **20** |
-| Secondary (kept) | Existing #423 minimizeApp + filePickerGuard for gallery/camera Activity cancel (not a new Back workaround) |
-| Production | **Not deployed** · **Codemagic not triggered** (needs explicit auth) |
-| Next action | Build/sideload new Android Internal APK/AAB with this tip · Samsung: Camera, Back on system camera, cancel gallery, immediate retry · optional Logcat if any crash remains |
-| Branch | `cursor/web-android-camera-crash-77c6` |
+| PR | **#431** merged → `main` @ **`0e5257be`** |
+| Symptom | Fitting Room → Take photo → Android CAMERA permission → Back → “FashionRise keeps stopping” |
+| Prior PRs | **#419** / **#423** — JS Back / `exitApp` / filePickerGuard only; did not remove native `CAMERA`; web deploy alone does not update installed APK/AAB |
+| Suspected root cause | Declared `android.permission.CAMERA` while capture is HTML `capture="environment"` → Capacitor `ACTION_IMAGE_CAPTURE`. Capacitor prompts only when CAMERA is *defined*; Back/deny + capture without grant matches MediaStore `SecurityException` guidance. No in-app `getUserMedia` / `@capacitor/camera`. |
+| Logcat | Not captured in agent VM (`adb devices` empty). Strong in-repo hypothesis; Samsung Logcat still useful if any crash remains. |
+| Fix | `CAMERA` → `tools:node="remove"` · `npm run check:android-camera-perm` · local `versionCode` **21** · Codemagic offset **20** |
+| FE tip | **`0e5257be`** · `/var/www/fashionrise/releases/0e5257be-android-camera` · `/version.json` → `0e5257be` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/3e59f594-report-discard /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Android debug APK | VPS `/var/www/fashionrise/artifacts/android/FashionRise-0e5257be-camera-debug.apk` · **no CAMERA** in `aapt` · `versionCode=21` (sideload QA) |
+| Play AAB / Codemagic | **Not started** from this agent (no Codemagic API token). Start **FashionRise Android (Play AAB)** on tip `0e5257be` for Internal testing. |
+| iOS | No change required — keep `NSCameraUsageDescription` (do **not** mirror Android CAMERA removal) |
+| Next action | Sideload debug APK or install Codemagic Internal AAB on Samsung · Take photo / Back cancel / gallery cancel / immediate retry |
 
 ## Fix — Report discard keep-private + confirm Send (2026-11-17 Asia/Jerusalem)
 
