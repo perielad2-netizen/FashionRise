@@ -53,7 +53,7 @@ npm run cap:ios           # opens Xcode (macOS only)
 | Package / applicationId | `app.fashionrise.studio` |
 | targetSdk / compileSdk | **36** (`web-ui/android/variables.gradle`) |
 | versionName | **1.0** |
-| versionCode | `PROJECT_BUILD_NUMBER + ANDROID_VERSION_CODE_OFFSET` (offset currently `10`) |
+| versionCode | `PROJECT_BUILD_NUMBER + ANDROID_VERSION_CODE_OFFSET` (offset currently `20`) |
 | Signing | Codemagic `android_signing` reference **`fashionrise_android_upload`** → Gradle `CM_KEYSTORE_*` |
 | Native web | `npm run build:native` + `npx cap sync android` |
 | Artifact | `web-ui/android/app/build/outputs/bundle/release/*.aab` |

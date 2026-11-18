@@ -66,4 +66,24 @@ describe('filePickerGuard', () => {
     vi.setSystemTime(1_000_000 + 10_000)
     expect(wasNativeFilePickerRecentlyOpen()).toBe(false)
   })
+
+  it('allows a second Camera arm after cancel clears the first guard', async () => {
+    vi.useFakeTimers()
+    const first = document.createElement('input')
+    first.type = 'file'
+    const finishFirst = armNativeFilePickerForInput(first, { camera: true })
+    first.dispatchEvent(new Event('cancel'))
+    await vi.advanceTimersByTimeAsync(400)
+    finishFirst()
+    __resetNativeFilePickerGuardForTests()
+
+    const second = document.createElement('input')
+    second.type = 'file'
+    armNativeFilePickerForInput(second, { camera: true })
+    expect(App.toggleBackButtonHandler).toHaveBeenCalledWith({ enabled: false })
+    expect(isNativeFilePickerOpen()).toBe(true)
+    second.dispatchEvent(new Event('cancel'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(App.toggleBackButtonHandler).toHaveBeenLastCalledWith({ enabled: true })
+  })
 })

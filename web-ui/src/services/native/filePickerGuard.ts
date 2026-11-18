@@ -1,15 +1,17 @@
 /**
- * Tracks when a native WebView file/camera picker (or OS CAMERA permission sheet)
+ * Tracks when a native WebView file/camera picker (or system camera Activity)
  * may be open.
  *
- * Android crash loop (Fitting Room Take photo):
- * 1) Capacitor OnBackPressedCallback consumes Back while the permission dialog is up
- * 2) Our listener called App.exitApp() → Activity.finish() mid permission/file callback
- * 3) WebView filePathCallback never cleared → next Camera tap crashes → "keeps stopping"
+ * Primary native fix (P0): AndroidManifest must NOT declare CAMERA. Fitting Room
+ * uses HTML capture → Capacitor ACTION_IMAGE_CAPTURE. Declaring CAMERA made
+ * Capacitor show a FashionRise permission dialog; Back/deny + ACTION_IMAGE_CAPTURE
+ * without a grant is the SecurityException / "keeps stopping" path (see
+ * BridgeWebChromeClient.isMediaCaptureSupported).
  *
- * Fix: keep a sticky open window, disable Capacitor's back handler for that window,
- * never exitApp from backButton (minimize instead), and only clear after input
- * change/cancel or a real resume from background.
+ * This guard remains as secondary hardening for gallery/camera Activity
+ * cancellation: disable Capacitor's back handler while the sheet is open, never
+ * exitApp from backButton (minimize instead), clear on input change/cancel or
+ * a real resume — so a cancelled filePathCallback can complete once.
  */
 
 import { App } from '@capacitor/app'

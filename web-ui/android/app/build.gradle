@@ -8,8 +8,10 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Codemagic / CI may pass -PversionCode / -PversionName (Play requires monotonic versionCode).
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 1
-        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0"
+        // Local default bumped so sideloaded debug APKs after the camera-permission
+        // fix are distinguishable from older Internal builds that still declare CAMERA.
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 21
+        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
