@@ -457,6 +457,7 @@ FITTING_ROOM_LOOK_PLATE_PROMPT = (
 )
 
 # OpenAI Fitting Room path for Social looks — full photoreal + 1:1 contract (not Max-truncated).
+# Used when productize→Max is unavailable (fallback only).
 FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "Create a single photorealistic photograph of the person from image 1 wearing real "
     "clothing that matches the FashionRise look illustration in image 2 one-to-one. "
@@ -470,6 +471,26 @@ FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "airbrushed concept-art shading, or a translucent sketched overlay. "
     "Preserve the person's exact identity, face, hair, pose, proportions, background, "
     "and natural skin tone. Output one realistic photograph."
+)
+
+# Step 1 for Social looks: illustration → photoreal product plate (no person), then Max try-on.
+FITTING_ROOM_LOOK_PRODUCTIZE_PROMPT = (
+    "Transform this FashionRise look illustration into a photorealistic commercial clothing "
+    "product photograph of the REAL garment alone on a neutral light studio background. "
+    "Ignore the drawn model body, face, hair, skin, and pose entirely — clothing only in "
+    "the output. Keep 1:1 design: silhouette, wrap bodice, sheer layered skirt, straps, "
+    "coverage, and exact multi-tone panel colors (bodice vs skirt — never unify into one "
+    "green). Render real fabric texture, weave, folds, and sheer chiffon/tulle — not sketch "
+    "strokes, flat fills, or Fashion Magic illustration style. No person, mannequin, or face."
+)
+
+# Step 2 Max prompt when the garment ref is already a photoreal product from the look.
+FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
+    "Fit only the clothing from the product photograph onto the person. Preserve exact "
+    "multi-tone panel hues (bodice vs skirt), sheer layers, cut, straps, and coverage. "
+    "Do not unify, wash, or recolor panels. Match person-photo lighting with natural fabric. "
+    "Keep the person's identity, face, hair, pose, lighting, background, and natural skin "
+    "tone unchanged."
 )
 
 
@@ -656,12 +677,113 @@ def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
         return FITTING_ROOM_MAX_PROMPT
     lock = data.get("look_color_lock")
     clause = _look_color_lock_prompt_clause(lock if isinstance(lock, dict) else None)
-    # normalize_max_prompt truncates at 1000 — keep color lock near the front.
-    return (
-        FITTING_ROOM_LOOK_PLATE_PROMPT[:720] + clause
-        if clause
+    # Already productized look → shorter product-fit prompt; else illustration prompt.
+    base = (
+        FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT
+        if data.get("look_productized")
         else FITTING_ROOM_LOOK_PLATE_PROMPT
     )
+    # normalize_max_prompt truncates at 1000 — keep color lock near the front.
+    return (base[:720] + clause) if clause else base
+
+
+def _look_productize_prompt(data: dict[str, Any]) -> str:
+    lock = data.get("look_color_lock")
+    clause = _look_color_lock_prompt_clause(lock if isinstance(lock, dict) else None)
+    return FITTING_ROOM_LOOK_PRODUCTIZE_PROMPT + clause
+
+
+def productize_fashionrise_look_plate(
+    *,
+    garment_png: bytes,
+    data: dict[str, Any],
+) -> tuple[bytes, dict[str, Any]]:
+    """OpenAI images.edit: look illustration → photoreal product plate for FASHN Max.
+
+    Separates realism (productize) from person try-on (Max) so Social looks get both
+    photographed fabric and COLOR LOCK panel hues — OpenAI one-shot try-on traded one off.
+    """
+    from app.services.personal_croquis_provider import extract_edit_png_bytes
+    from app.services.sketch_openai import (
+        SketchCompletionError,
+        assert_image_model_editable,
+        build_image_edit_kwargs,
+    )
+
+    settings = get_settings()
+    if not settings.my_croquis_ai_enabled:
+        raise ProviderNotAvailableError("MY_CROQUIS_AI_ENABLED is false")
+    if not settings.my_croquis_ai_live_http:
+        raise ProviderNotAvailableError("MY_CROQUIS_AI_LIVE_HTTP is false")
+    if float(settings.my_croquis_ai_spend_ceiling_usd or 0) <= 0:
+        raise ProviderNotAvailableError("MY_CROQUIS_AI_SPEND_CEILING_USD is 0")
+    if not (settings.openai_api_key or "").strip():
+        raise ProviderNotAvailableError("OPENAI_API_KEY missing")
+
+    _ensure_look_color_lock(garment_png, data)
+    plate = _garment_png_for_look_plate(garment_png, data)
+    model = (settings.openai_image_model or "").strip()
+    assert_image_model_editable(model)
+    size = (settings.openai_image_size or "1024x1536").strip()
+    quality = settings.openai_image_quality
+
+    try:
+        kwargs = build_image_edit_kwargs(
+            model=model,
+            prompt=_look_productize_prompt(data),
+            sketch=(plate, "image/png"),
+            size=size,
+            quality=quality,
+            fabric_swatch=None,
+        )
+    except SketchCompletionError as exc:
+        raise ProviderNotAvailableError(str(exc)) from exc
+
+    kwargs["n"] = 1
+    kwargs["output_format"] = "png"
+    kwargs.pop("background", None)
+    extra = dict(kwargs.get("extra_body") or {})
+    extra["moderation"] = "low"
+    kwargs["extra_body"] = extra
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or None,
+        timeout=float(settings.openai_timeout_seconds or 180),
+    )
+    try:
+        result = client.with_options(max_retries=0).images.edit(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        summary = str(exc)[:400]
+        raise ProviderOutcomeUnknownError(
+            f"look productize images.edit failed: {type(exc).__name__}: {summary}"
+        ) from exc
+
+    png = extract_edit_png_bytes(result)
+    # Opaque RGB product plate — FASHN prefers non-transparent garment refs.
+    with Image.open(io.BytesIO(png)) as im:
+        im.load()
+        rgb = Image.new("RGB", im.size, (245, 245, 245))
+        if im.mode == "RGBA":
+            rgb.paste(im, mask=im.split()[-1])
+        else:
+            rgb.paste(im.convert("RGB"))
+        out = io.BytesIO()
+        rgb.save(out, format="PNG")
+        product = out.getvalue()
+
+    # Re-apply color lock pull on the product so Max sees the measured split.
+    product = reinforce_look_plate_panel_colors(product, data.get("look_color_lock"))
+    return product, {
+        "provider": "openai_look_productize",
+        "model": kwargs.get("model"),
+        "prompt_kind": "fitting_room_look_productize",
+        "source_sha256": hashlib.sha256(garment_png).hexdigest(),
+        "product_sha256": hashlib.sha256(product).hexdigest(),
+        "look_color_lock": data.get("look_color_lock"),
+    }
 
 
 def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str | None:
@@ -828,16 +950,46 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
 
     look_plate = _is_fashionrise_look_plate(data)
+    # Social look plates: productize illustration → FASHN Max (photoreal + COLOR LOCK).
+    # One-shot OpenAI try-on traded realism vs multi-tone; Max needs a product plate.
+    if (
+        look_plate
+        and _fashn_max_fallback_armed()
+        and _try_on_provider_override is None
+    ):
+        try:
+            product_png, product_meta = productize_fashionrise_look_plate(
+                garment_png=garment_png, data=data
+            )
+            data_for_max = dict(data)
+            data_for_max["look_productized"] = True
+            png, meta = _generate_fitting_room_via_fashn(
+                person_png=person_png, garment_png=product_png, data=data_for_max
+            )
+            if not isinstance(meta, dict):
+                meta = {}
+            meta["look_productize"] = product_meta
+            meta["fitting_room_look_path"] = "productize_then_max"
+            used_provider = str(meta.get("provider") or "fashn_tryon_max")
+            fallback_from = None
+            openai_operator_detail = None
+        except Exception:  # noqa: BLE001
+            logger.info(
+                "Fitting Room job %s look productize→Max failed — OpenAI try-on fallback",
+                job.id,
+                exc_info=True,
+            )
+            png = None
+
     # Swimwear / lingerie / product dresses: prefer Try-On Max quality first (skip
-    # OpenAI moderation landmines). Social look plates skip Max-first so OpenAI
-    # receives COLOR LOCK design_hints (Max was washing multi-tone bodice/skirt).
+    # OpenAI moderation landmines). Look plates handled above.
     prefer_max_first = (
         _fashn_max_fallback_armed()
         and _fashn_category_for_fitting_room(data) == "one-pieces"
         and _try_on_provider_override is None
         and not look_plate
     )
-    if prefer_max_first:
+    if prefer_max_first and png is None:
         try:
             png, meta = _generate_fitting_room_via_fashn(
                 person_png=person_png, garment_png=garment_png, data=data

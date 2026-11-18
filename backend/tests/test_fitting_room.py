@@ -463,3 +463,114 @@ def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
     assert "REAL photographed clothing" in prompt or "real photographed" in prompt.lower()
     assert "sketch overlay" in prompt.lower()
     assert len(prompt) <= 1000
+
+
+def test_look_productize_prompt_keeps_color_lock_and_no_person():
+    from app.services.fitting_room import (
+        _look_productize_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _look_productize_prompt(
+        {"garment_source": "fashionrise_look", "look_color_lock": lock}
+    )
+    assert "product photograph" in prompt.lower() or "commercial clothing" in prompt.lower()
+    assert "COLOR LOCK" in prompt
+    assert lock["bodice_hex"] in prompt
+    assert "No person" in prompt or "clothing only" in prompt.lower()
+
+
+def test_look_productized_max_prompt_is_product_fit_not_illustration():
+    from app.services.fitting_room import (
+        FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT,
+        _fitting_room_max_prompt,
+        sample_look_garment_panel_colors,
+    )
+
+    lock = sample_look_garment_panel_colors(_two_tone_look_png())
+    prompt = _fitting_room_max_prompt(
+        {
+            "garment_source": "fashionrise_look",
+            "look_productized": True,
+            "look_color_lock": lock,
+        }
+    )
+    assert prompt.startswith(FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT[:40])
+    assert "COLOR LOCK" in prompt
+    assert "drawn model" not in prompt.lower()
+    assert len(prompt) <= 1000
+
+
+def test_look_plate_prefers_productize_then_max(client, db_session, monkeypatch):
+    """Social looks: productize plate then FASHN Max (not one-shot OpenAI try-on)."""
+    from app.services import fitting_room as fr
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setattr(fr, "_fashn_fallback_armed", lambda: True)
+
+    calls: list[str] = []
+
+    def _fake_productize(*, garment_png: bytes, data: dict):
+        calls.append("productize")
+        data["look_color_lock"] = data.get("look_color_lock") or {
+            "bodice_hex": "#6B7757",
+            "skirt_hex": "#3D4C3A",
+            "relation": "lighter_bodice",
+            "bodice_rgb": [107, 119, 87],
+            "skirt_rgb": [61, 76, 58],
+        }
+        return _png_bytes((64, 96), (80, 110, 70, 255)), {"provider": "mock_productize"}
+
+    def _fake_fashn(*, person_png: bytes, garment_png: bytes, data: dict):
+        calls.append("max")
+        assert data.get("look_productized") is True
+        return _png_bytes((96, 128), (20, 40, 60, 255)), {
+            "provider": "fashn_tryon_max",
+            "fitting_room_fashn_path": "max_quality_2k",
+        }
+
+    monkeypatch.setattr(fr, "productize_fashionrise_look_plate", _fake_productize)
+    monkeypatch.setattr(fr, "_generate_fitting_room_via_fashn", _fake_fashn)
+
+    # If productize→Max is skipped, OpenAI must not silently succeed.
+    def _boom_openai(*_a, **_k):
+        raise AssertionError("OpenAI try-on must not run when productize→Max succeeds")
+
+    monkeypatch.setattr(fr, "get_try_on_provider", _boom_openai)
+    set_try_on_provider_override(None)
+
+    tokens = register_with_invite(
+        client, db_session, email="fr-look-max@example.com", username="fr_look_max"
+    )
+    _grant_stars(db_session, "fr_look_max", amount=40)
+    look_png = _two_tone_look_png()
+    look_b64 = "data:image/png;base64," + base64.b64encode(look_png).decode("ascii")
+    person_b64 = _data_url((40, 80, 120, 255))
+    key = f"fitting_room:{uuid.uuid4()}"
+    body = {
+        "person_image_base64": person_b64,
+        "garment_pieces": [
+            {
+                "image_base64": look_b64,
+                "category": "dresses",
+                "source": "fashionrise_look",
+            }
+        ],
+        "idempotency_key": key,
+        "consent_acknowledged": True,
+        "consent_version": FITTING_ROOM_CONSENT_VERSION,
+    }
+    r = client.post(f"{FR}/try-on", json=body, headers=_auth(tokens))
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    assert run_magic_worker_tick(db_session) >= 1
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None
+    assert job.status == "completed"
+    assert calls == ["productize", "max"]
+    result = job.result_data or {}
+    assert job.status == "completed"
+    provider = str(result.get("provider") or result.get("used_provider") or "")
+    assert "fashn" in provider
