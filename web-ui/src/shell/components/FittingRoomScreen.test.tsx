@@ -32,6 +32,7 @@ vi.mock('@/lib/fittingRoomStore', () => ({
   saveFittingResult: vi.fn(async () => undefined),
   deleteSavedResult: vi.fn(async () => undefined),
   newOutfitPieceId: () => 'piece_test',
+  consumeFittingRoomPlantedNotice: () => null,
   fileToFittingRoomDataUrl: async () => ({
     dataUrl: 'data:image/png;base64,aaa',
     mimeType: 'image/png',

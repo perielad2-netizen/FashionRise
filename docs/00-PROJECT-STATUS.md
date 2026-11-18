@@ -3,6 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Feature — FashionRise Try on me → Fitting Room (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-feed-tryon-fitting-77c6` |
+| CTA | Immersive feed **Try on me** pill (Doji-style) + rail Shirt control; plants look image into Fitting Room outfit session |
+| Flow | Fetch `/gallery/{id}/image` → IndexedDB outfit piece → navigate `/studio/fitting-room` → user adds photo → Try on |
+| Gate | Hidden when Fitting Room UI flag is off |
+| Tip | Pending merge/deploy |
+
 ## Deployed — Reported look feed leak + durable reporter hide (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |

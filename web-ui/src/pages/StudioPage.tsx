@@ -175,6 +175,9 @@ export function StudioPage() {
           <RunwayScreen
             onOpenCreate={() => onShellNavigate('create')}
             onOpenLooks={() => onShellNavigate('looks')}
+            onOpenFittingRoom={
+              fittingRoomEnabled ? () => onShellNavigate('fitting-room') : undefined
+            }
             openOwnProfile={openOwnProfile}
             onOwnProfileConsumed={clearOwnProfileParam}
             onImmersiveFeedChange={setFashionRiseImmersiveFeed}

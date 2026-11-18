@@ -321,3 +321,89 @@ export async function fileToFittingRoomDataUrl(
 export function newOutfitPieceId(): string {
   return `piece_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
+
+/** sessionStorage key: FashionRise feed planted a look into Fitting Room. */
+export const FITTING_ROOM_PLANTED_NOTICE_KEY = 'fr.fittingRoom.plantedFromFeed'
+
+export type FittingRoomPlantedNotice = {
+  title: string
+  galleryItemId: string
+  at: string
+}
+
+/**
+ * Convert gallery/look image bytes into an upright PNG data URL for Fitting Room.
+ */
+export async function blobToFittingRoomDataUrl(
+  blob: Blob,
+): Promise<{ dataUrl: string; mimeType: string }> {
+  const type = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png'
+  const file = new File([blob], 'fashionrise-look.png', { type })
+  return fileToFittingRoomDataUrl(file)
+}
+
+/**
+ * Plant a single clothing piece from FashionRise Social into the device outfit
+ * session (replaces prior pieces so the chosen look is clearly ready to try on).
+ */
+export async function plantFittingRoomGarment(opts: {
+  userId: string
+  dataUrl: string
+  mimeType: string
+  category?: string
+  notice?: { title: string; galleryItemId: string }
+}): Promise<void> {
+  const updatedAt = new Date().toISOString()
+  const piece: FittingRoomOutfitPiece = {
+    id: newOutfitPieceId(),
+    category: opts.category?.trim() || 'auto',
+    dataUrl: opts.dataUrl,
+    mimeType: opts.mimeType,
+    updatedAt,
+  }
+  await writeOutfitSession({
+    key: outfitKey(opts.userId),
+    userId: opts.userId,
+    pieces: [piece],
+    updatedAt,
+  })
+  await writeFittingRoomAsset({
+    userId: opts.userId,
+    kind: 'garment',
+    dataUrl: piece.dataUrl,
+    mimeType: piece.mimeType,
+    updatedAt,
+    garmentCategory: piece.category,
+  })
+  if (opts.notice && typeof sessionStorage !== 'undefined') {
+    const payload: FittingRoomPlantedNotice = {
+      title: opts.notice.title,
+      galleryItemId: opts.notice.galleryItemId,
+      at: updatedAt,
+    }
+    try {
+      sessionStorage.setItem(FITTING_ROOM_PLANTED_NOTICE_KEY, JSON.stringify(payload))
+    } catch {
+      /* private mode / quota */
+    }
+  }
+}
+
+/** Read + clear one-shot planted notice for Fitting Room UI. */
+export function consumeFittingRoomPlantedNotice(): FittingRoomPlantedNotice | null {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(FITTING_ROOM_PLANTED_NOTICE_KEY)
+    if (!raw) return null
+    sessionStorage.removeItem(FITTING_ROOM_PLANTED_NOTICE_KEY)
+    const parsed = JSON.parse(raw) as FittingRoomPlantedNotice
+    if (!parsed || typeof parsed.galleryItemId !== 'string') return null
+    return {
+      title: typeof parsed.title === 'string' ? parsed.title : 'Look',
+      galleryItemId: parsed.galleryItemId,
+      at: typeof parsed.at === 'string' ? parsed.at : new Date().toISOString(),
+    }
+  } catch {
+    return null
+  }
+}

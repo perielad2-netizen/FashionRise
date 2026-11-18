@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import {
   clearOutfitSession,
+  consumeFittingRoomPlantedNotice,
   deleteFittingRoomAsset,
   deleteSavedResult,
   fileToFittingRoomDataUrl,
@@ -178,6 +179,14 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         }
       }
       if (!cancelled) setSaved(savedRows)
+      const planted = consumeFittingRoomPlantedNotice()
+      if (!cancelled && planted) {
+        const label = planted.title?.trim() || 'this look'
+        showNotice(
+          `Ready to try on “${label}”. Add your photo, then tap Try on.`,
+          'info',
+        )
+      }
       try {
         const pf = await fetchFittingRoomPreflight()
         if (!cancelled) setPreflight(pf)
@@ -213,7 +222,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     return () => {
       cancelled = true
     }
-  }, [userId, persistOutfit])
+  }, [userId, persistOutfit, showNotice])
 
   const starsCost = preflight?.stars_cost ?? costs.fitting_room ?? 20
   const maxPieces = preflight?.max_outfit_pieces ?? 4

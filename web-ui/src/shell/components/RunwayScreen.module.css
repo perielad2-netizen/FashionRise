@@ -439,6 +439,7 @@
 .immersiveActions .likeBtnOn,
 .immersiveActions .commentBtn,
 .immersiveActions .commentBtnOn,
+.immersiveActions .tryOnBtn,
 .immersiveActions .reportBtn,
 .immersiveActions .statChip {
   display: inline-flex;
@@ -462,8 +463,41 @@
   box-shadow: none;
 }
 
+.immersiveActions .tryOnBtn {
+  color: #f9a8d4;
+}
+
 .immersiveActions .reportBtn {
   color: #fecaca;
+}
+
+.tryOnPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+.tryOnPill:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.tryOnPill:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .actionCount {
@@ -1444,6 +1478,36 @@
   border-color: rgba(125, 211, 252, 0.45);
   background: rgba(14, 116, 144, 0.22);
   color: #bae6fd;
+}
+
+.tryOnBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.4);
+  background: rgba(157, 23, 77, 0.22);
+  color: #fbcfe8;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tryOnBtn:hover {
+  border-color: rgba(244, 114, 182, 0.6);
+  color: #fce7f3;
+}
+
+.tryOnBtn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.tryOnBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .reportBtn {
