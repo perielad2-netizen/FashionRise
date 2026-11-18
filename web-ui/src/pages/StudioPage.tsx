@@ -30,6 +30,8 @@ export const FASHIONRISE_PATH = '/studio/fashionrise'
 export const RUNWAY_PATH = '/studio/runway'
 /** Opens FashionRise directly into My Profile (edit). */
 export const RUNWAY_MY_PROFILE_PATH = `${FASHIONRISE_PATH}?profile=me`
+/** Opens FashionRise Manage friends. */
+export const RUNWAY_FRIENDS_PATH = `${FASHIONRISE_PATH}?friends=1`
 /** @deprecated legacy Fashion Stars path — redirects to FashionRise feed */
 export const FASHION_STARS_PATH = '/studio/fashion-stars'
 export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
@@ -99,6 +101,7 @@ export function StudioPage() {
   )
   const focusLookId = searchParams.get('look')
   const openOwnProfile = searchParams.get('profile') === 'me'
+  const openFriends = searchParams.get('friends') === '1'
   /** false while designer profile / Friends manage (or left FashionRise feed) — keeps GlobalHeader visible. */
   const [fashionRiseImmersiveFeed, setFashionRiseImmersiveFeed] = useState(true)
   const [fashionRiseFeedFocusToken, setFashionRiseFeedFocusToken] = useState(0)
@@ -117,8 +120,17 @@ export function StudioPage() {
     next.delete('profile')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
+  const clearFriendsParam = useCallback(() => {
+    if (!searchParams.has('friends')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('friends')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
   const openMyProfile = useCallback(() => {
     navigate(RUNWAY_MY_PROFILE_PATH)
+  }, [navigate])
+  const openFriendsPage = useCallback(() => {
+    navigate(RUNWAY_FRIENDS_PATH)
   }, [navigate])
   const focusFashionRiseFeed = useCallback(() => {
     setFashionRiseImmersiveFeed(true)
@@ -164,6 +176,7 @@ export function StudioPage() {
         currentNav={currentNav}
         onNavigate={onShellNavigate}
         onOpenProfile={openMyProfile}
+        onOpenFriends={openFriendsPage}
         immersive={immersive}
       >
         {view === 'home' ? (
@@ -180,6 +193,8 @@ export function StudioPage() {
             }
             openOwnProfile={openOwnProfile}
             onOwnProfileConsumed={clearOwnProfileParam}
+            openFriends={openFriends}
+            onFriendsConsumed={clearFriendsParam}
             onImmersiveFeedChange={setFashionRiseImmersiveFeed}
             feedFocusToken={fashionRiseFeedFocusToken}
           />

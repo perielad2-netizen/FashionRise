@@ -7,6 +7,7 @@ import {
   Star,
   Trash2,
   UserRound,
+  Users,
   X,
 } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
@@ -36,6 +37,8 @@ type Props = {
   onComingSoon?: (label: string) => void
   /** Opens FashionRise My Profile (header avatar). */
   onOpenProfile?: () => void
+  /** Opens FashionRise Manage friends. */
+  onOpenFriends?: () => void
   /** Controlled account menu — shell coordinates with nav drawer. */
   accountMenuOpen?: boolean
   onAccountMenuOpenChange?: (open: boolean) => void
@@ -55,6 +58,7 @@ export function GlobalHeader({
   username,
   onLogout,
   onOpenProfile,
+  onOpenFriends,
   accountMenuOpen: accountMenuOpenProp,
   onAccountMenuOpenChange,
 }: Props) {
@@ -293,6 +297,21 @@ export function GlobalHeader({
                 >
                   <UserRound size={14} />
                   My Profile
+                </button>
+              ) : null}
+              {onOpenFriends ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  data-testid="menu-friends"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onOpenFriends()
+                  }}
+                >
+                  <Users size={14} />
+                  Friends
                 </button>
               ) : null}
               <button

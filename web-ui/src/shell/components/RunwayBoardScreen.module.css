@@ -79,9 +79,16 @@
   color: rgba(255, 255, 255, 0.66);
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .socialCta {
   justify-self: start;
-  margin-top: 4px;
   min-height: 40px;
   padding: 0 18px;
   border: 0;
@@ -98,6 +105,33 @@
 
 .socialCta:active {
   transform: translateY(1px);
+}
+
+.friendsCta {
+  min-height: 40px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(249, 168, 212, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f9a8d4;
+  font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.friendsCta:active {
+  transform: translateY(1px);
+}
+
+.friendsCta:focus-visible,
+.socialCta:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .lookThumb,
