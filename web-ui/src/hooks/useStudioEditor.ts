@@ -1669,6 +1669,7 @@ export function useStudioEditor() {
             // V2-0017: when both sides are inked, attach Front sketch as pair reference
             // (used as Image 2 unless a fabric swatch already occupies that slot).
             ...(!smartBack ? { pair_reference_base64: frontCap.dataUrl } : {}),
+            ...(smartBack ? { smart_back: true } : {}),
             notes: smartBack ? smartBackNotes : dualBackNotes,
             idempotency_key: backIdempotencyKey,
           },
