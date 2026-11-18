@@ -552,9 +552,37 @@ def test_analyze_look_plate_detects_sheer_legs():
 
     solid = analyze_fashionrise_look_plate(_two_tone_look_png())
     sheer = analyze_fashionrise_look_plate(_sheer_look_png())
-    assert solid["preferred_path"] == "openai_look_direct"
+    assert solid["preferred_path"] == "normalize_then_max"
     assert sheer["sheer_legs"] is True
-    assert sheer["preferred_path"] == "openai_look_direct"
+    assert sheer["preferred_path"] == "normalize_then_max"
+
+
+def test_apply_openness_mask_preserves_alpha_for_sheer():
+    from app.services.look_garment_normalize import (
+        apply_openness_mask_to_product,
+        build_look_openness_mask,
+    )
+
+    sheer = _sheer_look_png()
+    # Simulate a bad opaque product (solid green skirt).
+    opaque = _two_tone_look_png()
+    openness = build_look_openness_mask(sheer)
+    assert openness is not None
+    fixed, meta = apply_openness_mask_to_product(opaque, openness, sheer_expected=True)
+    assert meta["openness_applied"] is True
+    assert meta["alpha_preserved"] is True
+    with Image.open(io.BytesIO(fixed)) as im:
+        assert im.mode == "RGBA"
+        alpha = im.split()[-1]
+        assert alpha.getextrema()[0] < 250
+
+
+def test_sketch_texture_score_runs_on_synthetic():
+    from app.services.look_garment_normalize import estimate_sketch_texture_score
+
+    score = estimate_sketch_texture_score(_two_tone_look_png())
+    assert "edge_density" in score
+    assert "illustrated_texture_suspected" in score
 
 
 def test_soft_check_flags_opaque_skirt_when_sheer_expected():
@@ -570,9 +598,10 @@ def test_soft_check_flags_opaque_skirt_when_sheer_expected():
     assert "sheer_legs_likely_covered" in quality["warnings"]
 
 
-def test_look_plate_prefers_openai_direct(client, db_session, monkeypatch):
-    """Social looks: OpenAI direct try-on (productize→Max skipped after sheer QA regression)."""
+def test_look_plate_prefers_normalize_then_max(client, db_session, monkeypatch):
+    """Social looks: alpha-preserving normalize then FASHN Max try-on."""
     from app.services import fitting_room as fr
+    import app.services.look_garment_normalize as lgn
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
@@ -580,30 +609,44 @@ def test_look_plate_prefers_openai_direct(client, db_session, monkeypatch):
 
     calls: list[str] = []
 
-    def _boom_productize(*, garment_png: bytes, data: dict):
-        raise AssertionError("productize must not run for Social look default path")
+    def _fake_normalize(*, garment_png: bytes, data: dict):
+        calls.append("normalize")
+        data["look_normalized"] = True
+        data["look_productized"] = True
+        data["look_color_lock"] = data.get("look_color_lock") or {
+            "bodice_hex": "#6B7757",
+            "skirt_hex": "#3D4C3A",
+            "relation": "lighter_bodice",
+            "bodice_rgb": [107, 119, 87],
+            "skirt_rgb": [61, 76, 58],
+        }
+        plate = _png_bytes((64, 96), (80, 110, 70, 255))
+        return plate, {
+            "provider": "openai_look_normalize",
+            "prompt_kind": "fitting_room_look_normalize_v1",
+            "alpha": {"alpha_preserved": True, "openness_applied": True},
+        }
 
-    def _boom_fashn(*, person_png: bytes, garment_png: bytes, data: dict):
-        raise AssertionError("FASHN Max must not run when OpenAI look direct succeeds")
+    def _fake_fashn(*, person_png: bytes, garment_png: bytes, data: dict):
+        calls.append("max")
+        assert data.get("look_normalized") is True
+        return _png_bytes((96, 128), (20, 40, 60, 255)), {
+            "provider": "fashn_tryon_max",
+            "fitting_room_fashn_path": "max_quality_2k",
+        }
 
-    class _OpenAIProv:
-        def generate(self, **kwargs):
-            calls.append("openai")
-            assert kwargs.get("prompt_override")
-            assert "COLOR LOCK" in kwargs["prompt_override"] or "photorealistic" in kwargs[
-                "prompt_override"
-            ].lower()
-            return _png_bytes((96, 128), (20, 40, 60, 255)), {"provider": "openai"}
+    def _boom_openai(*_a, **_k):
+        raise AssertionError("OpenAI try-on must not run when normalize→Max succeeds")
 
-    monkeypatch.setattr(fr, "productize_fashionrise_look_plate", _boom_productize)
-    monkeypatch.setattr(fr, "_generate_fitting_room_via_fashn", _boom_fashn)
-    monkeypatch.setattr(fr, "get_try_on_provider", lambda name: _OpenAIProv())
+    monkeypatch.setattr(lgn, "normalize_fashionrise_look_garment", _fake_normalize)
+    monkeypatch.setattr(fr, "_generate_fitting_room_via_fashn", _fake_fashn)
+    monkeypatch.setattr(fr, "get_try_on_provider", _boom_openai)
     set_try_on_provider_override(None)
 
     tokens = register_with_invite(
-        client, db_session, email="fr-look-openai@example.com", username="fr_look_oai"
+        client, db_session, email="fr-look-norm@example.com", username="fr_look_norm"
     )
-    _grant_stars(db_session, "fr_look_oai", amount=40)
+    _grant_stars(db_session, "fr_look_norm", amount=40)
     look_png = _two_tone_look_png()
     look_b64 = "data:image/png;base64," + base64.b64encode(look_png).decode("ascii")
     person_b64 = _data_url((40, 80, 120, 255))
@@ -628,8 +671,9 @@ def test_look_plate_prefers_openai_direct(client, db_session, monkeypatch):
     job = db_session.get(AIJob, uuid.UUID(job_id))
     assert job is not None
     assert job.status == "completed"
-    assert calls == ["openai"]
+    assert calls == ["normalize", "max"]
     result = job.result_data or {}
-    assert result.get("provider") == "openai"
-    assert result.get("fitting_room_look_path") == "openai_look_direct"
+    assert "fashn" in str(result.get("provider") or "")
+    assert result.get("fitting_room_look_path") == "normalize_then_max"
+    assert result.get("look_normalize", {}).get("provider") == "openai_look_normalize"
     assert "look_quality" in result

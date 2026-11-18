@@ -3,19 +3,29 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Social Try on me photoreal normalize pipeline (2026-11-18 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-look-tryon-photoreal-77c6` |
+| Problem | `openai_look_direct` still pasted illustrated fabric onto real people (graphic folds / flat paint). Prior productize→Max flattened RGBA→opaque RGB and covered sheer legs. |
+| Fix | New `look_garment_normalize.py`: design-spec normalize (OpenAI, `background=transparent`, **no** high `input_fidelity`) → **alpha openness mask** from the look plate → light-studio composite → **FASHN Max** try-on (`normalize_then_max`), OpenAI try-on fallback. Soft quality now flags `illustrated_texture_suspected` + sheer/color. |
+| Stars | Flat **20** on success (unchanged) |
+| AI cost | **+1 OpenAI images.edit** normalize per Social look success, then **1 FASHN Max** (or OpenAI try-on if Max fails). Optional **+1** normalize style retry only when the product still scores as illustrated. No Stars change. |
+| Live visual note | Bounded normalize calls on the green dress produced garment-only plates with openings preserved, but OpenAI still tends to emit digital-illustration fabric on the intermediate plate; Max is relied on for photographic drape on the person. Full end-to-end person try-on needs hands-on QA. |
+| Limitations | Intermediate normalize is not fully photographic with current `gpt-image-2.5-sunburst`; sheer/openness is heuristic; soft check is deterministic and advisory (no auto-regenerate). |
+| Tip | BE tip set at deploy · FE unchanged (`cd612dec` wait modal / Results) |
+| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 8492c358 && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+
 ## Deployed — Social Try on me look fidelity (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | PR | **#435** merged → `main` @ **`c4a027ee`** (feature tip **`4a0e7dfb`**) |
 | Problem | Productize→FASHN Max for Social looks baked opaque skirts, washed silhouette, and still fought two-tone color |
-| Fix | Social look plates use **OpenAI direct** (`openai_look_direct`): color-agnostic COLOR LOCK, sheer/cutaway analysis + prompts, footwear lock, local soft quality meta (no extra paid retries). Productize helper kept but not used on the default path. |
+| Fix | Social look plates used **OpenAI direct** (`openai_look_direct`) — superseded by normalize→Max above |
 | Stars | Flat **20** on success (unchanged) |
-| AI cost | **Lower** than prior productize+Max: one OpenAI images.edit try-on per success; FASHN Max only on OpenAI moderation fallback |
-| Limitations | Illustration→photo still imperfect; sheer detection is heuristic; soft check warns in meta only (no auto-regenerate) |
-| Tip | BE `/opt/fashionrise/src` @ **`c4a027ee`** · FE `/var/www/fashionrise/releases/cd612dec-fr-wait-results` · `/version.json` → `cd612dec` |
-| Verify | `curl -sS http://127.0.0.1:8010/api/v1/ai/fitting-room/preflight` → `Not authenticated`; workers active; code contains `openai_look_direct` |
-| Rollback BE | `cd /opt/fashionrise/src && git checkout --detach cd612dec && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+| Tip | BE `/opt/fashionrise/src` @ **`8492c358`** · FE `/var/www/fashionrise/releases/cd612dec-fr-wait-results` · `/version.json` → `cd612dec` |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/a6de9825-report-hide-feed /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## Deployed — FashionRise Try on me → Fitting Room UX (2026-11-18 Asia/Jerusalem)
