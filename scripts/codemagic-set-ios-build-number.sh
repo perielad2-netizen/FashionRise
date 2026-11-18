@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Stamp a unique CFBundleVersion for FashionRise iOS (Codemagic).
-# Marketing version (MARKETING_VERSION / 1.0) is left unchanged.
+# Stamp CFBundleVersion + marketing version for FashionRise iOS (Codemagic).
+# ASC closes a version train after release — 1.0 is closed (error 90186), so
+# default marketing is 1.0.1. Override with IOS_MARKETING_VERSION if needed.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,7 +10,7 @@ cd "$APP_DIR"
 
 OFFSET="${IOS_BUILD_NUMBER_OFFSET:-100}"
 APP_ID="${APP_STORE_APPLE_ID:?APP_STORE_APPLE_ID is required}"
-MARKETING_VERSION_STRING="${IOS_MARKETING_VERSION:-1.0}"
+MARKETING_VERSION_STRING="${IOS_MARKETING_VERSION:-1.0.1}"
 
 # Fail closed: require Codemagic's project-wide counter. Do not fall back to 0
 # or BUILD_NUMBER (workflow-local) — that breaks uniqueness / monotonicity.
@@ -79,6 +80,10 @@ echo "CFBundleVersion inputs: PROJECT_BUILD_NUMBER=$PROJECT_BN BUILD_NUMBER=${BU
 echo "CFBundleVersion selected=$CANDIDATE"
 echo "CM_COMMIT=${CM_COMMIT:-unset}"
 
+agvtool new-marketing-version "$MARKETING_VERSION_STRING"
 agvtool new-version -all "$CANDIDATE"
 echo "$CANDIDATE" > /tmp/fr-ios-cfbundle-version.txt
+echo "$MARKETING_VERSION_STRING" > /tmp/fr-ios-marketing-version.txt
 echo "Wrote expected CFBundleVersion to /tmp/fr-ios-cfbundle-version.txt"
+echo "MARKETING_VERSION=$MARKETING_VERSION_STRING (ASC train; 1.0 is closed)"
+
