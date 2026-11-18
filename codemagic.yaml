@@ -36,7 +36,9 @@ workflows:
   fashionrise-ios-app-store:
     name: FashionRise iOS (App Store IPA)
     max_build_duration: 120
-    instance_type: mac_mini_m2
+    # Paid plan: Mac mini M4 (10-core / 16GB) — faster than mac_mini_m2.
+    # Studio M4 Max is invite-only via Codemagic support (no public YAML key).
+    instance_type: mac_mini_m4
     working_directory: web-ui
 
     # Must match the Apple Developer Portal integration name in Codemagic
@@ -153,7 +155,8 @@ workflows:
   fashionrise-ipad-screenshots:
     name: FashionRise iPad Screenshots
     max_build_duration: 120
-    instance_type: mac_mini_m2
+    # Same paid Mac mini M4 as App Store IPA (Xcode / simulator need macOS).
+    instance_type: mac_mini_m4
     working_directory: web-ui
     # No app_store_connect integration — screenshot session only.
 
@@ -261,7 +264,7 @@ workflows:
   fashionrise-android-play-internal:
     name: FashionRise Android (Play AAB)
     max_build_duration: 120
-    # Linux builder for Android AAB (iOS workflows stay on mac_mini_m2).
+    # Linux builder for Android AAB (iOS workflows use mac_mini_m4).
     instance_type: linux_x2
     working_directory: web-ui
 
