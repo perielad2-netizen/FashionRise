@@ -60,3 +60,56 @@ def test_cannot_friend_self(client, db_session):
         json={"username": "SoloFriend"},
     )
     assert res.status_code == 403
+
+
+def test_search_contains_and_reject(client, db_session):
+    peri = register_with_invite(client, db_session, "peri_search@example.com", "PeriSearch")
+    maya = register_with_invite(client, db_session, "maya_rose@example.com", "MayaRose")
+
+    hits = client.get("/api/v1/friends/search", headers=_auth(peri), params={"q": "maya"})
+    assert hits.status_code == 200, hits.text
+    body = hits.json()
+    assert len(body) == 1
+    assert body[0]["user"]["username"] == "MayaRose"
+    assert body[0]["relationship"] == "none"
+
+    req = client.post(
+        "/api/v1/friends/request",
+        headers=_auth(peri),
+        json={"user_id": body[0]["user"]["user_id"]},
+    )
+    assert req.status_code == 201, req.text
+    friendship_id = req.json()["id"]
+
+    pending_out = client.get(
+        "/api/v1/friends/search", headers=_auth(peri), params={"q": "Maya"}
+    )
+    assert pending_out.status_code == 200
+    assert pending_out.json()[0]["relationship"] == "pending_out"
+
+    pending = client.get("/api/v1/friends/requests", headers=_auth(maya))
+    assert pending.status_code == 200
+    assert len(pending.json()) == 1
+    assert pending.json()[0]["friend"]["username"] == "PeriSearch"
+
+    rejected = client.post(
+        f"/api/v1/friends/{friendship_id}/reject",
+        headers=_auth(maya),
+    )
+    assert rejected.status_code == 204, rejected.text
+
+    after = client.get("/api/v1/friends/requests", headers=_auth(maya))
+    assert after.json() == []
+
+    # Requester cannot reject their own outbound request.
+    again = client.post(
+        "/api/v1/friends/request",
+        headers=_auth(peri),
+        json={"username": "MayaRose"},
+    )
+    assert again.status_code == 201
+    bad = client.post(
+        f"/api/v1/friends/{again.json()['id']}/reject",
+        headers=_auth(peri),
+    )
+    assert bad.status_code == 403

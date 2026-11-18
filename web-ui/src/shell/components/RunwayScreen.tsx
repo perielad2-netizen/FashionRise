@@ -18,7 +18,9 @@ import {
   Heart,
   MessageCircle,
   MoreHorizontal,
+  Check,
   RefreshCw,
+  Search,
   Shirt,
   Sparkles,
   Star,
@@ -46,8 +48,11 @@ import {
   acceptFriendRequest,
   listFriendRequests,
   listFriends,
+  rejectFriendRequest,
   removeFriend,
-  requestFriendByUsername,
+  requestFriendByUserId,
+  searchFriends,
+  type FriendSearchHit,
   type Friendship,
 } from '@/services/friendsApi'
 import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
@@ -95,6 +100,9 @@ type Props = {
   /** Deep-link from Home header avatar → open own editable profile. */
   openOwnProfile?: boolean
   onOwnProfileConsumed?: () => void
+  /** Deep-link → open Manage friends (`?friends=1`). */
+  openFriends?: boolean
+  onFriendsConsumed?: () => void
   /**
    * Notify shell whether FashionRise is showing the immersive feed.
    * false → GlobalHeader (profile, Friends manage, etc.); true → full-bleed feed.
@@ -170,6 +178,8 @@ export function RunwayScreen({
   onOpenFittingRoom,
   openOwnProfile = false,
   onOwnProfileConsumed,
+  openFriends = false,
+  onFriendsConsumed,
   onImmersiveFeedChange,
   feedFocusToken = 0,
 }: Props) {
@@ -184,7 +194,9 @@ export function RunwayScreen({
   const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false)
   const reportDiscoverImpression = useDiscoverImpressionReporter()
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
-  const [friendUsername, setFriendUsername] = useState('')
+  const [friendQuery, setFriendQuery] = useState('')
+  const [friendHits, setFriendHits] = useState<FriendSearchHit[] | null>(null)
+  const [friendSearchBusy, setFriendSearchBusy] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [friendNotice, setFriendNotice] = useState<string | null>(null)
   const [pushOn, setPushOn] = useState(false)
@@ -206,6 +218,15 @@ export function RunwayScreen({
     })
     onOwnProfileConsumed?.()
   }, [openOwnProfile, onOwnProfileConsumed, viewerId, viewerUsername])
+
+  useEffect(() => {
+    if (!openFriends) return
+    setViewingDesigner(null)
+    setBrowseSheet(null)
+    setMenuOpen(false)
+    setTab('friends')
+    onFriendsConsumed?.()
+  }, [openFriends, onFriendsConsumed])
 
   const immersiveFeed = !viewingDesigner && tab !== 'friends'
   useEffect(() => {
@@ -520,20 +541,58 @@ export function RunwayScreen({
     return () => observer.disconnect()
   }, [discoverCount, discoverHasMore, loadMoreDiscover, state.status, tab])
 
-  const onAddFriend = useCallback(
+  const onSearchFriends = useCallback(
     async (event: FormEvent) => {
       event.preventDefault()
-      const username = friendUsername.trim()
-      if (!username || friendBusy) return
+      const q = friendQuery.trim()
+      if (!q || friendSearchBusy) return
+      setFriendSearchBusy(true)
+      setFriendNotice(null)
+      try {
+        const hits = await searchFriends(q)
+        setFriendHits(hits)
+        if (hits.length === 0) {
+          setFriendNotice(`No designers match “${q}”.`)
+        }
+      } catch (err) {
+        setFriendHits([])
+        setFriendNotice(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Could not search designers.',
+        )
+      } finally {
+        setFriendSearchBusy(false)
+      }
+    },
+    [friendQuery, friendSearchBusy],
+  )
+
+  const onRequestFromSearch = useCallback(
+    async (userId: string) => {
+      if (friendBusy) return
       setFriendBusy(true)
       setFriendNotice(null)
       try {
-        const row = await requestFriendByUsername(username)
-        setFriendUsername('')
+        const row = await requestFriendByUserId(userId)
+        const label = row.friend.display_name || row.friend.username
         setFriendNotice(
           row.status === 'accepted'
-            ? `${row.friend.display_name || row.friend.username} is now in your friends circle.`
-            : `Friend request sent to ${row.friend.display_name || row.friend.username}.`,
+            ? `${label} is now in your friends circle.`
+            : `Request sent to ${label}.`,
+        )
+        setFriendHits((prev) =>
+          (prev || []).map((hit) =>
+            hit.user.user_id === userId
+              ? {
+                  ...hit,
+                  relationship: row.status === 'accepted' ? 'accepted' : 'pending_out',
+                  friendship_id: row.id,
+                }
+              : hit,
+          ),
         )
         await load()
       } catch (err) {
@@ -542,13 +601,13 @@ export function RunwayScreen({
             ? err.message
             : err instanceof Error
               ? err.message
-              : 'Could not add friend.',
+              : 'Could not send friend request.',
         )
       } finally {
         setFriendBusy(false)
       }
     },
-    [friendBusy, friendUsername, load],
+    [friendBusy, load],
   )
 
   const onAccept = useCallback(
@@ -557,10 +616,29 @@ export function RunwayScreen({
       setFriendNotice(null)
       try {
         const row = await acceptFriendRequest(friendshipId)
-        setFriendNotice(`${row.friend.display_name || row.friend.username} accepted.`)
+        setFriendNotice(
+          `${row.friend.display_name || row.friend.username} is now in your friends circle.`,
+        )
         await load()
       } catch (err) {
         setFriendNotice(err instanceof ApiError ? err.message : 'Could not accept request.')
+      } finally {
+        setFriendBusy(false)
+      }
+    },
+    [load],
+  )
+
+  const onReject = useCallback(
+    async (friendshipId: string, label: string) => {
+      setFriendBusy(true)
+      setFriendNotice(null)
+      try {
+        await rejectFriendRequest(friendshipId)
+        setFriendNotice(`Rejected ${label}.`)
+        await load()
+      } catch (err) {
+        setFriendNotice(err instanceof ApiError ? err.message : 'Could not reject request.')
       } finally {
         setFriendBusy(false)
       }
@@ -628,6 +706,14 @@ export function RunwayScreen({
             setOpenOwnProfileEditing(false)
             setViewingDesigner(designer)
           }}
+          onManageFriends={
+            viewingDesigner.user_id === viewerId
+              ? () => {
+                  setViewingDesigner(null)
+                  setTab('friends')
+                }
+              : undefined
+          }
         />
       </section>
     )
@@ -835,12 +921,16 @@ export function RunwayScreen({
             </header>
             <FriendsPanel
               state={friendsState}
-              username={friendUsername}
+              query={friendQuery}
+              hits={friendHits}
+              searchBusy={friendSearchBusy}
               busy={friendBusy}
               notice={friendNotice}
-              onUsernameChange={setFriendUsername}
-              onAdd={(e) => void onAddFriend(e)}
+              onQueryChange={setFriendQuery}
+              onSearch={(e) => void onSearchFriends(e)}
+              onRequest={(userId) => void onRequestFromSearch(userId)}
               onAccept={(id) => void onAccept(id)}
+              onReject={(id, label) => void onReject(id, label)}
               onRemove={(id, label) => void onRemove(id, label)}
               onRetry={() => void load()}
               onOpenDesigner={(designer) => setViewingDesigner(designer)}
@@ -1153,23 +1243,31 @@ function RunwayBrowseSheet({
 
 function FriendsPanel({
   state,
-  username,
+  query,
+  hits,
+  searchBusy,
   busy,
   notice,
-  onUsernameChange,
-  onAdd,
+  onQueryChange,
+  onSearch,
+  onRequest,
   onAccept,
+  onReject,
   onRemove,
   onRetry,
   onOpenDesigner,
 }: {
   state: FriendsState
-  username: string
+  query: string
+  hits: FriendSearchHit[] | null
+  searchBusy: boolean
   busy: boolean
   notice: string | null
-  onUsernameChange: (value: string) => void
-  onAdd: (event: FormEvent) => void
+  onQueryChange: (value: string) => void
+  onSearch: (event: FormEvent) => void
+  onRequest: (userId: string) => void
   onAccept: (friendshipId: string) => void
+  onReject: (friendshipId: string, label: string) => void
   onRemove: (friendUserId: string, label: string) => void
   onRetry: () => void
   /** Open the same full-screen designer profile used from Discover (not nested in Friends). */
@@ -1178,10 +1276,9 @@ function FriendsPanel({
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  // V2-0011: keep Add friend row visible when the soft keyboard opens.
+  // Keep Find friends row visible when the soft keyboard opens.
   // Do NOT pad by visualViewport occlusion — that stacked with `--fr-vv-height`
   // shrinking `#root` and produced a full-bleed black void (Android native).
-  // Android uses adjustResize; scroll the sticky form into view gently instead.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
@@ -1210,7 +1307,7 @@ function FriendsPanel({
             {ready
               ? state.friends.length > 0
                 ? `${state.friends.length} designer${state.friends.length === 1 ? '' : 's'} in your circle`
-                : 'Add someone by username to start'
+                : 'Search for designers to invite'
               : 'Loading your circle…'}
           </p>
         </div>
@@ -1241,48 +1338,117 @@ function FriendsPanel({
       <form
         ref={formRef}
         className={styles.addFriendForm}
-        onSubmit={onAdd}
-        data-testid="add-friend-form"
+        onSubmit={onSearch}
+        data-testid="find-friends-form"
       >
-        <label className={styles.addFriendLabel} htmlFor="runway-friend-username">
-          Add friend by username
+        <label className={styles.addFriendLabel} htmlFor="runway-friend-search">
+          Find friends
         </label>
         <div className={styles.addFriendRow}>
           <span className={styles.addFriendAt} aria-hidden>
-            @
+            <Search size={14} />
           </span>
           <input
             ref={inputRef}
-            id="runway-friend-username"
+            id="runway-friend-search"
             className={styles.addFriendInput}
-            value={username}
-            onChange={(e) => onUsernameChange(e.target.value)}
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
             onFocus={() => {
-              // nearest — center scroll left a black empty band above the keyboard.
               onAndroidEditableFocus(inputRef.current)
               window.setTimeout(() => {
                 formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
               }, 50)
             }}
-            placeholder="yanivprbk"
-            autoComplete="username"
+            placeholder="Type a designer name"
+            autoComplete="off"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            inputMode="text"
-            enterKeyHint="done"
-            disabled={busy}
+            inputMode="search"
+            enterKeyHint="search"
+            disabled={busy || searchBusy}
+            data-testid="find-friends-input"
           />
         </div>
         <button
           type="submit"
           className={styles.addFriendSubmit}
-          disabled={busy || !username.trim()}
+          disabled={busy || searchBusy || !query.trim()}
+          data-testid="find-friends-search"
         >
-          <UserPlus size={16} aria-hidden />
-          {busy ? 'Adding…' : 'Add friend'}
+          <Search size={16} aria-hidden />
+          {searchBusy ? 'Searching…' : 'Search'}
         </button>
       </form>
+
+      {hits ? (
+        <section className={styles.friendSection} aria-label="Search results">
+          <div className={styles.friendSectionHead}>
+            <h2 className={styles.friendSectionTitle}>Results</h2>
+            <span className={styles.friendSectionCount}>{hits.length}</span>
+          </div>
+          {hits.length === 0 ? (
+            <p className={styles.findEmpty}>No designers match that name.</p>
+          ) : (
+            <ul className={styles.findResults} data-testid="find-friends-results">
+              {hits.map((hit) => {
+                const label = hit.user.display_name || hit.user.username
+                return (
+                  <li key={hit.user.user_id} className={styles.friendCard}>
+                    <button
+                      type="button"
+                      className={styles.friendOpen}
+                      data-testid={`find-open-${hit.user.user_id}`}
+                      onClick={() =>
+                        onOpenDesigner({
+                          user_id: hit.user.user_id,
+                          username: hit.user.username,
+                          display_name: hit.user.display_name,
+                          avatar_url: hit.user.avatar_url,
+                        })
+                      }
+                    >
+                      <DesignerAvatar
+                        userId={hit.user.user_id}
+                        label={label}
+                        avatarUrl={hit.user.avatar_url}
+                      />
+                      <span className={styles.friendText}>
+                        <strong>{label}</strong>
+                        <span>@{hit.user.username}</span>
+                      </span>
+                    </button>
+                    {hit.relationship === 'accepted' ? (
+                      <span className={styles.friendStatusPill}>
+                        <Check size={14} aria-hidden />
+                        Friends
+                      </span>
+                    ) : hit.relationship === 'pending_out' ? (
+                      <span className={styles.friendStatusPill} data-testid="request-sent-status">
+                        Request sent
+                      </span>
+                    ) : hit.relationship === 'pending_in' ? (
+                      <span className={styles.friendStatusPill}>Incoming request</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.friendAccept}
+                        disabled={busy}
+                        data-testid={`find-add-${hit.user.user_id}`}
+                        onClick={() => onRequest(hit.user.user_id)}
+                      >
+                        <UserPlus size={14} aria-hidden />
+                        Add friend
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {notice ? (
         <p className={styles.friendNotice} role="status">
@@ -1313,34 +1479,56 @@ function FriendsPanel({
           {state.requests.length > 0 ? (
             <section className={styles.friendSection} aria-label="Friend requests">
               <div className={styles.friendSectionHead}>
-                <h2 className={styles.friendSectionTitle}>Requests</h2>
+                <h2 className={styles.friendSectionTitle}>Friend requests</h2>
                 <span className={styles.friendSectionCount}>{state.requests.length}</span>
               </div>
-              <ul className={styles.friendList}>
+              <ul className={styles.friendList} data-testid="friend-requests-list">
                 {state.requests.map((row) => {
                   const label = row.friend.display_name || row.friend.username
                   return (
                     <li key={row.id} className={`${styles.friendCard} ${styles.friendCardRequest}`}>
-                      <div className={styles.friendCardMain}>
+                      <button
+                        type="button"
+                        className={styles.friendOpen}
+                        data-testid={`request-open-${row.friend.user_id}`}
+                        onClick={() =>
+                          onOpenDesigner({
+                            user_id: row.friend.user_id,
+                            username: row.friend.username,
+                            display_name: row.friend.display_name,
+                            avatar_url: row.friend.avatar_url,
+                          })
+                        }
+                      >
                         <DesignerAvatar
                           userId={row.friend.user_id}
                           label={label}
                           avatarUrl={row.friend.avatar_url}
                         />
-                        <div className={styles.friendText}>
+                        <span className={styles.friendText}>
                           <strong>{label}</strong>
                           <span>@{row.friend.username}</span>
-                          <em className={styles.friendAsk}>Add as a friend?</em>
-                        </div>
-                      </div>
+                          <em className={styles.friendAsk}>Wants to join your circle</em>
+                        </span>
+                      </button>
                       <div className={styles.friendCardActions}>
                         <button
                           type="button"
                           className={styles.friendAccept}
                           disabled={busy}
+                          data-testid={`friend-accept-${row.id}`}
                           onClick={() => onAccept(row.id)}
                         >
-                          Accept
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.friendReject}
+                          disabled={busy}
+                          data-testid={`friend-reject-${row.id}`}
+                          onClick={() => onReject(row.id, label)}
+                        >
+                          Reject
                         </button>
                       </div>
                     </li>
@@ -1360,14 +1548,14 @@ function FriendsPanel({
                 <button
                   type="button"
                   className={styles.friendsEmptyBtn}
-                  aria-label="Focus add friend"
+                  aria-label="Focus find friends"
                   onClick={() => inputRef.current?.focus()}
                 >
                   <UserPlus size={28} aria-hidden />
                 </button>
-                <p className={styles.friendsEmptyTitle}>Add a friend</p>
+                <p className={styles.friendsEmptyTitle}>Find friends</p>
                 <p className={styles.friendsEmptyBody}>
-                  Invite the designers closest to you by FashionRise username.
+                  Search by name, send a request, and grow your private circle.
                 </p>
               </div>
             ) : (

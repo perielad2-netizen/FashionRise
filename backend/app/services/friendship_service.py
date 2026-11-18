@@ -16,7 +16,7 @@ from app.models.user_friendship import (
     UserFriendship,
 )
 from app.models.user_profile import UserProfile
-from app.schemas.friendship import FriendUserRead, FriendshipRead
+from app.schemas.friendship import FriendSearchHit, FriendUserRead, FriendshipRead
 
 
 def _pair_ids(a: uuid.UUID, b: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
@@ -174,6 +174,75 @@ def remove_friend(db: Session, user: User, friend_user_id: uuid.UUID) -> None:
         raise ForbiddenError("Not your friendship")
     db.delete(row)
     db.commit()
+
+
+def reject_friend(db: Session, user: User, friendship_id: uuid.UUID) -> None:
+    """Addressee declines a pending request — deletes the pending row."""
+    row = db.get(UserFriendship, friendship_id)
+    if row is None:
+        raise NotFoundError("Friend request not found")
+    if row.addressee_id != user.id:
+        raise ForbiddenError("Only the invited friend can reject this request")
+    if row.status != FRIENDSHIP_PENDING:
+        raise ConflictError("This friend request can no longer be rejected")
+    db.delete(row)
+    db.commit()
+
+
+def search_designers(
+    db: Session,
+    viewer: User,
+    *,
+    query: str,
+    limit: int = 20,
+) -> list[FriendSearchHit]:
+    """Find active designers whose username or display name contains ``query``."""
+    needle = (query or "").strip()
+    if len(needle) < 1:
+        raise ValidationAppError("Enter a name to search")
+    if len(needle) > 64:
+        raise ValidationAppError("Search is too long")
+    # Escape LIKE wildcards so user input is literal contains-match.
+    escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    cap = max(1, min(int(limit), 40))
+
+    rows = db.execute(
+        select(User)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(
+            User.is_active.is_(True),
+            User.id != viewer.id,
+            or_(
+                User.username.ilike(pattern, escape="\\"),
+                UserProfile.display_name.ilike(pattern, escape="\\"),
+            ),
+        )
+        .order_by(User.username.asc())
+        .limit(cap)
+    ).scalars().all()
+
+    hits: list[FriendSearchHit] = []
+    for other in rows:
+        pair = _find_pair(db, viewer.id, other.id)
+        relationship = "none"
+        friendship_id: uuid.UUID | None = None
+        if pair is not None:
+            friendship_id = pair.id
+            if pair.status == FRIENDSHIP_ACCEPTED:
+                relationship = "accepted"
+            elif pair.status == FRIENDSHIP_PENDING:
+                relationship = (
+                    "pending_out" if pair.requester_id == viewer.id else "pending_in"
+                )
+        hits.append(
+            FriendSearchHit(
+                user=_friend_user_read(db, other),
+                relationship=relationship,
+                friendship_id=friendship_id,
+            )
+        )
+    return hits
 
 
 def ensure_accepted_friends(db: Session, user_a: User, user_b: User) -> UserFriendship:

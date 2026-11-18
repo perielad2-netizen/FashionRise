@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Camera, Heart, MessageCircle, Star, UserMinus, UserPlus, X } from 'lucide-react'
+import { Camera, Heart, MessageCircle, Star, UserMinus, UserPlus, Users, X } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { ApiError } from '@/services/api/client'
@@ -50,6 +50,8 @@ type Props = {
   startInEditMode?: boolean
   /** Open another designer profile (e.g. from the Followers list). */
   onOpenDesigner?: (designer: DesignerRef) => void
+  /** Own profile → open Manage friends. */
+  onManageFriends?: () => void
 }
 
 type LoadState =
@@ -78,6 +80,7 @@ function tierLabel(tier: string | null | undefined): string | null {
  */
 export function FriendProfilePanel({
   friend,
+  onManageFriends,
   startInEditMode = false,
   onOpenDesigner,
 }: Props) {
@@ -477,6 +480,17 @@ export function FriendProfilePanel({
                 onClick={beginEdit}
               >
                 Edit Designer Card
+              </button>
+            ) : null}
+            {isSelf && onManageFriends ? (
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                data-testid="designer-manage-friends"
+                onClick={onManageFriends}
+              >
+                <Users size={14} aria-hidden />
+                Friends
               </button>
             ) : null}
           </div>

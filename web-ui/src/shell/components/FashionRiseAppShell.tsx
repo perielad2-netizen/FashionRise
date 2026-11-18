@@ -13,6 +13,8 @@ type Props = {
   onNavigate?: (destination: NavDestination) => void
   /** Header avatar → My Profile */
   onOpenProfile?: () => void
+  /** Account menu → Manage friends */
+  onOpenFriends?: () => void
   /** FashionRise immersive feed: hide global header; full-bleed main; floating nav exit. */
   immersive?: boolean
 }
@@ -25,6 +27,7 @@ export function FashionRiseAppShell({
   currentNav,
   onNavigate,
   onOpenProfile,
+  onOpenFriends,
   immersive = false,
 }: Props) {
   const [navOpen, setNavOpen] = useState(false)
@@ -78,6 +81,7 @@ export function FashionRiseAppShell({
           onLogout={onLogout}
           onComingSoon={onComingSoon}
           onOpenProfile={onOpenProfile}
+          onOpenFriends={onOpenFriends}
           accountMenuOpen={accountMenuOpen}
           onAccountMenuOpenChange={setAccountMenu}
           leading={menuToggle}

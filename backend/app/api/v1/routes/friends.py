@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser
 from app.db.session import get_db
-from app.schemas.friendship import FriendRequestCreate, FriendshipRead
+from app.schemas.friendship import FriendRequestCreate, FriendSearchHit, FriendshipRead
 from app.services import friendship_service as fs
 
 router = APIRouter()
@@ -25,6 +25,15 @@ def list_incoming_friend_requests(
     user: CurrentUser, db: Session = Depends(get_db)
 ) -> list[FriendshipRead]:
     return fs.list_incoming_requests(db, user)
+
+
+@router.get("/search", response_model=list[FriendSearchHit])
+def search_designers(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    q: str = Query(..., min_length=1, max_length=64, description="Contains match on username or display name"),
+) -> list[FriendSearchHit]:
+    return fs.search_designers(db, user, query=q)
 
 
 @router.post("/request", response_model=FriendshipRead, status_code=201)
@@ -43,6 +52,16 @@ def accept_friend_request(
     db: Session = Depends(get_db),
 ) -> FriendshipRead:
     return fs.accept_friend(db, user, friendship_id)
+
+
+@router.post("/{friendship_id}/reject", status_code=204, response_class=Response)
+def reject_friend_request(
+    friendship_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> Response:
+    fs.reject_friend(db, user, friendship_id)
+    return Response(status_code=204)
 
 
 @router.delete("/{friend_user_id}", status_code=204, response_class=Response)
