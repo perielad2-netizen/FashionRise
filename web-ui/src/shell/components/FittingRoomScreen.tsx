@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import {
   clearOutfitSession,
@@ -116,7 +117,18 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [saved, setSaved] = useState<FittingRoomSavedResult[]>([])
   const [spendOpen, setSpendOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [resultsOpen, setResultsOpen] = useState(false)
+  const [waitTick, setWaitTick] = useState(0)
   const { balance, unlimited, costs } = useAiStarsWallet()
+
+  const waitMessages = useMemo(
+    () => [
+      'Creating your Fitting Room preview…',
+      'Matching fabric and colors…',
+      'Almost ready…',
+    ],
+    [],
+  )
 
   const showNotice = useCallback((text: string, tone: 'ok' | 'info' | 'error') => {
     setNotice(text)
@@ -335,6 +347,50 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     setPieces([])
   }
 
+  useEffect(() => {
+    if (phase !== 'running') {
+      setWaitTick(0)
+      return
+    }
+    const id = window.setInterval(() => setWaitTick((n) => n + 1), 3800)
+    return () => window.clearInterval(id)
+  }, [phase])
+
+  useEffect(() => {
+    if (phase !== 'running' && !resultsOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [phase, resultsOpen])
+
+  const persistResult = useCallback(
+    async (jobId: string, categories: string[]) => {
+      const blob = await fetchJobImageBlob(jobId)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(blob)
+      })
+      const record: FittingRoomSavedResult = {
+        id: `frsave_${jobId}`,
+        userId,
+        jobId,
+        dataUrl,
+        label: `Outfit ${new Date().toLocaleString()}`,
+        outfitCategories: categories,
+        createdAt: new Date().toISOString(),
+      }
+      await saveFittingResult(record)
+      const rows = await listSavedResults(userId)
+      setSaved(rows)
+      return rows
+    },
+    [userId],
+  )
+
   const runTryOn = async () => {
     if (!personUrl || !pieces.length || !preflight?.enabled || !consent) return
     abortRef.current?.abort()
@@ -374,7 +430,16 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setResultJobId(settled.id)
       setResultBlobUrl(url)
       setPhase('done')
-      setStatusMsg('Preview ready. Concept only, not a fit guarantee.')
+      setStatusMsg('Preview ready — saved to your Fitting Room results.')
+      try {
+        await persistResult(
+          settled.id,
+          pieces.map((p) => p.category),
+        )
+        showNotice('Saved to Fitting Room results ✓', 'ok')
+      } catch {
+        showNotice('Preview ready, but auto-save failed — use Save.', 'info')
+      }
     } catch (err) {
       if (ac.signal.aborted) return
       setPhase('failed')
@@ -427,33 +492,22 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   }
 
   const onSavePrivate = async () => {
-    if (!resultBlobUrl || !resultJobId) return
+    if (!resultJobId) return
     try {
-      const record: FittingRoomSavedResult = {
-        id: `frsave_${resultJobId}`,
-        userId,
-        jobId: resultJobId,
-        dataUrl: resultBlobUrl,
-        label: `Outfit ${new Date().toLocaleString()}`,
-        outfitCategories: pieces.map((p) => p.category),
-        createdAt: new Date().toISOString(),
-      }
-      // Persist a durable data URL (object URLs expire).
-      const blob = await fetchJobImageBlob(resultJobId)
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || ''))
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(blob)
-      })
-      record.dataUrl = dataUrl
-      await saveFittingResult(record)
-      const rows = await listSavedResults(userId)
-      setSaved(rows)
-      showNotice('Saved privately on this device ✓', 'ok')
+      await persistResult(
+        resultJobId,
+        pieces.map((p) => p.category),
+      )
+      showNotice('Saved to Fitting Room results ✓', 'ok')
     } catch {
       showNotice('Could not save this preview.', 'error')
     }
+  }
+
+  const cancelRunning = () => {
+    abortRef.current?.abort()
+    setPhase('idle')
+    setStatusMsg(null)
   }
 
   const onDownloadSaved = async (row: FittingRoomSavedResult) => {
@@ -535,6 +589,14 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
           </p>
         </div>
         <div className={styles.headActions}>
+          <button
+            type="button"
+            className={styles.btnGhost}
+            data-testid="fitting-room-results-open"
+            onClick={() => setResultsOpen(true)}
+          >
+            Results{saved.length ? ` (${saved.length})` : ''}
+          </button>
           <button type="button" className={styles.btnGhost} onClick={onBackToStudio}>
             Back to Studio
           </button>
@@ -737,18 +799,17 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               onClick={() => setSpendOpen(true)}
               data-testid="fitting-room-try-on"
             >
-              {phase === 'running'
-                ? 'Working…'
-                : phase === 'failed'
-                  ? 'Retry'
-                  : 'Try on'}
+              {phase === 'failed' ? 'Retry' : 'Try on'}
+            </button>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              data-testid="fitting-room-results-open-inline"
+              onClick={() => setResultsOpen(true)}
+            >
+              Open results
             </button>
           </div>
-          {phase === 'running' ? (
-            <p className={`${styles.status} ${styles.loadingPulse}`} role="status">
-              {statusMsg}
-            </p>
-          ) : null}
           {errorMsg ? (
             <p className={`${styles.status} ${styles.statusError}`} role="alert">
               {errorMsg}
@@ -779,54 +840,18 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                   Share
                 </button>
                 <button type="button" className={styles.btnPrimary} onClick={() => void onSavePrivate()}>
-                  Save privately
+                  Save again
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnGhost}
+                  onClick={() => setResultsOpen(true)}
+                >
+                  View all results
                 </button>
               </div>
             </>
           ) : null}
-        </div>
-
-        <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
-          <h2 className={styles.panelTitle}>4 · Saved previews</h2>
-          <p className={styles.panelHint}>
-            Previews you save stay on this device. Download, share, or delete anytime.
-          </p>
-          {saved.length === 0 ? (
-            <p className={styles.previewEmpty}>No saved Fitting Room previews yet</p>
-          ) : (
-            <div className={styles.savedGrid}>
-              {saved.map((row) => (
-                <div key={row.id} className={styles.savedCard}>
-                  <img src={row.dataUrl} alt={row.label} />
-                  <span className={styles.outfitCat}>{row.label}</span>
-                  <div className={styles.actions}>
-                    <button
-                      type="button"
-                      className={styles.btnGhost}
-                      disabled={downloadBusy}
-                      onClick={() => void onDownloadSaved(row)}
-                    >
-                      Download
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.btnGhost}
-                      onClick={() => void onShareSaved(row)}
-                    >
-                      Share
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.btnGhost}
-                      onClick={() => void onDeleteSaved(row.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -862,6 +887,108 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         onOpenShop={() => setShopOpen(true)}
       />
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
+
+      {phase === 'running' && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={styles.waitOverlay}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="fr-wait-title"
+              data-testid="fitting-room-wait-modal"
+            >
+              <div className={styles.waitCard}>
+                <div className={styles.generatingVisual} aria-hidden>
+                  <span className={styles.pulseRing} />
+                  <span className={styles.pulseRingDelayed} />
+                  <div className={styles.spinner} />
+                </div>
+                <strong id="fr-wait-title">
+                  {waitMessages[waitTick % waitMessages.length]}
+                </strong>
+                <span className={styles.waitPill}>Rendering</span>
+                <p className={styles.waitHint}>
+                  Hang tight — same Magic-style wait. Your result auto-saves when ready.
+                </p>
+                <button type="button" className={styles.btnGhost} onClick={cancelRunning}>
+                  Cancel
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {resultsOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={styles.resultsOverlay}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="fr-results-title"
+              data-testid="fitting-room-results-modal"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setResultsOpen(false)
+              }}
+            >
+              <div className={styles.resultsSheet}>
+                <header className={styles.resultsHead}>
+                  <h2 id="fr-results-title">Fitting Room results</h2>
+                  <button
+                    type="button"
+                    className={styles.btnGhost}
+                    data-testid="fitting-room-results-close"
+                    onClick={() => setResultsOpen(false)}
+                  >
+                    Close
+                  </button>
+                </header>
+                <p className={styles.panelHint}>
+                  Saved on this device. Scroll to browse, download, share, or delete.
+                </p>
+                <div className={styles.resultsScroll}>
+                  {saved.length === 0 ? (
+                    <p className={styles.previewEmpty}>No saved previews yet — try on to create one.</p>
+                  ) : (
+                    <div className={styles.savedGrid}>
+                      {saved.map((row) => (
+                        <div key={row.id} className={styles.savedCard}>
+                          <img src={row.dataUrl} alt={row.label} />
+                          <span className={styles.outfitCat}>{row.label}</span>
+                          <div className={styles.actions}>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              disabled={downloadBusy}
+                              onClick={() => void onDownloadSaved(row)}
+                            >
+                              Download
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              onClick={() => void onShareSaved(row)}
+                            >
+                              Share
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              onClick={() => void onDeleteSaved(row.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   )
 }

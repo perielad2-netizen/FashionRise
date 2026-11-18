@@ -448,12 +448,11 @@ FITTING_ROOM_MAX_PROMPT = (
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
 # Keep short: FASHN Max truncates prompts at 1000 chars (color lock appends below).
 FITTING_ROOM_LOOK_PLATE_PROMPT = (
-    "FashionRise look illustration with a drawn model — ignore body/face/hair/skin/pose; "
-    "transfer only the garments onto the person as REAL photographed clothing, not a "
-    "sketch overlay. 1:1 design: cut, coverage, sheer layers, exact panel hues "
-    "(bodice vs skirt). Do not unify or wash colors. Match person-photo lighting with "
-    "natural fabric texture and soft contact shadows. Keep the real person's identity, "
-    "face, hair, pose, lighting, background, and natural skin tone unchanged."
+    "FashionRise look illustration — ignore drawn body/face/hair; transfer garments as "
+    "REAL photographed clothing (not a sketch overlay). 1:1 design + exact panel hues "
+    "(bodice vs skirt). Keep sheer tulle/chiffon translucent — legs must stay visible "
+    "where the look shows them through the skirt; never make the skirt opaque. Match "
+    "person-photo lighting. Keep identity, face, hair, pose, background, skin unchanged."
 )
 
 # OpenAI Fitting Room path for Social looks — full photoreal + 1:1 contract (not Max-truncated).
@@ -463,34 +462,36 @@ FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "clothing that matches the FashionRise look illustration in image 2 one-to-one. "
     "Image 2 includes a drawn model — ignore that illustrated body, face, hair, skin, and "
     "pose; use only the garment design. Keep cut, silhouette, neckline, straps, coverage, "
-    "sheer layers, and every panel color exact (including two-tone bodice vs skirt — do not "
-    "unify hues). "
-    "CRITICAL REALISM: render the garments as real fabric in a real photo — natural cloth "
-    "texture, weave, folds, and sheerness that respond to image 1 lighting with soft "
-    "contact shadows at skin edges. Do NOT paste sketch strokes, flat illustrated fills, "
-    "airbrushed concept-art shading, or a translucent sketched overlay. "
-    "Preserve the person's exact identity, face, hair, pose, proportions, background, "
-    "and natural skin tone. Output one realistic photograph."
+    "and every panel color exact (including two-tone bodice vs skirt — do not unify hues). "
+    "SHEER LAYERS: if image 2 shows legs through a sheer/tulle/chiffon skirt, the person's "
+    "legs MUST remain visible through those sheer layers — never fill an opaque skirt over "
+    "the legs. "
+    "CRITICAL REALISM: render real fabric — weave, folds, photographic sheerness matching "
+    "image 1 lighting with soft contact shadows. Do NOT paste sketch strokes, flat "
+    "illustrated fills, airbrushed concept-art shading, or a sketched overlay. "
+    "Preserve identity, face, hair, pose, proportions, background, and natural skin tone. "
+    "Output one realistic photograph."
 )
 
 # Step 1 for Social looks: illustration → photoreal product plate (no person), then Max try-on.
 FITTING_ROOM_LOOK_PRODUCTIZE_PROMPT = (
     "Transform this FashionRise look illustration into a photorealistic commercial clothing "
     "product photograph of the REAL garment alone on a neutral light studio background. "
-    "Ignore the drawn model body, face, hair, skin, and pose entirely — clothing only in "
-    "the output. Keep 1:1 design: silhouette, wrap bodice, sheer layered skirt, straps, "
-    "coverage, and exact multi-tone panel colors (bodice vs skirt — never unify into one "
-    "green). Render real fabric texture, weave, folds, and sheer chiffon/tulle — not sketch "
-    "strokes, flat fills, or Fashion Magic illustration style. No person, mannequin, or face."
+    "Ignore the drawn model body, face, hair, skin, and pose — clothing only. Keep 1:1 "
+    "design: silhouette, wrap bodice, straps, multi-tone panel colors (bodice vs skirt — "
+    "never unify). CRITICAL SHEER: keep tulle/chiffon layers translucent with open "
+    "negative space where legs showed through the look — do not bake an opaque filled skirt. "
+    "Real fabric texture and weave — not sketch strokes or illustration style. No person."
 )
 
 # Step 2 Max prompt when the garment ref is already a photoreal product from the look.
 FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
-    "Fit only the clothing from the product photograph onto the person. Preserve exact "
-    "multi-tone panel hues (bodice vs skirt), sheer layers, cut, straps, and coverage. "
-    "Do not unify, wash, or recolor panels. Match person-photo lighting with natural fabric. "
-    "Keep the person's identity, face, hair, pose, lighting, background, and natural skin "
-    "tone unchanged."
+    "Fit only the clothing from the product photograph onto the person as real fabric. "
+    "Preserve multi-tone hues (bodice vs skirt), cut, and straps. Keep sheer tulle/chiffon "
+    "translucent — the person's legs must stay visible through sheer layers when the "
+    "product/look shows that; never cover legs with an opaque skirt. Do not unify colors "
+    "or paste sketch shading. Match person-photo lighting. Keep identity, face, hair, "
+    "pose, background, and natural skin tone unchanged."
 )
 
 

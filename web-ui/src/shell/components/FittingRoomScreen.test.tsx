@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   readFittingRoomAsset: vi.fn(async () => null),
   writeFittingRoomAsset: vi.fn(async () => undefined),
   deleteFittingRoomAsset: vi.fn(async () => undefined),
+  listSavedResults: vi.fn(async () => []),
+  saveFittingResult: vi.fn(async () => undefined),
+  pollAiJobUntilSettled: vi.fn(),
+  fetchJobImageBlob: vi.fn(),
 }))
 
 vi.mock('@/config/fittingRoomUi', () => ({
@@ -28,8 +32,8 @@ vi.mock('@/lib/fittingRoomStore', () => ({
   readOutfitSession: vi.fn(async () => null),
   writeOutfitSession: vi.fn(async () => undefined),
   clearOutfitSession: vi.fn(async () => undefined),
-  listSavedResults: vi.fn(async () => []),
-  saveFittingResult: vi.fn(async () => undefined),
+  listSavedResults: (...args: unknown[]) => mocks.listSavedResults(...args),
+  saveFittingResult: (...args: unknown[]) => mocks.saveFittingResult(...args),
   deleteSavedResult: vi.fn(async () => undefined),
   newOutfitPieceId: () => 'piece_test',
   consumeFittingRoomPlantedNotice: () => null,
@@ -40,11 +44,11 @@ vi.mock('@/lib/fittingRoomStore', () => ({
 }))
 
 vi.mock('@/services/ai/pollAiJob', () => ({
-  pollAiJobUntilSettled: vi.fn(),
+  pollAiJobUntilSettled: (...args: unknown[]) => mocks.pollAiJobUntilSettled(...args),
 }))
 
 vi.mock('@/services/ai/magicApi', () => ({
-  fetchJobImageBlob: vi.fn(),
+  fetchJobImageBlob: (...args: unknown[]) => mocks.fetchJobImageBlob(...args),
 }))
 
 vi.mock('@/lib/sharePromo', () => ({
@@ -85,6 +89,11 @@ describe('FittingRoomScreen', () => {
       conflicting_category_sets: [['one-pieces', 'tops']],
     })
     mocks.readFittingRoomAsset.mockResolvedValue(null)
+    mocks.listSavedResults.mockResolvedValue([])
+    mocks.saveFittingResult.mockResolvedValue(undefined)
+    mocks.enqueueFittingRoomTryOn.mockReset()
+    mocks.pollAiJobUntilSettled.mockReset()
+    mocks.fetchJobImageBlob.mockReset()
   })
 
   it('renders gated-off copy when UI flag is false', () => {
@@ -151,5 +160,84 @@ describe('FittingRoomScreen', () => {
     await userEvent.click(tryBtn)
     expect(await screen.findByRole('button', { name: /Approve −20/i })).toBeInTheDocument()
     expect(mocks.enqueueFittingRoomTryOn).not.toHaveBeenCalled()
+  })
+
+  it('shows wait modal, auto-saves, and opens results sheet', async () => {
+    mocks.readFittingRoomAsset.mockResolvedValue({
+      key: 'u1:person',
+      kind: 'person',
+      userId: 'u1',
+      dataUrl: 'data:image/png;base64,person',
+      mimeType: 'image/png',
+      updatedAt: new Date().toISOString(),
+    })
+    const { readOutfitSession } = await import('@/lib/fittingRoomStore')
+    vi.mocked(readOutfitSession).mockResolvedValue({
+      key: 'u1:outfit',
+      userId: 'u1',
+      pieces: [
+        {
+          id: 'piece_1',
+          dataUrl: 'data:image/png;base64,garment',
+          mimeType: 'image/png',
+          category: 'dresses',
+          source: 'fashionrise_look',
+          addedAt: new Date().toISOString(),
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    })
+
+    let resolvePoll: ((value: unknown) => void) | null = null
+    mocks.enqueueFittingRoomTryOn.mockResolvedValue({ id: 'job-fr-1' })
+    mocks.pollAiJobUntilSettled.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePoll = resolve
+        }),
+    )
+    mocks.fetchJobImageBlob.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
+    mocks.listSavedResults.mockResolvedValue([
+      {
+        id: 'frsave_job-fr-1',
+        userId: 'u1',
+        jobId: 'job-fr-1',
+        dataUrl: 'data:image/png;base64,saved',
+        label: 'Outfit test',
+        outfitCategories: ['dresses'],
+        createdAt: new Date().toISOString(),
+      },
+    ])
+
+    // FileReader for auto-save data URL
+    class FakeFileReader {
+      result: string | null = null
+      onload: ((ev: ProgressEvent<FileReader>) => void) | null = null
+      onerror: ((ev: ProgressEvent<FileReader>) => void) | null = null
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,autosaved'
+        this.onload?.({} as ProgressEvent<FileReader>)
+      }
+    }
+    vi.stubGlobal('FileReader', FakeFileReader as unknown as typeof FileReader)
+
+    render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
+    await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
+    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
+    const tryBtn = screen.getByTestId('fitting-room-try-on')
+    await waitFor(() => expect(tryBtn).not.toBeDisabled())
+    await userEvent.click(tryBtn)
+    await userEvent.click(await screen.findByRole('button', { name: /Approve −20/i }))
+
+    expect(await screen.findByTestId('fitting-room-wait-modal')).toBeInTheDocument()
+    expect(screen.getByTestId('fitting-room-try-on')).toHaveTextContent(/^Try on$/i)
+
+    resolvePoll?.({ id: 'job-fr-1', status: 'completed' })
+    await waitFor(() => expect(mocks.saveFittingResult).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByTestId('fitting-room-wait-modal')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('fitting-room-results-open'))
+    expect(await screen.findByTestId('fitting-room-results-modal')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Fitting Room results/i })).toBeInTheDocument()
   })
 })
