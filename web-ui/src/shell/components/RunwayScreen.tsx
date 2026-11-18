@@ -1844,7 +1844,8 @@ function RunwayCard({
         userId: viewerId,
         dataUrl,
         mimeType,
-        category: 'auto',
+        category: 'dresses',
+        source: 'fashionrise_look',
         notice: {
           title: item.title?.trim() || 'FashionRise look',
           galleryItemId: item.id,

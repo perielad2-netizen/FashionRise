@@ -1046,6 +1046,8 @@ describe('RunwayScreen', () => {
         expect.objectContaining({
           userId: 'viewer-1',
           dataUrl: 'data:image/png;base64,look',
+          category: 'dresses',
+          source: 'fashionrise_look',
           notice: expect.objectContaining({
             galleryItemId: 'tryon-1',
             title: 'Try me look',

@@ -276,6 +276,7 @@ def enqueue_fitting_room_try_on(
 
     piece_bytes: list[bytes] = []
     piece_cats: list[str] = []
+    piece_sources: list[str] = []
     if isinstance(garment_pieces, list) and garment_pieces:
         if len(garment_pieces) > MAX_OUTFIT_PIECES:
             raise HTTPException(
@@ -290,9 +291,11 @@ def enqueue_fitting_room_try_on(
             raw = piece.get("image_base64") or piece.get("imageBase64")
             piece_bytes.append(_decode_png(str(raw or ""), field=f"garment_pieces[{i}]"))
             piece_cats.append(_normalize_category(piece.get("category") or piece.get("garment_category")))
+            piece_sources.append(str(piece.get("source") or "").strip().lower())
     elif garment_image_base64:
         piece_bytes.append(_decode_png(garment_image_base64, field="garment_image_base64"))
         piece_cats.append(_normalize_category(garment_category))
+        piece_sources.append("")
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -301,6 +304,7 @@ def enqueue_fitting_room_try_on(
 
     category = piece_cats[0] if len(piece_cats) == 1 else "auto"
     combo_warning = combo_warning_for_categories(piece_cats)
+    look_plate = any(src == "fashionrise_look" for src in piece_sources)
 
     # Flat Stars check before enqueue — debit only after success (worker).
     assert_can_spend_fitting_room(db, user)
@@ -318,6 +322,14 @@ def enqueue_fitting_room_try_on(
     for cat in piece_cats:
         if cat != "auto":
             hints.append(f"garment_category:{cat}")
+    if look_plate:
+        hints.extend(
+            [
+                "fashionrise_look_plate",
+                "Ignore illustrated model body/skin in garment plate; clothing only.",
+                "Keep exact multi-tone colors (bodice vs skirt); do not lighten panels.",
+            ]
+        )
     if len(piece_bytes) > 1:
         hints.append(
             "Apply all clothing pieces from the garment collage onto the person photo "
@@ -338,6 +350,8 @@ def enqueue_fitting_room_try_on(
             "garment_category": category,
             "outfit_categories": piece_cats,
             "outfit_piece_count": len(piece_bytes),
+            "garment_sources": piece_sources,
+            "garment_source": "fashionrise_look" if look_plate else None,
             "combo_warning": combo_warning,
             "stars_cost": fitting_room_cost(),
             "design_hints": hints,
@@ -419,6 +433,28 @@ FITTING_ROOM_MAX_PROMPT = (
     "unchanged — do not darken, bronze, tint, or recolor any skin."
 )
 
+# Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
+FITTING_ROOM_LOOK_PLATE_PROMPT = (
+    "The clothing reference is a FashionRise look illustration that includes a drawn model. "
+    "Ignore that illustrated body, face, hair, skin, and pose — transfer only the garments "
+    "onto the real person photo. Preserve every garment panel's exact hue and value, "
+    "including two-tone designs (bodice vs skirt, overlays, sheer layers). Do not unify, "
+    "lighten, wash, or recolor any clothing panel. Keep coverage, cut, straps, and fabric "
+    "read identical to the look. Keep the real person's identity, face, hair, pose, "
+    "proportions, lighting, background, and natural skin tone unchanged."
+)
+
+
+def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
+    sources = data.get("garment_sources")
+    if isinstance(sources, list) and any(
+        str(s).strip().lower() == "fashionrise_look" for s in sources
+    ):
+        return FITTING_ROOM_LOOK_PLATE_PROMPT
+    if str(data.get("garment_source") or "").strip().lower() == "fashionrise_look":
+        return FITTING_ROOM_LOOK_PLATE_PROMPT
+    return FITTING_ROOM_MAX_PROMPT
+
 
 def _fitting_room_garment_prep(
     *,
@@ -462,7 +498,7 @@ def _generate_fitting_room_via_fashn(
                 prep=prep,
                 generation_mode="quality",
                 resolution="2k",
-                prompt=FITTING_ROOM_MAX_PROMPT,
+                prompt=_fitting_room_max_prompt(data),
             )
             if not isinstance(meta, dict):
                 meta = {}

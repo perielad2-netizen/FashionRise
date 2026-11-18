@@ -355,6 +355,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         garmentPieces: pieces.map((p) => ({
           imageBase64: p.dataUrl,
           category: p.category,
+          ...(p.source ? { source: p.source } : {}),
         })),
         idempotencyKey: idem,
         consentAcknowledged: true,

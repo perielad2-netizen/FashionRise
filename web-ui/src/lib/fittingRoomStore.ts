@@ -27,6 +27,8 @@ export type FittingRoomOutfitPiece = {
   dataUrl: string
   mimeType: string
   updatedAt: string
+  /** Set when planted from FashionRise Social Try on me. */
+  source?: 'fashionrise_look' | 'upload'
 }
 
 export type FittingRoomOutfitSession = {
@@ -351,15 +353,18 @@ export async function plantFittingRoomGarment(opts: {
   dataUrl: string
   mimeType: string
   category?: string
+  source?: FittingRoomOutfitPiece['source']
   notice?: { title: string; galleryItemId: string }
 }): Promise<void> {
   const updatedAt = new Date().toISOString()
   const piece: FittingRoomOutfitPiece = {
     id: newOutfitPieceId(),
-    category: opts.category?.trim() || 'auto',
+    // Full Social looks are dresses/one-pieces — not ambiguous auto plates.
+    category: opts.category?.trim() || 'dresses',
     dataUrl: opts.dataUrl,
     mimeType: opts.mimeType,
     updatedAt,
+    source: opts.source ?? 'fashionrise_look',
   }
   await writeOutfitSession({
     key: outfitKey(opts.userId),
