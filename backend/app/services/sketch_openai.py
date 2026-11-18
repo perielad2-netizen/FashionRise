@@ -594,7 +594,7 @@ def _shared_garment_spec_clause(input_data: dict[str, Any]) -> str:
     )
 
 
-def _studio_side_vision_clause(side: str | None) -> str:
+def _studio_side_vision_clause(side: str | None, *, smart_back: bool = False) -> str:
     if side == "front":
         return (
             "STUDIO VIEW: FRONT of the garment (viewer-facing). This upload is the front sketch only. "
@@ -603,32 +603,58 @@ def _studio_side_vision_clause(side: str | None) -> str:
             "or claim this is a rear view."
         )
     if side == "back":
+        if smart_back:
+            return (
+                "STUDIO VIEW: REAR / BACK of the SAME garment. Image 1 is the FRONT sketch used as a "
+                "design seed (Smart Back) — invent the coherent rear view of that outfit on the same "
+                "fashion figure. Preserve full garment coverage from behind (hood, cape/robe/body, "
+                "sleeves, length, hem) matching Front. Do NOT return a bare croquis, underwear/socks "
+                "only, or a different garment. Male and female croquis both require the full designed "
+                "outfit on the back. Target polished professional enhancement quality equal to Front."
+            )
         return (
-            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use neutral "
-            "professional fashion-illustration language for adult swimwear and rear garment construction "
+            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch — use neutral "
+            "professional fashion-illustration language for rear garment construction "
             "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
-            "rear hem, coverage panels as designed). Target the same polished professional enhancement "
-            "quality as Front — not a traced or cartoon back sketch. Do NOT claim this is the front view, "
-            "invent front-only details, add coverage that is not drawn, or invent a different garment "
-            "(especially not a plain bodysuit) that contradicts SHARED GARMENT SPEC."
+            "rear hem, coverage panels as designed). Show the SAME garment coverage as Front from "
+            "behind (hoods, robes, coats, full-length pieces included). Do NOT strip the design down "
+            "to underwear/socks or a bare croquis unless Front is swimwear/lingerie. Target the same "
+            "polished professional enhancement quality as Front — not a traced or cartoon back sketch. "
+            "Do NOT claim this is the front view or invent a different garment (especially not a plain "
+            "bodysuit) that contradicts SHARED GARMENT SPEC. Works for male and female fashion croquis."
         )
     return ""
 
 
-def _studio_side_edit_clause(side: str | None) -> str:
+def _studio_side_edit_clause(side: str | None, *, smart_back: bool = False) -> str:
     if side == "front":
         return (
             "VIEW: front-facing fashion illustration — preserve front concept and applied "
             "materials; polish imperfections; not a rear/back view. "
         )
     if side == "back":
+        if smart_back:
+            return (
+                "VIEW: rear/back fashion illustration invented from the Front design seed — full "
+                "matching outfit from behind (not underwear-only); same polished quality as front; "
+                "never invent a different garment that contradicts SHARED GARMENT SPEC. "
+            )
         return (
             "VIEW: rear/back fashion illustration — accurate back necklines, straps/ties, "
-            "dorsal seams, rear hem as designed; same polished quality as front (not traced/"
-            "cartoon); never describe this upload as a front-facing sketch; never invent a "
-            "different garment or bodysuit that contradicts SHARED GARMENT SPEC. "
+            "dorsal seams, rear hem as designed; keep the SAME full garment coverage as Front "
+            "(robes/hoods/coats included); never strip to underwear/socks unless Front is "
+            "swimwear/lingerie; same polished quality as front (not traced/cartoon); never "
+            "describe this upload as a front-facing sketch; never invent a different garment or "
+            "bodysuit that contradicts SHARED GARMENT SPEC. "
         )
     return ""
+
+
+def _smart_back_flag(input_data: dict[str, Any] | None) -> bool:
+    if not isinstance(input_data, dict):
+        return False
+    v = input_data.get("smart_back")
+    return v is True or v == 1 or (isinstance(v, str) and v.strip().lower() in {"1", "true", "yes"})
 
 
 def _dual_back_pair_text_clause(input_data: dict[str, Any]) -> str:
@@ -649,7 +675,7 @@ def _user_text(job: AIJob) -> str:
         ref = reference_from_job_input(d if isinstance(d, dict) else {})
         parts.append(vision_reference_instructions(ref))
         side = _normalized_studio_side(d if isinstance(d, dict) else {})
-        side_clause = _studio_side_vision_clause(side)
+        side_clause = _studio_side_vision_clause(side, smart_back=_smart_back_flag(d if isinstance(d, dict) else {}))
         if side_clause:
             parts.append(side_clause)
         pair_text = _dual_back_pair_text_clause(d if isinstance(d, dict) else {})
@@ -933,7 +959,7 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
     pair_clause = ""
     if job is not None:
         job_input = job.input_data if isinstance(job.input_data, dict) else {}
-        side_clause = _studio_side_edit_clause(_normalized_studio_side(job_input))
+        side_clause = _studio_side_edit_clause(_normalized_studio_side(job_input), smart_back=_smart_back_flag(job_input))
         shared_edit = _shared_garment_spec_clause(job_input)
         if shared_edit:
             side_clause = f"{side_clause}{shared_edit} "
