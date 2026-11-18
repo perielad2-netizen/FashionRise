@@ -14,7 +14,9 @@
 | AI cost | **+1 OpenAI images.edit** normalize per Social look success, then **1 FASHN Max** (or OpenAI try-on if Max fails). Optional **+1** normalize style retry only when the product still scores as illustrated. No Stars change. |
 | Live visual note | Bounded normalize calls on the green dress produced garment-only plates with openings preserved, but OpenAI still tends to emit digital-illustration fabric on the intermediate plate; Max is relied on for photographic drape on the person. Full end-to-end person try-on needs hands-on QA. |
 | Limitations | Intermediate normalize is not fully photographic with current `gpt-image-2.5-sunburst`; sheer/openness is heuristic; soft check is deterministic and advisory (no auto-regenerate). |
-| Tip | BE tip set at deploy · FE unchanged (`cd612dec` wait modal / Results) |
+| Tip | BE `/opt/fashionrise/src` @ **`aa01b25d`** · FE `/var/www/fashionrise/releases/cd612dec-fr-wait-results` · `/version.json` → `cd612dec` |
+| Verify | `curl -sS http://127.0.0.1:8010/api/v1/ai/fitting-room/preflight` → Not authenticated; `look_garment_normalize.py` present |
+| PR | **#436** merged → `main` @ **`aa01b25d`** |
 | Rollback BE | `cd /opt/fashionrise/src && git checkout --detach 8492c358 && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
 
 ## Deployed — Social Try on me look fidelity (2026-11-18 Asia/Jerusalem)
