@@ -30,3 +30,13 @@ class FriendRequestCreate(BaseModel):
 
     username: str | None = Field(default=None, min_length=1, max_length=64)
     user_id: uuid.UUID | None = None
+
+
+class FriendSearchHit(BaseModel):
+    """Designer match from Find friends (contains username / display name)."""
+
+    user: FriendUserRead
+    relationship: str = Field(
+        description="none | pending_out | pending_in | accepted",
+    )
+    friendship_id: uuid.UUID | None = None

@@ -166,8 +166,11 @@
 }
 
 .friendsWrap {
-  position: relative;
+  /* Fill .body (overflow:hidden flex child) so the list scrolls instead of clipping. */
+  position: absolute;
+  inset: 0;
   display: grid;
+  align-content: start;
   gap: 18px;
   /* GlobalHeader owns top chrome — no immersive hamburger inset. */
   padding: 14px 14px 40px;
@@ -175,9 +178,10 @@
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  min-height: 100%;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(120% 70% at 0% -20%, rgba(236, 72, 153, 0.28), transparent 55%),
@@ -2362,6 +2366,73 @@
 .friendAccept:focus-visible {
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
+}
+
+.friendReject {
+  flex: 1 1 auto;
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.friendReject:hover,
+.friendReject:focus-visible {
+  color: #fecdd3;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.friendReject:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.friendReject:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.friendStatusPill {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(249, 168, 212, 0.35);
+  background: rgba(249, 168, 212, 0.12);
+  color: #f9a8d4;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.findResults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.findEmpty {
+  margin: 0;
+  padding: 4px 2px 0;
+  color: rgba(248, 250, 252, 0.62);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .friendRemove {

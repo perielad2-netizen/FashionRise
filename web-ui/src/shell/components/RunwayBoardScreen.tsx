@@ -15,7 +15,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
-import { FASHIONRISE_PATH } from '@/pages/StudioPage'
+import { FASHIONRISE_PATH, RUNWAY_FRIENDS_PATH } from '@/pages/StudioPage'
 import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
@@ -253,14 +253,25 @@ export function RunwayBoardScreen() {
           Runway
         </h1>
         <p className={styles.lead}>Weekly awards and Top rankings.</p>
-        <button
-          type="button"
-          className={styles.socialCta}
-          data-testid="runway-open-fashionrise"
-          onClick={() => navigate(FASHIONRISE_PATH)}
-        >
-          Open FashionRise Social
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.socialCta}
+            data-testid="runway-open-fashionrise"
+            onClick={() => navigate(FASHIONRISE_PATH)}
+          >
+            Open FashionRise Social
+          </button>
+          <button
+            type="button"
+            className={styles.friendsCta}
+            data-testid="runway-open-friends"
+            onClick={() => navigate(RUNWAY_FRIENDS_PATH)}
+          >
+            <Users size={14} aria-hidden />
+            Friends
+          </button>
+        </div>
         <CompetitionStrip />
       </header>
 

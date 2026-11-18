@@ -19,7 +19,10 @@ const unlikeGalleryComment = vi.fn()
 const reportGalleryItem = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
-const requestFriendByUsername = vi.fn()
+const searchFriends = vi.fn()
+const requestFriendByUserId = vi.fn()
+const acceptFriendRequest = vi.fn()
+const rejectFriendRequest = vi.fn()
 const listUserGallery = vi.fn()
 const getPublicProfile = vi.fn()
 const removeFriend = vi.fn()
@@ -118,8 +121,11 @@ vi.mock('@/services/competitionsApi', () => ({
 vi.mock('@/services/friendsApi', () => ({
   listFriends: (...args: unknown[]) => listFriends(...args),
   listFriendRequests: (...args: unknown[]) => listFriendRequests(...args),
-  requestFriendByUsername: (...args: unknown[]) => requestFriendByUsername(...args),
-  acceptFriendRequest: vi.fn(),
+  searchFriends: (...args: unknown[]) => searchFriends(...args),
+  requestFriendByUserId: (...args: unknown[]) => requestFriendByUserId(...args),
+  requestFriendByUsername: vi.fn(),
+  acceptFriendRequest: (...args: unknown[]) => acceptFriendRequest(...args),
+  rejectFriendRequest: (...args: unknown[]) => rejectFriendRequest(...args),
   removeFriend: (...args: unknown[]) => removeFriend(...args),
 }))
 
@@ -202,7 +208,10 @@ describe('RunwayScreen', () => {
     unlikeGalleryComment.mockReset()
     listFriends.mockReset()
     listFriendRequests.mockReset()
-    requestFriendByUsername.mockReset()
+    searchFriends.mockReset()
+    requestFriendByUserId.mockReset()
+    acceptFriendRequest.mockReset()
+    rejectFriendRequest.mockReset()
     listUserGallery.mockReset()
     getPublicProfile.mockReset()
     getFollowStatus.mockReset()
@@ -799,7 +808,7 @@ describe('RunwayScreen', () => {
     expect(rateGalleryItem).not.toHaveBeenCalled()
   })
 
-  it('loads friends circle and can add by username', async () => {
+  it('loads friends circle and can find + request by contains name', async () => {
     listFriends.mockResolvedValue([
       {
         id: 'fs-1',
@@ -826,7 +835,19 @@ describe('RunwayScreen', () => {
     expect(listGallery).not.toHaveBeenCalled()
     expect(listFriends).toHaveBeenCalled()
 
-    requestFriendByUsername.mockResolvedValue({
+    searchFriends.mockResolvedValue([
+      {
+        user: {
+          user_id: 'other',
+          username: 'newfriend',
+          display_name: 'New Friend',
+          avatar_url: null,
+        },
+        relationship: 'none',
+        friendship_id: null,
+      },
+    ])
+    requestFriendByUserId.mockResolvedValue({
       id: 'fs-2',
       status: 'pending',
       requester_id: 'me',
@@ -840,11 +861,57 @@ describe('RunwayScreen', () => {
         avatar_url: null,
       },
     })
-    fireEvent.change(screen.getByLabelText(/Add friend by username/i), {
-      target: { value: 'newfriend' },
+    fireEvent.change(screen.getByTestId('find-friends-input'), {
+      target: { value: 'new' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /^Add friend$/i }))
-    await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
+    fireEvent.click(screen.getByTestId('find-friends-search'))
+    expect(await screen.findByTestId('find-friends-results')).toBeInTheDocument()
+    await waitFor(() => expect(searchFriends).toHaveBeenCalledWith('new'))
+    fireEvent.click(screen.getByTestId('find-add-other'))
+    await waitFor(() => expect(requestFriendByUserId).toHaveBeenCalledWith('other'))
+    expect(await screen.findByTestId('request-sent-status')).toBeInTheDocument()
+  })
+
+  it('shows incoming friend requests with approve and reject', async () => {
+    listFriends.mockResolvedValue([])
+    listFriendRequests.mockResolvedValue([
+      {
+        id: 'req-1',
+        status: 'pending',
+        requester_id: 'maya',
+        addressee_id: 'me',
+        created_at: '2026-11-07T00:00:00Z',
+        accepted_at: null,
+        friend: {
+          user_id: 'maya',
+          username: 'MayaRose',
+          display_name: 'Maya',
+          avatar_url: null,
+        },
+      },
+    ])
+    acceptFriendRequest.mockResolvedValue({
+      id: 'req-1',
+      status: 'accepted',
+      requester_id: 'maya',
+      addressee_id: 'me',
+      created_at: '2026-11-07T00:00:00Z',
+      accepted_at: '2026-11-07T01:00:00Z',
+      friend: {
+        user_id: 'maya',
+        username: 'MayaRose',
+        display_name: 'Maya',
+        avatar_url: null,
+      },
+    })
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await waitFor(() => expect(listGallery).toHaveBeenCalled())
+    await openMoreMenu()
+    fireEvent.click(screen.getByTestId('runway-tab-friends'))
+    expect(await screen.findByTestId('friend-requests-list')).toBeInTheDocument()
+    expect(screen.getByTestId('request-open-maya')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('friend-accept-req-1'))
+    await waitFor(() => expect(acceptFriendRequest).toHaveBeenCalledWith('req-1'))
   })
 
   it('opens the full designer profile from a friend row (not nested in Friends chrome)', async () => {
