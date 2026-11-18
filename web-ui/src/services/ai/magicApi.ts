@@ -455,6 +455,11 @@ export async function fetchAiJob(jobId: string, signal?: AbortSignal): Promise<A
   return apiRequest<AiJobRead>(`/ai/jobs/${jobId}`, { signal })
 }
 
+/** Owner abandons an in-flight job — server skips Stars debit for this attempt. */
+export async function cancelAiJob(jobId: string, signal?: AbortSignal): Promise<AiJobRead> {
+  return apiRequest<AiJobRead>(`/ai/jobs/${jobId}/cancel`, { method: 'POST', signal })
+}
+
 export type MagicOperationJobsRead = {
   magic_operation_id: string
   jobs: AiJobRead[]

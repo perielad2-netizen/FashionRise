@@ -885,13 +885,35 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             "max_exposure_cents": int(payload.get("max_exposure_cents") or 0),
             "geometry_profile": result.geometry_profile or GEOMETRY_PROFILE_V1,
         }
-        # Charge Stars only after success — failed croquis AI never reduces the wallet.
+        # Charge Stars only after success — failed / cancelled croquis never reduces the wallet.
         from app.core.errors import ForbiddenError
         from app.models.user import User as StarUser
         from app.services import ai_stars
+        from app.services.ai_service import _job_cancel_requested
 
         owner = db.get(StarUser, job.user_id)
-        if owner is not None:
+        fresh_input = db.scalar(select(AIJob.input_data).where(AIJob.id == job.id))
+        cancelled = (
+            (isinstance(fresh_input, dict) and fresh_input.get("cancel_requested") is True)
+            or _job_cancel_requested(job)
+        )
+        # Version may have been rejected/cancelled while the provider ran.
+        version_row = db.get(PersonalCroquisVersion, version_id)
+        if version_row is not None and version_row.status in {
+            VERSION_STATUS_REJECTED,
+            VERSION_STATUS_FAILED,
+        }:
+            cancelled = True
+        if cancelled:
+            job.status = "failed"
+            job.error_message = job.error_message or "Cancelled by owner."
+            result_data["cancel_requested"] = True
+            result_data["stars_debited"] = False
+            if version_row is not None and version_row.status == VERSION_STATUS_AWAITING_REVIEW:
+                version_row.status = VERSION_STATUS_REJECTED
+                version_row.generated_asset_id = None
+                db.add(version_row)
+        elif owner is not None:
             try:
                 ai_stars.debit_stars(db, owner, "croquis")
                 result_data["stars_debited"] = True

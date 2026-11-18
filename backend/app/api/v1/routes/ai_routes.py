@@ -339,6 +339,17 @@ def get_job(
     return AIJobRead.from_job(job)
 
 
+@router.post("/jobs/{job_id}/cancel", response_model=AIJobRead)
+@limiter.limit("60/minute")
+def cancel_job(
+    request: Request, job_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> AIJobRead:
+    """Abandon an in-flight Magic / Try On / Fitting Room job — no Stars charge."""
+    _ = request.url
+    job = ai_service.cancel_ai_job(db, user, job_id)
+    return AIJobRead.from_job(job)
+
+
 @router.get("/jobs/{job_id}/image")
 @limiter.limit("120/minute")
 def get_job_image(

@@ -75,6 +75,7 @@ import { getLook } from '@/services/looksApi'
 import {
   acceptFashnGarmentRealism,
   enqueueFashnGarmentRealism,
+  cancelAiJob,
   enqueuePersonalTryOn,
   enqueueSketchPolish,
   fetchAiJob,
@@ -1441,14 +1442,36 @@ export function useStudioEditor() {
     setMagicBack(emptyMagicSide())
   }, [])
 
+  const requestCancelInFlightAiJobs = useCallback(async () => {
+    const ids = new Set<string>()
+    if (magicJobId) ids.add(magicJobId)
+    if (user?.id) {
+      const stored = readMagicJobId(user.id)
+      if (stored) ids.add(stored)
+      const op = readMagicOperation(user.id)
+      if (op?.frontJobId) ids.add(op.frontJobId)
+      if (op?.backJobId) ids.add(op.backJobId)
+    }
+    await Promise.all(
+      [...ids].map(async (id) => {
+        try {
+          await cancelAiJob(id)
+        } catch {
+          /* best-effort — local abort still hides results */
+        }
+      }),
+    )
+  }, [magicJobId, user?.id])
+
   const closeMagicPanel = useCallback(() => {
     magicAbortRef.current?.abort()
     magicAbortRef.current = null
+    void requestCancelInFlightAiJobs()
     setMagicOpen(false)
     setMagicPhase('idle')
     setMagicError(null)
     setMagicStatusHint(null)
-  }, [])
+  }, [requestCancelInFlightAiJobs])
 
   /** Authoritative Stars balance after a billable Magic debit commits — never invent a local delta. */
   const refreshStarsAfterBillableMagicSuccess = useCallback(() => {
@@ -3142,9 +3165,10 @@ export function useStudioEditor() {
   }, [magicJobId, user?.id])
 
   const cancelMagicWait = useCallback(() => {
-    // #179 — Stop waiting: abort local polling only. Provider jobs keep running.
+    // Abort local poll AND tell the server to skip Stars for this attempt.
     magicAbortRef.current?.abort()
-  }, [])
+    void requestCancelInFlightAiJobs()
+  }, [requestCancelInFlightAiJobs])
 
   /**
    * #179 — Verify the try-on job is My Looks–eligible before navigating.

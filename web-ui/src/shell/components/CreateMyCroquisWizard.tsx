@@ -83,6 +83,9 @@ export function CreateMyCroquisWizard({
   const [aiConsentId, setAiConsentId] = useState<string | null>(null)
   const [croquisId, setCroquisId] = useState<string | null>(null)
   const [pendingVersion, setPendingVersion] = useState<PersonalCroquisVersionRead | null>(null)
+  const pendingVersionRef = useRef<PersonalCroquisVersionRead | null>(null)
+  const croquisIdRef = useRef<string | null>(null)
+  const stepRef = useRef<Step>('compose')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
   const [spendOpen, setSpendOpen] = useState(false)
@@ -90,7 +93,27 @@ export function CreateMyCroquisWizard({
   const { balance, unlimited, costs } = useAiStarsWallet()
   const croquisCost = costs.croquis
 
+  useEffect(() => {
+    pendingVersionRef.current = pendingVersion
+  }, [pendingVersion])
+  useEffect(() => {
+    croquisIdRef.current = croquisId
+  }, [croquisId])
+  useEffect(() => {
+    stepRef.current = step
+  }, [step])
+
+  const cancelInFlightGenerate = useCallback(() => {
+    // Only abandon mid-generation. Preview close/accept must not re-reject.
+    if (stepRef.current !== 'generating') return
+    const id = croquisIdRef.current
+    const ver = pendingVersionRef.current
+    if (!id || !ver) return
+    void rejectPersonalCroquisVersion(id, ver.version).catch(() => undefined)
+  }, [])
+
   const handleClose = useCallback(() => {
+    cancelInFlightGenerate()
     setLocalPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
       return null
@@ -100,7 +123,7 @@ export function CreateMyCroquisWizard({
       return null
     })
     onClose()
-  }, [onClose])
+  }, [cancelInFlightGenerate, onClose])
 
   const onPickLocal = useCallback((file: File) => {
     setError(null)
@@ -199,7 +222,10 @@ export function CreateMyCroquisWizard({
           { ai_consent_id: aiConsentId, idempotency_key: idempotencyKey },
           ac.signal,
         )
-        if (cancelled) return
+        if (cancelled) {
+          void rejectPersonalCroquisVersion(croquisId, enqueued.version).catch(() => undefined)
+          return
+        }
         setPendingVersion(enqueued)
         // Image generation can take 1–3 minutes. Poll durable status for up to
         // ~4 minutes without launching a new provider request.
@@ -207,7 +233,10 @@ export function CreateMyCroquisWizard({
         const maxPolls = import.meta.env.MODE === 'test' ? 50 : 120
         for (let i = 0; i < maxPolls; i++) {
           await new Promise((r) => setTimeout(r, pollMs))
-          if (cancelled) return
+          if (cancelled) {
+            void rejectPersonalCroquisVersion(croquisId, enqueued.version).catch(() => undefined)
+            return
+          }
           const ver = await getPersonalCroquisVersion(croquisId, enqueued.version, ac.signal)
           setPendingVersion(ver)
           if (ver.status === 'awaiting_review' && ver.generated_asset_id) {
@@ -455,6 +484,11 @@ export function CreateMyCroquisWizard({
               Status: {pendingVersion?.status ?? 'queued'}. Fashion illustration can take up to a
               few minutes — please keep this window open.
             </p>
+            <div className={styles.actions}>
+              <button type="button" className={styles.secondary} onClick={handleClose}>
+                Cancel
+              </button>
+            </div>
           </div>
         ) : null}
 

@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -58,6 +58,38 @@ def _magic_operation_already_has_job(
 def _job_result_stars_debited(job: AIJob) -> bool:
     result = job.result_data if isinstance(job.result_data, dict) else None
     return bool(result and result.get("stars_debited") is True)
+
+
+def _job_cancel_requested(job: AIJob) -> bool:
+    """True when the owner asked to abandon this job before Stars settle."""
+    data = job.input_data if isinstance(job.input_data, dict) else {}
+    if data.get("cancel_requested") is True:
+        return True
+    result = job.result_data if isinstance(job.result_data, dict) else None
+    return bool(result and result.get("cancel_requested") is True)
+
+
+def _mark_job_cancel_requested(job: AIJob) -> None:
+    data = dict(job.input_data) if isinstance(job.input_data, dict) else {}
+    data["cancel_requested"] = True
+    job.input_data = data
+    result = dict(job.result_data) if isinstance(job.result_data, dict) else {}
+    result["cancel_requested"] = True
+    job.result_data = result
+
+
+def _operation_ids_for_cancel(job: AIJob) -> list[str]:
+    """Magic / smart Try On op ids that should cancel together with this job."""
+    data = job.input_data if isinstance(job.input_data, dict) else {}
+    out: list[str] = []
+    for key in ("magic_operation_id",):
+        raw = data.get(key)
+        if isinstance(raw, str) and raw.strip():
+            out.append(raw.strip())
+    smart = _smart_operation_id_from_input(data)
+    if smart and smart not in out:
+        out.append(smart)
+    return out
 
 
 def _magic_operation_already_charged(
@@ -171,7 +203,8 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
     """Charge Stars only after the full user-visible AI flow succeeds.
 
     Rules:
-    - Failed jobs never debit.
+    - Failed / cancelled jobs never debit.
+    - Owner cancel mid-generation skips debit even if the provider already finished.
     - Fashion Magic (``sketch_polish``): dual Front/Back wait until **both** sides
       complete; one Stars charge for the whole operation.
     - Try On Person / FASHN (``personal_try_on``): debit only when the final look
@@ -189,6 +222,16 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
         return
     if _job_result_stars_debited(job):
         return
+    # Re-read cancel flag after provider work — cancel is owner abandon, no charge.
+    # Avoid db.refresh(job): it would wipe in-memory completed result_data.
+    fresh_input = db.scalar(select(AIJob.input_data).where(AIJob.id == job.id))
+    if isinstance(fresh_input, dict) and fresh_input.get("cancel_requested") is True:
+        data = dict(job.input_data) if isinstance(job.input_data, dict) else {}
+        data["cancel_requested"] = True
+        job.input_data = data
+        return
+    if _job_cancel_requested(job):
+        return
 
     user = db.get(User, job.user_id)
     if user is None:
@@ -203,6 +246,14 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
         op_str = _smart_operation_id_from_input(input_data)
 
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
+
+    # Another cancel may have landed while we waited for the lock.
+    fresh_input = db.scalar(select(AIJob.input_data).where(AIJob.id == job.id))
+    if isinstance(fresh_input, dict) and fresh_input.get("cancel_requested") is True:
+        data = dict(job.input_data) if isinstance(job.input_data, dict) else {}
+        data["cancel_requested"] = True
+        job.input_data = data
+        return
 
     if op_str and _magic_operation_already_charged(db, user.id, op_str):
         _mark_job_stars_debited(job)
@@ -238,6 +289,75 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
             if sibling.id == job.id:
                 continue
             _mark_job_stars_debited(sibling)
+
+
+def cancel_ai_job(db: Session, user: User, job_id: uuid.UUID) -> AIJob:
+    """Owner abandons an in-flight AI job — no Stars debit for this attempt.
+
+    Marks ``cancel_requested`` on the job (and Magic/smart siblings). Queued jobs
+    flip to ``failed`` immediately so the worker never starts the provider.
+    If Stars were already debited (rare race), credit them back.
+    """
+    job = get_job(db, user, job_id)
+    targets = [job]
+    for op in _operation_ids_for_cancel(job):
+        by_magic = (
+            db.query(AIJob)
+            .filter(
+                AIJob.user_id == user.id,
+                AIJob.id != job.id,
+                AIJob.job_type.in_(("sketch_polish", "personal_try_on")),
+                AIJob.input_data["magic_operation_id"].astext == op,
+            )
+            .all()
+        )
+        by_smart = (
+            db.query(AIJob)
+            .filter(
+                AIJob.user_id == user.id,
+                AIJob.id != job.id,
+                AIJob.job_type == "personal_try_on",
+                AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op,
+            )
+            .all()
+        )
+        targets.extend(by_magic)
+        targets.extend(by_smart)
+
+    seen: set[uuid.UUID] = set()
+    for row in targets:
+        if row.id in seen:
+            continue
+        seen.add(row.id)
+        _mark_job_cancel_requested(row)
+        if row.status in {"queued", "claimed", "running"}:
+            row.status = "failed"
+            row.error_message = "Cancelled by owner."
+        # Refund if the worker already charged before cancel landed.
+        if _job_result_stars_debited(row):
+            result = dict(row.result_data) if isinstance(row.result_data, dict) else {}
+            if result.get("stars_refunded_on_cancel") is True:
+                continue
+            if row.job_type == "fitting_room_try_on":
+                feature = "fitting_room"
+            elif row.job_type == "personal_croquis_generate":
+                feature = "croquis"
+            else:
+                feature = "magic"
+            try:
+                cost = ai_stars.feature_cost(feature)
+                if cost > 0 and not ai_stars.user_has_unlimited_stars(user):
+                    ai_stars.credit_stars(db, user, cost, reason="ai_cancel_refund")
+                result["stars_refunded_on_cancel"] = True
+                result["stars_debited"] = False
+                row.result_data = result
+            except Exception:
+                # Never block cancel on refund bookkeeping.
+                pass
+        db.add(row)
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 def _dual_magic_lock_key(user_id: uuid.UUID) -> int:
