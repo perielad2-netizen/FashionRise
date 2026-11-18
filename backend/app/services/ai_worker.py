@@ -32,7 +32,12 @@ def _safe_failure_result(meta: Any) -> dict[str, Any] | None:
 
 
 def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
-    """Claim up to *limit* queued Magic AIJob rows (SKIP LOCKED)."""
+    """Claim up to *limit* queued Magic AIJob rows (SKIP LOCKED).
+
+    Claim commits ``running`` before provider I/O so owner cancel can land
+    ``cancel_requested`` mid-generation (and skip Stars) without waiting on the
+    provider row lock.
+    """
     processed = 0
     for _ in range(limit):
         job = db.scalar(
@@ -47,6 +52,33 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
         )
         if job is None:
             break
+
+        from app.services.ai_service import _job_cancel_requested, debit_magic_stars_on_success
+
+        # Owner cancel before provider work — fail closed, never charge.
+        if _job_cancel_requested(job):
+            job.status = "failed"
+            job.error_message = job.error_message or "Cancelled by owner."
+            db.commit()
+            processed += 1
+            continue
+
+        job_id = job.id
+        job.status = "running"
+        db.commit()  # release row lock so POST /cancel can commit mid-provider
+
+        job = db.get(AIJob, job_id)
+        if job is None:
+            processed += 1
+            continue
+        # Cancel may have landed between claim and reload.
+        if _job_cancel_requested(job) or job.status == "failed":
+            job.status = "failed"
+            job.error_message = job.error_message or "Cancelled by owner."
+            db.commit()
+            processed += 1
+            continue
+
         try:
             if job.job_type == TRY_ON_JOB_TYPE:
                 from app.services.personal_try_on import complete_try_on_job
@@ -69,15 +101,25 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
                 job.result_data = _stub_result(job)
                 job.error_message = None
                 job.status = "completed"
+            # If the owner cancelled while the provider ran, do not keep a billable success.
+            # Re-read cancel flag without db.refresh() (refresh would wipe in-memory result).
+            if job.status == "completed":
+                fresh_input = db.scalar(select(AIJob.input_data).where(AIJob.id == job.id))
+                cancelled = isinstance(fresh_input, dict) and fresh_input.get("cancel_requested") is True
+                if cancelled:
+                    data = dict(job.input_data) if isinstance(job.input_data, dict) else {}
+                    data["cancel_requested"] = True
+                    job.input_data = data
+                    job.status = "failed"
+                    job.error_message = "Cancelled by owner."
             # Charge Stars only after the full Magic / Try On / FASHN look succeeds.
             # Garment realism is intermediate and is skipped inside the helper.
+            # Cancelled jobs never debit (also gated inside debit_magic_stars_on_success).
             if job.status == "completed" and job.job_type in {
                 "sketch_polish",
                 TRY_ON_JOB_TYPE,
                 FITTING_ROOM_JOB_TYPE,
             }:
-                from app.services.ai_service import debit_magic_stars_on_success
-
                 debit_magic_stars_on_success(db, job)
         except Exception as e:  # pragma: no cover — defensive
             logger.exception("AI job %s failed in worker", job.id)

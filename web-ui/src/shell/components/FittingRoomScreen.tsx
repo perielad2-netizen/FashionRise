@@ -85,6 +85,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const garmentRef = useRef<HTMLInputElement>(null)
   const garmentCameraRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const runningJobIdRef = useRef<string | null>(null)
   const noticeTimer = useRef<number | null>(null)
   const replacePieceId = useRef<string | null>(null)
 
@@ -431,12 +432,14 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         consentVersion: preflight.consent_version,
         signal: ac.signal,
       })
+      runningJobIdRef.current = job.id
       const settled = await pollAiJobUntilSettled({ jobId: job.id, signal: ac.signal })
       if (settled.status !== 'completed') {
         setPhase('failed')
         setPreviewModalOpen(false)
         setErrorMsg(ownerSafeFittingRoomError(settled.error_message))
         setStatusMsg(null)
+        runningJobIdRef.current = null
         return
       }
       const blob = await fetchJobImageBlob(settled.id, ac.signal)
@@ -445,6 +448,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setResultBlobUrl(url)
       setPhase('done')
       setStatusMsg('Preview ready — saved to your Fitting Room results.')
+      runningJobIdRef.current = null
       try {
         await persistResult(
           settled.id,
@@ -459,6 +463,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setPhase('failed')
       setPreviewModalOpen(false)
       setStatusMsg(null)
+      runningJobIdRef.current = null
       if (err instanceof ApiError) {
         setErrorMsg(ownerSafeFittingRoomError(err.message || 'Fitting Room request failed. No Stars were charged.'))
       } else {
@@ -521,6 +526,13 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
 
   const cancelRunning = () => {
     abortRef.current?.abort()
+    const jobId = runningJobIdRef.current || resultJobId
+    runningJobIdRef.current = null
+    if (jobId) {
+      void import('@/services/ai/magicApi').then(({ cancelAiJob }) =>
+        cancelAiJob(jobId).catch(() => undefined),
+      )
+    }
     setPhase('idle')
     setPreviewModalOpen(false)
     setStatusMsg(null)

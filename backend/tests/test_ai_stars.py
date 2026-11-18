@@ -452,3 +452,139 @@ def test_try_on_success_debits_magic_stars_once(db_session, stars_env):
     db_session.commit()
     db_session.refresh(user)
     assert user.ai_stars == 10
+
+
+def test_cancel_before_settle_skips_stars_debit(db_session, stars_env, monkeypatch):
+    """Owner cancel mid-generation must not charge even if the provider finishes."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-stars-cancel")
+    get_settings.cache_clear()
+
+    user = User(
+        email="magic_cancel@example.com",
+        username="magic_cancel",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    assert user.ai_stars == 10
+
+    op = str(uuid.uuid4())
+    job = ai_service.enqueue_job(
+        db_session,
+        user,
+        AIJobCreate(
+            job_type="sketch_polish",
+            input_data={
+                "image_base64": _DATA_URL,
+                "magic_operation_id": op,
+                "reference_model_id": "female",
+            },
+        ),
+    )
+    cancelled = ai_service.cancel_ai_job(db_session, user, job.id)
+    assert cancelled.status == "failed"
+    assert (cancelled.input_data or {}).get("cancel_requested") is True
+
+    # Worker tick must not revive a cancelled queued/failed job into a charge.
+    with patch(
+        "app.services.sketch_openai.complete_sketch_job",
+        return_value={"summary": "look ready", "image_base64": _DATA_URL},
+    ):
+        run_magic_worker_tick(db_session, limit=2)
+
+    db_session.refresh(job)
+    db_session.refresh(user)
+    assert job.status == "failed"
+    assert user.ai_stars == 10
+    assert (job.result_data or {}).get("stars_debited") is not True
+
+
+def test_cancel_after_complete_skips_debit(db_session, stars_env):
+    """If cancel lands before debit, a completed provider result still does not bill."""
+    user = User(
+        email="magic_cancel2@example.com",
+        username="magic_cancel2",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    job = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="fitting_room_try_on",
+        status="completed",
+        input_data={"cancel_requested": True},
+        result_data={"summary": "ready"},
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    ai_service.debit_magic_stars_on_success(db_session, job)
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(job)
+    assert user.ai_stars == 10
+    assert (job.result_data or {}).get("stars_debited") is not True
+
+
+def test_cancel_mid_provider_skips_stars(db_session, stars_env, monkeypatch):
+    """Cancel while status=running must land before settle and skip Stars."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-stars-cancel-mid")
+    get_settings.cache_clear()
+
+    user = User(
+        email="magic_cancel_mid@example.com",
+        username="magic_cancel_mid",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    op = str(uuid.uuid4())
+    job = ai_service.enqueue_job(
+        db_session,
+        user,
+        AIJobCreate(
+            job_type="sketch_polish",
+            input_data={
+                "image_base64": _DATA_URL,
+                "magic_operation_id": op,
+                "reference_model_id": "female",
+            },
+        ),
+    )
+
+    cancel_calls = {"n": 0}
+
+    def _slow_complete(active_job):
+        # Simulate provider latency: owner cancel lands while we are "in flight".
+        cancel_calls["n"] += 1
+        ai_service.cancel_ai_job(db_session, user, active_job.id)
+        return {"summary": "look ready", "image_base64": _DATA_URL}
+
+    with patch(
+        "app.services.sketch_openai.complete_sketch_job",
+        side_effect=_slow_complete,
+    ):
+        run_magic_worker_tick(db_session, limit=2)
+
+    db_session.refresh(job)
+    db_session.refresh(user)
+    assert cancel_calls["n"] == 1
+    assert job.status == "failed"
+    assert (job.input_data or {}).get("cancel_requested") is True
+    assert user.ai_stars == 10
+    assert (job.result_data or {}).get("stars_debited") is not True

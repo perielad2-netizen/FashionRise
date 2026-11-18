@@ -20,6 +20,7 @@ Allow authenticated Cloudflare Access clients (with FashionRise AOP) to call **o
 - `POST /api/v1/ai/fitting-room/try-on` (Fitting Room — applied 2026-11-14; body limit raised **20m→48m** 2026-11-18 after Android 413s)
 - `GET /api/v1/ai/jobs/{uuid}`
 - `GET /api/v1/ai/jobs/{uuid}/image`
+- `POST /api/v1/ai/jobs/{uuid}/cancel` (owner abandon mid-generation — no Stars charge)
 
 without opening general `/api/v1/ai`, sibling AI routes, uploads, docs, or public `/static/uploads`.
 
@@ -213,6 +214,21 @@ location ~ "^/api/v1/ai/personal-try-on/[0-9a-fA-F-]{36}/experiment-verdict$" {
     proxy_set_header X-Forwarded-Proto https;
     proxy_connect_timeout 5s;
     proxy_read_timeout 30s;
+    add_header Cache-Control "no-store" always;
+}
+
+# Owner cancel mid-generation (POST). Must be listed before the GET-only jobs regex.
+location ~ "^/api/v1/ai/jobs/[0-9a-fA-F-]{36}/cancel$" {
+    limit_except POST OPTIONS { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    client_max_body_size 1m;
     add_header Cache-Control "no-store" always;
 }
 

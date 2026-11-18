@@ -576,7 +576,24 @@ def reject_personal_croquis_version(
                     job.status = "failed"
                     job.error_message = "Rejected by owner before provider submission."
                     db.add(job)
+    # Always mark cancel on the linked AI job so a mid-flight worker never debits Stars.
+    if row.provider_job_id:
+        try:
+            job_uuid = uuid.UUID(str(row.provider_job_id))
+        except ValueError:
+            job_uuid = None
+        if job_uuid:
+            job = db.get(AIJob, job_uuid)
+            if job is not None:
+                from app.services.ai_service import _mark_job_cancel_requested
+
+                _mark_job_cancel_requested(job)
+                if job.status in ("queued", "claimed", "running"):
+                    job.status = "failed"
+                    job.error_message = job.error_message or "Cancelled by owner."
+                db.add(job)
     # If provider already called / settled, keep spend exposure; discard preview asset.
+    # Stars debit is skipped when cancel_requested is set (worker settle gate).
     row.status = VERSION_STATUS_REJECTED
     row.generated_asset_id = None
     db.add(row)

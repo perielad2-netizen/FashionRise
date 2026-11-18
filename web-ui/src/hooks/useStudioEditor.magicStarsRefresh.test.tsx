@@ -60,9 +60,15 @@ vi.mock('@/assets/rearCroquisPublished', () => ({
   isRearCroquisPublished: () => true,
 }))
 
+const cancelAiJob = vi.fn(async () => ({ id: 'job-cancelled', status: 'failed' }))
+
 vi.mock('@/services/ai/magicApi', () => ({
   enqueueSketchPolish: (...args: unknown[]) => enqueueSketchPolish(...args),
   fetchJobImageBlob: (...args: unknown[]) => fetchJobImageBlob(...args),
+  cancelAiJob: (...args: unknown[]) => cancelAiJob(...args),
+  fetchAiJob: vi.fn(),
+  fetchMagicOperationJobs: vi.fn(),
+  mapMagicOperationJobsBySide: vi.fn(),
 }))
 
 vi.mock('@/services/ai/pollAiJob', () => ({
@@ -140,6 +146,8 @@ describe('useStudioEditor Magic Stars balance refresh', () => {
     settleMagicJobWithImage.mockReset()
     recoverMagicJob.mockReset()
     fetchJobImageBlob.mockReset()
+    cancelAiJob.mockReset()
+    cancelAiJob.mockResolvedValue({ id: 'job-cancelled', status: 'failed' })
     vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
     vi.stubEnv('VITE_STUDIO_DUAL_MAGIC_ENABLED', 'false')
     vi.stubEnv('VITE_MAGIC_UI_ENABLED', 'true')
@@ -256,6 +264,7 @@ describe('useStudioEditor Magic Stars balance refresh', () => {
     })
 
     await waitFor(() => expect(result.current.magicPhase).toBe('failed'))
+    await waitFor(() => expect(cancelAiJob).toHaveBeenCalled())
     expect(authStore.refreshUser).not.toHaveBeenCalled()
     expect(screen.getByTestId('stars-balance')).toHaveTextContent('1000089')
   })
