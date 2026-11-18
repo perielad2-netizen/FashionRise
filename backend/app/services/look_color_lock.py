@@ -28,7 +28,7 @@ import math
 from collections import deque
 from typing import Any
 
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ _MAX_HUE_ROTATION = 1.4  # radians in the Cb/Cr plane
 _NEUTRAL_CHROMA = 5.0
 _MIN_LUMA_GAIN = 0.62
 _MAX_LUMA_GAIN = 1.5
+_HUE_ONLY_GAIN_RANGE = (0.72, 1.4)
 # Panels closer than this in Cb/Cr are one color for alignment purposes.
 _MIN_PANEL_CONTRAST = 9.0
 # A boundary found in a generated image counts when it keeps this share of the
@@ -597,8 +598,12 @@ def _band_grade(
 ) -> _Grade:
     """Correction for one band: exposure gain + hue rotation / saturation scale."""
     ty, cb, cr = have
-    gain = max(_MIN_LUMA_GAIN, min(_MAX_LUMA_GAIN, want[0] / max(ty, 1.0)))
-    gain = 1.0 + (gain - 1.0) * luma_strength
+    raw_gain = want[0] / max(ty, 1.0)
+    # Far lighter/darker than the flat illustration = sheer cloth or real scene light,
+    # not color drift: correct hue only, never force the drawing's depth/saturation.
+    hue_only = not (_HUE_ONLY_GAIN_RANGE[0] <= raw_gain <= _HUE_ONLY_GAIN_RANGE[1])
+    gain = max(_MIN_LUMA_GAIN, min(_MAX_LUMA_GAIN, raw_gain))
+    gain = 1.0 if hue_only else 1.0 + (gain - 1.0) * luma_strength
     # Saturation follows the design at whatever exposure the band ends up with.
     exposure = (ty * gain) / max(want[0], 1.0)
     want_cb = (want[1] - 128.0) * exposure
@@ -611,7 +616,7 @@ def _band_grade(
             d_cb, d_cr = d_cb * _MAX_CHROMA_SHIFT / mag, d_cr * _MAX_CHROMA_SHIFT / mag
         return gain, gain, 0.0, d_cb * chroma_strength, d_cr * chroma_strength
     scale = math.hypot(want_cb, want_cr) / have_mag
-    scale = max(_MIN_CHROMA_SCALE, min(_MAX_CHROMA_SCALE, scale))
+    scale = 1.0 if hue_only else max(_MIN_CHROMA_SCALE, min(_MAX_CHROMA_SCALE, scale))
     angle = math.atan2(want_cr, want_cb) - math.atan2(cr, cb)
     angle = (angle + math.pi) % (2.0 * math.pi) - math.pi
     angle = max(-_MAX_HUE_ROTATION, min(_MAX_HUE_ROTATION, angle))
@@ -701,13 +706,31 @@ def _apply_band_grade(
     return Image.composite(graded, rgb, soft_mask)
 
 
+def _interior_cells(cells: list[bytearray], w: int, h: int, *, rounds: int = 2) -> list[bytearray]:
+    """Cells at least ``rounds`` px inside the mask — edge pixels are mixed with skin/background."""
+    cur = cells
+    for _ in range(rounds):
+        nxt = [bytearray(w) for _ in range(h)]
+        kept = 0
+        for y in range(1, h - 1):
+            row, up, down, out = cur[y], cur[y - 1], cur[y + 1], nxt[y]
+            for x in range(1, w - 1):
+                if row[x] and row[x - 1] and row[x + 1] and up[x] and down[x]:
+                    out[x] = 1
+                    kept += 1
+        if kept < _MIN_BAND_PIXELS * _MIN_VALID_BANDS * 4:
+            break
+        cur = nxt
+    return cur
+
+
 def _cells_to_soft_mask(
     cells: list[bytearray], work_size: tuple[int, int], full_size: tuple[int, int]
 ) -> Image.Image:
     w, h = work_size
     mask = Image.frombytes("L", (w, h), b"".join(bytes(255 if v else 0 for v in row) for row in cells))
     # Close pinholes, then feather so the grade never draws a visible edge.
-    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.2))
+    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8))
     full = mask.resize(full_size, Image.Resampling.BILINEAR)
     return full.filter(ImageFilter.GaussianBlur(max(1.0, full_size[1] / 700.0)))
 
@@ -728,12 +751,19 @@ def _grade_toward_design(
     chroma_strength: float,
     luma_strength: float,
     tolerance: float,
+    mask_cells: list[bytearray] | None = None,
+    allow_frame_crop: bool = False,
+    allow_position_restore: bool = True,
 ) -> tuple[Image.Image | None, dict[str, Any]]:
     design_bands = palette.get("bands") or []
+    design_bottom = float((palette.get("bbox") or [0, 0, 0, 0])[3])
     positions, alignment = _design_positions(
         design_bands,
         stats["bands"],
-        runs_off_frame=float(stats["bbox"][3]) >= _FRAME_EDGE,
+        # "Cut off by the frame" only when the design itself is not floor-length.
+        runs_off_frame=allow_frame_crop
+        and float(stats["bbox"][3]) >= _FRAME_EDGE
+        and design_bottom < _FRAME_EDGE,
     )
     pairs, drift = _band_drift(design_bands, stats["bands"], positions)
     meta: dict[str, Any] = {
@@ -744,6 +774,10 @@ def _grade_toward_design(
     }
     if drift["chroma_drift"] < tolerance and drift["luma_drift"] * luma_strength < 0.04:
         meta["reason"] = "within_tolerance"
+        return None, meta
+    if alignment == "restore_by_position" and not allow_position_restore:
+        # No seam in the photo to follow — inventing one reads as a painted ombré.
+        meta["reason"] = "panel_boundary_missing"
         return None, meta
     grades = _smooth_grades(
         [
@@ -757,7 +791,7 @@ def _grade_toward_design(
     bbox = stats["bbox"]
     graded = _apply_band_grade(
         rgb,
-        _cells_to_soft_mask(cells, work.size, rgb.size),
+        _cells_to_soft_mask(mask_cells or cells, work.size, rgb.size),
         bbox_rows=(int(bbox[1] * h_full), int(bbox[3] * h_full)),
         grades=grades,
     )
@@ -856,6 +890,13 @@ def _changed_region(
     changed = diff.point(lambda v: 255 if v >= _CHANGED_THRESHOLD else 0).filter(
         ImageFilter.MaxFilter(3)
     )
+    # Garment pixels that happen to match what the person wore before (dark folds over a
+    # dark top, same-colour panel) are "unchanged" holes inside the garment — fill them.
+    outside = changed.copy()
+    for seed in ((0, 0), (work_size[0] - 1, 0), (0, work_size[1] - 1), (work_size[0] - 1, work_size[1] - 1)):
+        if outside.getpixel(seed) == 0:
+            ImageDraw.floodfill(outside, seed, 128)
+    changed = outside.point(lambda v: 0 if v == 128 else 255)
     return changed, meta
 
 
@@ -907,7 +948,7 @@ def lock_result_to_palette(
     palette: dict[str, Any] | None,
     *,
     chroma_strength: float = 0.85,
-    luma_strength: float = 0.3,
+    luma_strength: float = 0.0,
 ) -> tuple[bytes, dict[str, Any]]:
     """Re-impose the design palette on the final try-on photo.
 
@@ -936,19 +977,23 @@ def lock_result_to_palette(
     if not _keep_major_components(cells, *work_size):
         meta["reason"] = "no_garment_pixels"
         return result_png, meta
-    stats = _band_stats(work, cells)
+    interior = _interior_cells(cells, *work_size)
+    stats = _band_stats(work, interior)
     if not stats or float(stats["coverage"]) < _MIN_COVERAGE:
         meta["reason"] = "no_garment_bands"
         return result_png, meta
     graded, grade_meta = _grade_toward_design(
         result_rgb,
         work,
-        cells,
+        interior,
         stats,
         palette,
         chroma_strength=chroma_strength,
         luma_strength=luma_strength,
-        tolerance=3.0,
+        tolerance=6.0,
+        mask_cells=cells,
+        allow_frame_crop=True,
+        allow_position_restore=False,
     )
     meta.update(grade_meta)
     if graded is None:

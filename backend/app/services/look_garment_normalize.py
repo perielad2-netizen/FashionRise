@@ -52,7 +52,8 @@ LOOK_MATERIALIZE_PROMPT = (
     "Fashion e-commerce product photography only — a real camera photo of real cloth, never "
     "a sketch, painting, cartoon, CGI render, or digital illustration. Re-create the outfit "
     "from this fashion design illustration as an actual sewn garment on a matte white "
-    "full-body retail mannequin, photographed full-length in a photo studio: plain "
+    "full-body retail mannequin with the same body form as the figure in the illustration, "
+    "photographed full-length in a photo studio: plain "
     "light-grey seamless backdrop, soft even lighting, natural contact shadow on the floor. "
     "The clothing must look like physical fabric: visible textile weave and fibre "
     "micro-texture, natural gravity drape and soft creases, photographic highlights and "
@@ -111,7 +112,9 @@ def check_materialized_product(
     coverage = float((stats or {}).get("coverage") or 0.0)
     out["coverage"] = round(coverage, 4)
     out["coverage_ratio"] = round(coverage / design_coverage, 3) if design_coverage else None
-    if not stats or (design_coverage and coverage < 0.4 * design_coverage):
+    # Sheer / tulle on a white mannequin measures low coverage — 0.4 was rejecting
+    # usable plates (ratio ~0.16) and falling back to the illustration.
+    if not stats or (design_coverage and coverage < 0.2 * design_coverage):
         out["reason"] = "garment_missing"
         return out
     out["ok"] = True
@@ -226,9 +229,18 @@ def materialize_fashionrise_look(
         calls = 2
         check = check_materialized_product(product, palette)
         if not check["ok"]:
-            raise ProviderNotAvailableError(
-                f"look materialize produced no usable garment ({check.get('reason')})"
-            )
+            # Prefer a marginal product photo over falling back to the illustration —
+            # Max handles fabric better than painted folds pasted onto the person.
+            if check.get("reason") == "garment_missing" and product:
+                logger.info(
+                    "look materialize second output still soft (%s) — keeping product",
+                    check.get("reason"),
+                )
+                check = {**check, "ok": True, "accepted": "soft_keep"}
+            else:
+                raise ProviderNotAvailableError(
+                    f"look materialize produced no usable garment ({check.get('reason')})"
+                )
 
     lock_meta: dict[str, Any] = {"stage": "product", "applied": False, "reason": "disabled"}
     if color_lock:

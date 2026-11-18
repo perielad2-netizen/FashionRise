@@ -1019,6 +1019,9 @@ def _garment_png_for_look_plate(garment_png: bytes, data: dict[str, Any]) -> byt
     Sheer looks skip reinforce — pulling skirt chrominance over skin-like pixels was
     filling translucent layers opaque before try-on.
     """
+    # Already a studio product photo — do not apply the legacy flat illustration recolor.
+    if data.get("look_materialized") or data.get("look_productized"):
+        return garment_png
     lock = _ensure_look_color_lock(garment_png, data)
     if not lock:
         return garment_png

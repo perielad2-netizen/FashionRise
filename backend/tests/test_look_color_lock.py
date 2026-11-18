@@ -146,16 +146,16 @@ def test_result_lock_aligns_panel_boundary_on_different_proportions():
     assert split_row(0.5) > split_row(0.26)
 
 
-def test_result_lock_restores_collapsed_two_tone_by_position():
+def test_result_lock_skips_inventing_panel_when_max_collapsed_two_tone():
+    """When Max merges panels, do not invent a painted seam — leave the one real color."""
     palette = extract_design_palette(look_plate_png())
     person = person_photo_png()
     collapsed = tryon_result_png(bodice=FOREST, skirt=FOREST)
     locked, meta = lock_result_to_palette(collapsed, person, palette)
-    assert meta["applied"] is True
-    assert meta["alignment"] == "restore_by_position"
-    top = pixel(locked, 0.5, _garment_row(0.06))
-    assert _hue_gap(top, OLIVE) < _hue_gap(FOREST, OLIVE) * 0.5
-    assert _hue_gap(pixel(locked, 0.5, _garment_row(0.8)), FOREST) < 8
+    assert meta.get("applied") is False
+    # Either within tolerance or explicitly refused to invent a panel boundary.
+    assert meta.get("reason") in {"within_tolerance", "panel_boundary_missing"}
+    assert locked == collapsed
 
 
 def test_result_lock_keeps_upper_panel_when_only_bodice_is_visible():

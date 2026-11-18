@@ -957,24 +957,28 @@ def test_materialize_color_lock_can_be_disabled(monkeypatch):
     assert meta["color_lock"] == {"stage": "product", "applied": False, "reason": "disabled"}
 
 
-def test_materialize_gives_up_after_one_retry(monkeypatch):
+def test_materialize_soft_keeps_product_after_one_retry(monkeypatch):
+    """Second soft garment_missing keeps the product photo instead of falling back to the look."""
     import app.services.look_garment_normalize as lgn
     from app.services.look_color_lock import extract_design_palette
-    from app.services.personal_try_on_provider import ProviderNotAvailableError
     from tests.look_test_images import look_plate_png, product_photo_png
 
     palette = extract_design_palette(look_plate_png())
     calls: list[str] = []
+    soft = product_photo_png(bodice=None, skirt=None)
 
     def _blank_edit(*, look_png: bytes, prompt: str, quality: str):
         calls.append(prompt)
-        return product_photo_png(bodice=None, skirt=None), {"model": "m", "quality": quality}
+        return soft, {"model": "m", "quality": quality}
 
     monkeypatch.setattr(lgn, "_assert_materialize_armed", lambda: None)
     monkeypatch.setattr(lgn, "_images_edit_product", _blank_edit)
-    with pytest.raises(ProviderNotAvailableError):
-        lgn.materialize_fashionrise_look(look_png=look_plate_png(), palette=palette)
+    product, meta = lgn.materialize_fashionrise_look(
+        look_png=look_plate_png(), palette=palette, color_lock=False
+    )
     assert len(calls) == 2
+    assert product == soft
+    assert meta["check"].get("accepted") == "soft_keep"
 
 
 def test_materialize_kill_switch_fails_closed_before_any_call(monkeypatch):
