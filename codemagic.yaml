@@ -277,7 +277,9 @@ workflows:
         ANDROID_VERSION_NAME: "1.0"
         # versionCode = PROJECT_BUILD_NUMBER + OFFSET (raise if Play latest ≥ stamp).
         # Raise when Play Internal already consumed lower versionCodes from prior AABs.
-        ANDROID_VERSION_CODE_OFFSET: "10"
+        # Bumped for camera-permission P0 (#CAMERA tools:node=remove) — next Internal
+        # AAB must exceed any APK/AAB still declaring android.permission.CAMERA.
+        ANDROID_VERSION_CODE_OFFSET: "20"
       node: 22
       java: 21
 
