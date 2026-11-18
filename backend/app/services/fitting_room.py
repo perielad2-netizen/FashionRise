@@ -358,7 +358,7 @@ def enqueue_fitting_room_try_on(
                 "Render real fabric photo matching image-1 lighting; no sketch overlay.",
                 "1:1 look design; photoreal cloth not illustration paste.",
                 "Keep exact multi-tone colors (bodice vs skirt); do not unify panels.",
-                "Keep the person's existing footwear; do not invent boots or shoes.",
+                "If the look shows shoes/sneakers/boots, replace the person's photo footwear with that look footwear.",
             ]
         )
         hints.extend(
@@ -496,9 +496,10 @@ FITTING_ROOM_LOOK_PLATE_PROMPT = (
     "FashionRise look illustration — ignore drawn body/face/hair; transfer garments as "
     "REAL photographed clothing (not a sketch overlay). 1:1 design + exact panel hues "
     "(bodice vs skirt). Keep sheer tulle/chiffon translucent — legs must stay visible "
-    "where the look shows them through the skirt; never make the skirt opaque. Keep the "
-    "person's existing footwear — do not invent boots. Match person-photo lighting. Keep "
-    "identity, face, hair, pose, background, skin unchanged."
+    "where the look shows them through the skirt; never make the skirt opaque. If the "
+    "look shows shoes/sneakers/boots, replace the person's photo footwear with that "
+    "look footwear (style, color, pattern) — do not keep photo boots. Match person-photo "
+    "lighting. Keep identity, face, hair, pose, background, skin unchanged."
 )
 
 # OpenAI Fitting Room path for Social looks — full photoreal + 1:1 contract (not Max-truncated).
@@ -513,7 +514,10 @@ FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "SHEER LAYERS: if image 2 shows legs through a sheer/tulle/chiffon skirt, the person's "
     "legs MUST remain visible through those sheer layers — never fill an opaque skirt over "
     "the legs or invent opaque underlayers. "
-    "FOOTWEAR: keep the person's existing shoes from image 1 — do not invent boots or heels. "
+    "FOOTWEAR: if image 2 shows shoes, sneakers, boots, flats, or heels, replace the shoes "
+    "in image 1 with that look footwear (same style, color, and pattern) — do not keep the "
+    "original photo boots when the look shows different shoes. Only keep image 1 footwear "
+    "when image 2 shows no shoes. "
     "CRITICAL REALISM: render real fabric — weave, folds, photographic sheerness matching "
     "image 1 lighting with soft contact shadows. Do NOT paste sketch strokes, flat "
     "illustrated fills, airbrushed concept-art shading, or a sketched overlay. "
@@ -527,8 +531,9 @@ FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
     "Preserve multi-tone panel hues, cut, straps, hem, and asymmetry exactly. Keep sheer "
     "tulle/chiffon and high-low openings — legs must stay visible where the product shows "
     "openings; never opaque-fill the skirt. Do not unify colors or paste sketch shading. "
-    "Keep the person's existing footwear — do not invent boots or shoes. Match person-photo "
-    "lighting. Keep identity, face, hair, pose, background, and natural skin tone unchanged."
+    "If the product includes shoes/sneakers/boots, replace the person's photo footwear "
+    "with those shoes — do not keep photo boots. Match person-photo lighting. Keep "
+    "identity, face, hair, pose, background, and natural skin tone unchanged."
 )
 
 # Max prompt for a materialized look: the reference is a studio photo of the real
@@ -537,18 +542,21 @@ FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
 FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT = (
     "Fit only the clothing from the product photograph onto the person as real fabric. "
     "The product is displayed on a white retail mannequin - ignore the mannequin body, "
-    "head, hands and stand; transfer the garment only. Preserve the garment's exact fabric "
-    "texture, cut, neckline, straps, layering, hem shape and hem length. Keep sheer layers "
-    "sheer and keep legs visible where the product shows them through the fabric. Do not "
-    "invent leggings or underlayers. Keep the person's existing footwear. Match the person "
-    "photo's lighting. Keep identity, face, hair, pose, proportions, background, and "
-    "natural skin tone unchanged."
+    "head, hands and stand; transfer the garment and any shoes on the mannequin. Preserve "
+    "the garment's exact fabric texture, cut, neckline, straps, layering, hem shape and "
+    "hem length. Keep sheer layers sheer and keep legs visible where the product shows "
+    "them through the fabric. Do not invent leggings or underlayers. If the product shows "
+    "shoes/sneakers/boots, replace the person's photo footwear with those shoes (style, "
+    "color, pattern) — do not keep photo boots. Match the person photo's lighting. Keep "
+    "identity, face, hair, pose, proportions, background, and natural skin tone unchanged."
 )
 
 # Shared footwear + coverage contract for Social look try-ons.
 FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE = (
-    " Keep the person's existing footwear from the photo — do not invent boots, heels, "
-    "or shoes. Do not invent leggings, opaque underlayers, or extra garments."
+    " FOOTWEAR: if the look/product shows shoes, sneakers, boots, flats, or heels, replace "
+    "the person's photo footwear with that footwear (same style, color, and pattern) — do "
+    "not keep the original photo boots. Only keep the person's shoes when the look shows "
+    "no footwear. Do not invent leggings, opaque underlayers, or extra garments."
 )
 
 
@@ -973,10 +981,10 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
             "Create a single photograph of the person from image 1 wearing the clothing "
             "from image 2. Image 2 is a studio product photograph of the real garment "
             "displayed on a white retail mannequin (not an illustration) — ignore the "
-            "mannequin and transfer the garment's real fabric, cut, panel colors, hem, and "
-            "sheer/open regions onto the person. Keep the person's face, hair, pose, "
-            "proportions, background, lighting, and existing footwear. Do not invent boots, "
-            "leggings, or opaque underlayers. Do not redraw the garment as sketch/line art."
+            "mannequin and transfer the garment's real fabric, cut, panel colors, hem, "
+            "sheer/open regions, and any shoes on the mannequin onto the person. Keep the "
+            "person's face, hair, pose, proportions, background, and lighting. Do not invent "
+            "leggings or opaque underlayers. Do not redraw the garment as sketch/line art."
             + clause
             + sheer_boost
             + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE

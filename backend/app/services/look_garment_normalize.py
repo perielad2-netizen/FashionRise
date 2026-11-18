@@ -61,11 +61,14 @@ LOOK_MATERIALIZE_PROMPT = (
     "ink or pencil outlines, no brush or airbrush strokes, no graphic fold lines, no flat "
     "cel fills, no illustrated shading. Keep the design identical to the illustration: same "
     "silhouette, neckline, straps, waist construction, panel layout, number of layers, hem "
-    "shape and hem length. Do not invent extra sleeves, linings, underlayers, or "
-    "accessories. Reproduce the garment colors exactly as in the illustration, panel by "
+    "shape and hem length. Include shoes, sneakers, boots, or other footwear when shown "
+    "in the illustration — same style, color, and pattern on the mannequin's feet. Do not "
+    "invent extra sleeves, linings, underlayers, or accessories that are not in the "
+    "illustration. Reproduce the garment colors exactly as in the illustration, panel by "
     "panel — same hue, same depth, same contrast between panels. Do not brighten, "
     "desaturate, shift hue, or merge different panels into one color. Whole outfit visible "
-    "from shoulders to hem, centered, same framing as the illustration."
+    "from head/shoulders through footwear to the floor when shoes are drawn, centered, "
+    "same framing as the illustration."
 )
 
 LOOK_MATERIALIZE_RETRY_SUFFIX = (

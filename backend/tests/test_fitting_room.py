@@ -468,6 +468,43 @@ def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
     assert len(prompt) <= 1000
 
 
+def test_look_tryon_prompts_replace_photo_footwear_with_look_shoes():
+    """Social looks that draw shoes must not keep the person's photo boots."""
+    from app.services.fitting_room import (
+        FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
+        FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
+        _fitting_room_max_prompt,
+        _fitting_room_openai_prompt,
+        _look_materialized_max_prompt,
+    )
+    from app.services.look_garment_normalize import LOOK_MATERIALIZE_PROMPT
+
+    max_prompts = (
+        _fitting_room_max_prompt({"garment_source": "fashionrise_look"}),
+        _fitting_room_max_prompt(
+            {"garment_source": "fashionrise_look", "look_productized": True}
+        ),
+        FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
+        _look_materialized_max_prompt(None),
+    )
+    openai_prompts = (
+        _fitting_room_openai_prompt({"garment_source": "fashionrise_look"}, []),
+        _fitting_room_openai_prompt(
+            {"garment_source": "fashionrise_look", "look_normalized": True}, []
+        ),
+    )
+    for prompt in (*max_prompts, *openai_prompts, FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE):
+        assert prompt is not None
+        low = prompt.lower()
+        assert "shoe" in low or "footwear" in low
+        assert "replace" in low
+        assert "keep the person's existing footwear" not in low
+    for prompt in max_prompts:
+        assert len(prompt) <= 1000
+    assert "shoes" in LOOK_MATERIALIZE_PROMPT.lower()
+    assert "footwear" in LOOK_MATERIALIZE_PROMPT.lower() or "sneakers" in LOOK_MATERIALIZE_PROMPT.lower()
+
+
 def test_look_productized_max_prompt_is_product_fit_not_illustration():
     from app.services.fitting_room import (
         FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT,
