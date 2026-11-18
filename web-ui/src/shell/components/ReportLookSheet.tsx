@@ -1,16 +1,14 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, ChevronLeft, ChevronRight, Flag, Send, X } from 'lucide-react'
-import {
-  onAndroidEditableFocus,
-  shouldIgnoreOverlayDismiss,
-} from '@/lib/androidKeyboardInput'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import {
   reportGalleryItem,
   type ContentReportReason,
   type GalleryItem,
 } from '@/services/galleryApi'
+import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import styles from './RunwayScreen.module.css'
 
 const REASONS: { id: ContentReportReason; label: string; hint: string }[] = [
@@ -59,6 +57,7 @@ type Props = {
 export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
   const titleId = useId()
   const detailsId = useId()
+  const detailsRef = useRef<HTMLTextAreaElement | null>(null)
   const [step, setStep] = useState<Step>('reasons')
   const [reason, setReason] = useState<ContentReportReason | null>(null)
   const [details, setDetails] = useState('')
@@ -77,11 +76,30 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      // Never dismiss while typing details — Esc should not wipe the report draft.
+      if (step === 'details') return
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, step])
+
+  useEffect(() => {
+    if (!open || step !== 'details') return
+    // Autofocus once on the details step so the caret is ready without a
+    // second tap that could race a scrim dismiss on some mobile browsers.
+    const id = window.setTimeout(() => {
+      const el = detailsRef.current
+      if (!el) return
+      try {
+        el.focus({ preventScroll: true })
+      } catch {
+        el.focus()
+      }
+    }, 40)
+    return () => window.clearTimeout(id)
+  }, [open, step])
 
   if (!open) return null
 
@@ -126,11 +144,19 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
     <div
       className={`fr-keyboard-overlay ${styles.chatScrim}`}
       role="presentation"
+      data-testid="report-look-scrim"
+      // Safety sheet: never close from a scrim tap. Focus/keyboard reflow on
+      // mobile web was turning the details-field tap into a backdrop click and
+      // dumping users back to the feed. Close only via X / Done / explicit Back.
+      onMouseDown={(event) => {
+        // Swallow backdrop presses so they cannot synthesize a click on feed UI.
+        if (event.target === event.currentTarget) event.preventDefault()
+      }}
       onClick={(event) => {
-        if (event.target !== event.currentTarget) return
-        // Focus → keyboard CSS reflow can turn the same tap into a scrim click.
-        if (shouldIgnoreOverlayDismiss()) return
-        onClose()
+        if (event.target === event.currentTarget) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
       }}
     >
       <div
@@ -139,6 +165,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="report-look-sheet"
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.chatHead}>
@@ -213,6 +240,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                 {reason === 'other' ? 'Details (required)' : 'Details (optional)'}
               </label>
               <textarea
+                ref={detailsRef}
                 id={detailsId}
                 className={styles.reportDetails}
                 value={details}
@@ -226,7 +254,13 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
                 disabled={busy}
                 data-testid="report-details"
                 onChange={(event) => setDetails(event.target.value)}
-                onFocus={(event) => onAndroidEditableFocus(event.currentTarget)}
+                onFocus={(event) => {
+                  // scrollIntoView only on Android native — on mobile web it
+                  // reflows the fixed sheet under the finger and used to close it.
+                  if (isNativeShell() && nativePlatform() === 'android') {
+                    onAndroidEditableFocus(event.currentTarget)
+                  }
+                }}
               />
               {otherNeedsDetails ? (
                 <p className={styles.commentsStatus} role="status">

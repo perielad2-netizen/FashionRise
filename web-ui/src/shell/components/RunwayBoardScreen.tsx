@@ -730,22 +730,7 @@ function RankRow({
       </div>
       <div className={styles.rankBody}>
         <p className={styles.rankTitle}>{title}</p>
-        <div className={styles.rankDesignerRow}>
-          <p className={styles.rankDesigner}>{designer}</p>
-          {viewerId && !isOwn ? (
-            <button
-              type="button"
-              className={following ? styles.rankFollowOn : styles.rankFollow}
-              data-testid={`runway-rank-follow-${item.user_id}`}
-              disabled={followBusy || !followKnown}
-              aria-pressed={following}
-              onClick={() => void onToggleFollow()}
-            >
-              {following ? <UserCheck size={14} aria-hidden /> : <UserPlus size={14} aria-hidden />}
-              {following ? 'Following' : 'Follow'}
-            </button>
-          ) : null}
-        </div>
+        <p className={styles.rankDesigner}>{designer}</p>
         <div className={styles.rankStats}>
           <span>
             Likes <strong>{formatCount(item.likes_count ?? 0)}</strong>
@@ -758,6 +743,19 @@ function RankRow({
             Ratings <strong>{formatCount(item.rating_count ?? 0)}</strong>
           </span>
         </div>
+        {viewerId && !isOwn ? (
+          <button
+            type="button"
+            className={following ? styles.rankFollowOn : styles.rankFollow}
+            data-testid={`runway-rank-follow-${item.user_id}`}
+            disabled={followBusy || !followKnown}
+            aria-pressed={following}
+            onClick={() => void onToggleFollow()}
+          >
+            {following ? <UserCheck size={14} aria-hidden /> : <UserPlus size={14} aria-hidden />}
+            {following ? 'Following' : 'Follow'}
+          </button>
+        ) : null}
       </div>
     </li>
   )

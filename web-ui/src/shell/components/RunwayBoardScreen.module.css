@@ -793,14 +793,6 @@
   white-space: nowrap;
 }
 
-.rankDesignerRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
 .rankDesigner {
   margin: 0;
   font-size: 12px;
@@ -813,15 +805,16 @@
 
 .rankFollow,
 .rankFollowOn {
-  flex: 0 0 auto;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-height: 28px;
-  padding: 0 10px;
+  margin-top: 8px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(244, 114, 182, 0.55);
-  background: rgba(244, 114, 182, 0.14);
+  border: 1px solid rgba(244, 114, 182, 0.65);
+  background: rgba(214, 51, 132, 0.28);
   color: #fce7f3;
   font-size: 11px;
   font-weight: 700;

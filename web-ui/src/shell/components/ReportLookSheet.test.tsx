@@ -81,19 +81,32 @@ describe('ReportLookSheet', () => {
     expect(screen.getByTestId('report-send')).not.toBeDisabled()
   })
 
-  it('does not close the sheet when details focus triggers keyboard reflow click', () => {
+  it('keeps the sheet open when focusing/typing details and when tapping the scrim', () => {
     const onClose = vi.fn()
     render(
       <ReportLookSheet item={item} open onClose={onClose} onReported={() => undefined} />,
     )
-    fireEvent.click(screen.getByTestId('report-reason-harassment'))
+    fireEvent.click(screen.getByTestId('report-reason-sexual_content'))
     const details = screen.getByTestId('report-details')
     fireEvent.focus(details)
-    document.documentElement.setAttribute('data-fr-keyboard', '1')
-    const scrim = details.closest('[role="presentation"]')
-    expect(scrim).toBeTruthy()
-    fireEvent.click(scrim!)
+    fireEvent.mouseDown(details)
+    fireEvent.click(details)
+    fireEvent.change(details, { target: { value: 'Explicit imagery' } })
+    expect(details).toHaveValue('Explicit imagery')
+
+    const scrim = screen.getByTestId('report-look-scrim')
+    fireEvent.mouseDown(scrim)
+    fireEvent.click(scrim)
     expect(onClose).not.toHaveBeenCalled()
-    document.documentElement.removeAttribute('data-fr-keyboard')
+    expect(screen.getByTestId('report-look-sheet')).toBeInTheDocument()
+  })
+
+  it('still closes from the explicit close control on the reasons step', () => {
+    const onClose = vi.fn()
+    render(
+      <ReportLookSheet item={item} open onClose={onClose} onReported={() => undefined} />,
+    )
+    fireEvent.click(screen.getByLabelText('Close report'))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
