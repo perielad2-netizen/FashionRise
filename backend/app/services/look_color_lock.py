@@ -60,12 +60,27 @@ _MIN_BOUNDARY_CONTRAST_RATIO = 0.25
 _FRAME_EDGE = 0.97
 _MIN_PANEL_WEIGHT = 0.1
 
-# Final-photo lock: person photo vs result must overlay before we trust a diff mask.
+# Final-photo lock: the try-on re-renders the frame, so the result never overlays the
+# person photo pixel for pixel. FASHN Max snaps to its own aspect bucket (measured:
+# 1616x2512 in -> 1696x2528 out, content off by ~1-2 %). The person photo is
+# registered onto the result first, then compared with a small shift tolerance.
 _MAX_ASPECT_MISMATCH = 0.06
-_MAX_MEDIAN_DIFF = 18
-_CHANGED_THRESHOLD = 30
+_MAX_MEDIAN_DIFF = 12
+_CHANGED_THRESHOLD = 24
 _MIN_CHANGED_FRACTION = 0.01
 _MAX_CHANGED_FRACTION = 0.9
+_REGISTER_INSET = 0.07
+_REGISTER_SCALES = (0.96, 0.98, 1.0, 1.02, 1.04)
+_REGISTER_SHIFTS = (-0.03, -0.015, 0.0, 0.015, 0.03)
+_REGISTER_FINE_SCALE = 0.01
+_REGISTER_FINE_SHIFT = 0.0075
+_REGISTER_MIN_GAIN = 0.08
+_SHIFT_TOLERANCE_PX = 5
+_CHROMA_DIFF_WEIGHT = 2.0
+_IDENTITY_FRAME = (1.0, 1.0, 0.0, 0.0)
+# Hue angle (Cb/Cr plane) from the band's fabric hue: full lock inside, none beyond.
+_AFFINITY_FULL_COS = math.cos(math.radians(28.0))
+_AFFINITY_ZERO_COS = math.cos(math.radians(55.0))
 
 
 def _is_skin_like(r: int, g: int, b: int) -> bool:
@@ -725,12 +740,19 @@ def _interior_cells(cells: list[bytearray], w: int, h: int, *, rounds: int = 2) 
 
 
 def _cells_to_soft_mask(
-    cells: list[bytearray], work_size: tuple[int, int], full_size: tuple[int, int]
+    cells: list[bytearray],
+    work_size: tuple[int, int],
+    full_size: tuple[int, int],
+    *,
+    weights: Image.Image | None = None,
 ) -> Image.Image:
     w, h = work_size
     mask = Image.frombytes("L", (w, h), b"".join(bytes(255 if v else 0 for v in row) for row in cells))
     # Close pinholes, then feather so the grade never draws a visible edge.
-    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8))
+    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3))
+    if weights is not None:
+        mask = ImageChops.multiply(mask, weights)
+    mask = mask.filter(ImageFilter.GaussianBlur(0.8))
     full = mask.resize(full_size, Image.Resampling.BILINEAR)
     return full.filter(ImageFilter.GaussianBlur(max(1.0, full_size[1] / 700.0)))
 
@@ -754,6 +776,7 @@ def _grade_toward_design(
     mask_cells: list[bytearray] | None = None,
     allow_frame_crop: bool = False,
     allow_position_restore: bool = True,
+    weights: Image.Image | None = None,
 ) -> tuple[Image.Image | None, dict[str, Any]]:
     design_bands = palette.get("bands") or []
     design_bottom = float((palette.get("bbox") or [0, 0, 0, 0])[3])
@@ -791,7 +814,7 @@ def _grade_toward_design(
     bbox = stats["bbox"]
     graded = _apply_band_grade(
         rgb,
-        _cells_to_soft_mask(mask_cells or cells, work.size, rgb.size),
+        _cells_to_soft_mask(mask_cells or cells, work.size, rgb.size, weights=weights),
         bbox_rows=(int(bbox[1] * h_full), int(bbox[3] * h_full)),
         grades=grades,
     )
@@ -849,6 +872,103 @@ def lock_plate_to_palette(
     return _encode_png(graded), meta
 
 
+def _warp_frame(img: Image.Image, frame: tuple[float, float, float, float]) -> Image.Image:
+    """Scale about the centre, then shift (shifts are fractions of the frame size)."""
+    sx, sy, tx, ty = frame
+    w, h = img.size
+    cx, cy = w / 2.0, h / 2.0
+    coeffs = (1.0 / sx, 0.0, cx - cx / sx - tx * w, 0.0, 1.0 / sy, cy - cy / sy - ty * h)
+    return img.transform(img.size, Image.Transform.AFFINE, coeffs, Image.Resampling.BILINEAR)
+
+
+def _max_channel(img: Image.Image) -> Image.Image:
+    r, g, b = img.split()
+    return ImageChops.lighter(ImageChops.lighter(r, g), b)
+
+
+def _unchanged_mismatch(a: Image.Image, b: Image.Image, *, keep: float = 0.6) -> float:
+    """Mean difference over the best-matching ``keep`` share of pixels.
+
+    The swapped garment is a large legitimate difference; trimming it keeps the score
+    about how well the *unchanged* scene lines up.
+    """
+    hist = _max_channel(ImageChops.difference(a, b)).histogram()
+    budget = sum(hist) * keep
+    if budget <= 0:
+        return 255.0
+    acc = 0.0
+    total = 0.0
+    for value, count in enumerate(hist):
+        take = min(float(count), budget - acc)
+        total += value * take
+        acc += take
+        if acc >= budget:
+            break
+    return total / budget
+
+
+def _register_person_frame(
+    result_work: Image.Image, person_work: Image.Image
+) -> tuple[tuple[float, float, float, float], dict[str, Any]]:
+    """Find the small scale/shift that lays the person photo over the result."""
+    w, h = result_work.size
+    small = (max(8, w // 2), max(12, h // 2))
+    soften = ImageFilter.GaussianBlur(1.0)
+    ref_full = result_work.resize(small, Image.Resampling.BILINEAR).filter(soften)
+    src = person_work.resize(small, Image.Resampling.BILINEAR).filter(soften)
+    # Score an inset window so pixels warped in from outside the frame never count.
+    box = (
+        int(small[0] * _REGISTER_INSET),
+        int(small[1] * _REGISTER_INSET),
+        int(small[0] * (1.0 - _REGISTER_INSET)),
+        int(small[1] * (1.0 - _REGISTER_INSET)),
+    )
+    ref = ref_full.crop(box)
+
+    def score(frame: tuple[float, float, float, float]) -> float:
+        return _unchanged_mismatch(ref, _warp_frame(src, frame).crop(box))
+
+    identity_score = score(_IDENTITY_FRAME)
+    best_frame, best_score = _IDENTITY_FRAME, identity_score
+    for sx in _REGISTER_SCALES:
+        for sy in _REGISTER_SCALES:
+            for tx in _REGISTER_SHIFTS:
+                for ty in _REGISTER_SHIFTS:
+                    frame = (sx, sy, tx, ty)
+                    value = score(frame)
+                    if value < best_score:
+                        best_frame, best_score = frame, value
+    csx, csy, ctx, cty = best_frame
+    for sx in (csx - _REGISTER_FINE_SCALE, csx, csx + _REGISTER_FINE_SCALE):
+        for sy in (csy - _REGISTER_FINE_SCALE, csy, csy + _REGISTER_FINE_SCALE):
+            for tx in (ctx - _REGISTER_FINE_SHIFT, ctx, ctx + _REGISTER_FINE_SHIFT):
+                for ty in (cty - _REGISTER_FINE_SHIFT, cty, cty + _REGISTER_FINE_SHIFT):
+                    frame = (sx, sy, tx, ty)
+                    value = score(frame)
+                    if value < best_score:
+                        best_frame, best_score = frame, value
+    if best_score > identity_score * (1.0 - _REGISTER_MIN_GAIN):
+        # Not clearly better than leaving the frame alone — do not chase noise.
+        return _IDENTITY_FRAME, {"registered": False}
+    return best_frame, {
+        "registered": True,
+        "frame": [round(v, 4) for v in best_frame],
+        "mismatch_before": round(identity_score, 2),
+        "mismatch_after": round(best_score, 2),
+    }
+
+
+def _outside_local_range(value: Image.Image, reference: Image.Image) -> Image.Image:
+    """How far ``value`` falls outside the range ``reference`` spans nearby.
+
+    Zero wherever the result pixel could be explained by the person photo shifted a
+    pixel or two, so re-rendered edges and sub-percent misregistration stay quiet.
+    """
+    hi = reference.filter(ImageFilter.MaxFilter(_SHIFT_TOLERANCE_PX))
+    lo = reference.filter(ImageFilter.MinFilter(_SHIFT_TOLERANCE_PX))
+    return ImageChops.lighter(ImageChops.subtract(value, hi), ImageChops.subtract(lo, value))
+
+
 def _changed_region(
     result_rgb: Image.Image, person_rgb: Image.Image, work_size: tuple[int, int]
 ) -> tuple[Image.Image | None, dict[str, Any]]:
@@ -863,8 +983,29 @@ def _changed_region(
         return None, meta
     a = result_rgb.resize(work_size, Image.Resampling.BILINEAR)
     b = person_rgb.resize(work_size, Image.Resampling.BILINEAR)
-    r, g, bl = ImageChops.difference(a, b).split()
-    diff = ImageChops.lighter(ImageChops.lighter(r, g), bl).filter(ImageFilter.GaussianBlur(1.5))
+    frame, registration = _register_person_frame(a, b)
+    meta["registration"] = registration
+    covered = Image.new("L", work_size, 255)
+    if frame != _IDENTITY_FRAME:
+        b = _warp_frame(b, frame)
+        covered = _warp_frame(covered, frame).point(lambda v: 255 if v >= 250 else 0)
+    # Compare luma and chroma separately: a colored garment over a high-contrast
+    # grey edge (steps, railings) sits inside the local RGB range but not the chroma one.
+    ay, acb, acr = a.convert("YCbCr").split()
+    by, bcb, bcr = b.convert("YCbCr").split()
+
+    def weighted(v: int) -> int:
+        return min(255, int(v * _CHROMA_DIFF_WEIGHT))
+
+    diff = ImageChops.lighter(
+        _outside_local_range(ay, by),
+        ImageChops.lighter(
+            _outside_local_range(acb, bcb).point(weighted),
+            _outside_local_range(acr, bcr).point(weighted),
+        ),
+    )
+    # Person pixels warped in from outside the frame are unknown, not "changed".
+    diff = ImageChops.multiply(diff, covered).filter(ImageFilter.GaussianBlur(1.0))
     hist = diff.histogram()
     total = sum(hist)
     acc = 0
@@ -885,10 +1026,12 @@ def _changed_region(
     if fraction < _MIN_CHANGED_FRACTION or fraction > _MAX_CHANGED_FRACTION:
         meta["reason"] = "changed_region_out_of_range"
         return None, meta
-    # One-pixel dilation only: a wider ring would pull the unchanged background next
-    # to the garment into the measurement.
-    changed = diff.point(lambda v: 255 if v >= _CHANGED_THRESHOLD else 0).filter(
-        ImageFilter.MaxFilter(3)
+    # Close pin-holes, then grow one pixel: a wider ring would pull the unchanged
+    # background next to the garment into the measurement.
+    changed = (
+        diff.point(lambda v: 255 if v >= _CHANGED_THRESHOLD else 0)
+        .filter(ImageFilter.MaxFilter(5))
+        .filter(ImageFilter.MinFilter(3))
     )
     # Garment pixels that happen to match what the person wore before (dark folds over a
     # dark top, same-colour panel) are "unchanged" holes inside the garment — fill them.
@@ -900,21 +1043,20 @@ def _changed_region(
     return changed, meta
 
 
-def _reject_chroma_outliers(
-    work: Image.Image, cells: list[bytearray], *, max_distance: float = 52.0
-) -> None:
-    """Drop candidates far from their band's median chroma (revealed sky / grass)."""
+def _band_chroma_medians(
+    work: Image.Image, cells: list[bytearray]
+) -> tuple[int, float, list[tuple[float, float] | None]] | None:
+    """Median (Cb, Cr) of the candidate cells in each vertical band of their extent."""
     w, h = work.size
     rows = [y for y in range(h) if any(cells[y])]
     if not rows:
-        return
+        return None
     y0, y1 = rows[0], rows[-1]
     span = float(y1 - y0 + 1)
-    bands = PALETTE_BANDS
     px = work.load()
-    samples: list[list[tuple[float, float]]] = [[] for _ in range(bands)]
+    samples: list[list[tuple[float, float]]] = [[] for _ in range(PALETTE_BANDS)]
     for y in range(y0, y1 + 1):
-        k = min(bands - 1, int((y - y0) * bands / span))
+        k = min(PALETTE_BANDS - 1, int((y - y0) * PALETTE_BANDS / span))
         row = cells[y]
         for x in range(0, w, 2):
             if row[x]:
@@ -928,9 +1070,22 @@ def _reject_chroma_outliers(
         cbs = sorted(p[0] for p in band)
         crs = sorted(p[1] for p in band)
         centers.append((cbs[len(cbs) // 2], crs[len(crs) // 2]))
+    return y0, span, centers
+
+
+def _reject_chroma_outliers(
+    work: Image.Image, cells: list[bytearray], *, max_distance: float = 52.0
+) -> None:
+    """Drop candidates far from their band's median chroma (revealed sky / grass)."""
+    medians = _band_chroma_medians(work, cells)
+    if medians is None:
+        return
+    y0, span, centers = medians
+    w = work.size[0]
+    px = work.load()
     limit = max_distance * max_distance
-    for y in range(y0, y1 + 1):
-        k = min(bands - 1, int((y - y0) * bands / span))
+    for y in range(y0, min(len(cells), y0 + int(span))):
+        k = min(PALETTE_BANDS - 1, int((y - y0) * PALETTE_BANDS / span))
         center = centers[k]
         if center is None:
             continue
@@ -940,6 +1095,60 @@ def _reject_chroma_outliers(
                 _, cb, cr = _rgb_to_ycc(*px[x, y])
                 if (cb - center[0]) ** 2 + (cr - center[1]) ** 2 > limit:
                     row[x] = 0
+
+
+def _fabric_affinity(work: Image.Image, cells: list[bytearray]) -> Image.Image | None:
+    """Lock strength per pixel: full on the fabric's own hue, none on foreign hues.
+
+    Sheer layers let skin show through; those pixels sit between the fabric hue and a
+    skin tone. Grading them with the fabric's correction turns legs mustard / green,
+    and counting them drags the measured fabric color off. Cells whose hue is far
+    from the dominant hue of their band (or a neighbouring band, so two-tone seams
+    stay whole) are removed from ``cells`` and faded out of the mask.
+    """
+    medians = _band_chroma_medians(work, cells)
+    if medians is None:
+        return None
+    y0, span, centers = medians
+    w, h = work.size
+    px = work.load()
+    directions: list[tuple[float, float] | None] = []
+    for center in centers:
+        if center is None:
+            directions.append(None)
+            continue
+        cb, cr = center[0] - 128.0, center[1] - 128.0
+        mag = math.hypot(cb, cr)
+        directions.append((cb / mag, cr / mag) if mag >= _NEUTRAL_CHROMA else None)
+    ramp = _AFFINITY_FULL_COS - _AFFINITY_ZERO_COS
+    weights = Image.new("L", (w, h), 255)
+    wpx = weights.load()
+    for y in range(y0, min(h, y0 + int(span))):
+        k = min(PALETTE_BANDS - 1, int((y - y0) * PALETTE_BANDS / span))
+        near = [
+            directions[j] for j in (k - 1, k, k + 1) if 0 <= j < PALETTE_BANDS and directions[j]
+        ]
+        if not near:
+            continue
+        row = cells[y]
+        for x in range(w):
+            if not row[x]:
+                continue
+            _, cb, cr = _rgb_to_ycc(*px[x, y])
+            cb -= 128.0
+            cr -= 128.0
+            mag = math.hypot(cb, cr)
+            if mag < _NEUTRAL_CHROMA:
+                continue
+            cos = max((cb * d[0] + cr * d[1]) / mag for d in near)
+            if cos >= _AFFINITY_FULL_COS:
+                continue
+            if cos <= _AFFINITY_ZERO_COS:
+                row[x] = 0
+                wpx[x, y] = 0
+                continue
+            wpx[x, y] = int(255 * (cos - _AFFINITY_ZERO_COS) / ramp)
+    return weights
 
 
 def lock_result_to_palette(
@@ -977,6 +1186,7 @@ def lock_result_to_palette(
     if not _keep_major_components(cells, *work_size):
         meta["reason"] = "no_garment_pixels"
         return result_png, meta
+    affinity = _fabric_affinity(work, cells)
     interior = _interior_cells(cells, *work_size)
     stats = _band_stats(work, interior)
     if not stats or float(stats["coverage"]) < _MIN_COVERAGE:
@@ -994,6 +1204,7 @@ def lock_result_to_palette(
         mask_cells=cells,
         allow_frame_crop=True,
         allow_position_restore=False,
+        weights=affinity,
     )
     meta.update(grade_meta)
     if graded is None:

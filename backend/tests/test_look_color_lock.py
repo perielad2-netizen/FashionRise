@@ -17,12 +17,15 @@ from tests.look_test_images import (
     GARMENT_BOTTOM,
     GARMENT_TOP,
     OLIVE,
+    SHEER_LEG,
+    SHEER_LEG_BOX,
     SKIN,
     SKY,
     look_plate_png,
     person_photo_png,
     pixel,
     product_photo_png,
+    reframe_png,
     split_row,
     tryon_result_png,
 )
@@ -170,6 +173,55 @@ def test_result_lock_keeps_upper_panel_when_only_bodice_is_visible():
         visible = pixel(locked, 0.5, fy)
         assert _hue_gap(visible, OLIVE) < 12
         assert _hue_gap(visible, FOREST) > 30
+
+
+def test_result_lock_registers_a_reframed_result():
+    """FASHN Max answers in its own aspect bucket with the scene a few percent off.
+
+    Production case: 1616x2512 person photo -> 1696x2528 result. A plain per-pixel
+    comparison against a busy background then reads as "different scene" and the
+    lock used to skip itself on every real photo.
+    """
+    palette = extract_design_palette(look_plate_png())
+    person = person_photo_png(textured=True)
+    fitted = tryon_result_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT, textured=True)
+    result = reframe_png(fitted, size=(416, 600), scale=(1.03, 1.0), shift=(0.015, -0.0075))
+
+    locked, meta = lock_result_to_palette(result, person, palette)
+
+    assert meta["aspect_gap"] > 0.03
+    registration = meta["registration"]
+    assert registration["registered"] is True
+    assert registration["mismatch_after"] < registration["mismatch_before"] * 0.5
+    sx, sy, tx, ty = registration["frame"]
+    assert abs(sx - 1.03) <= 0.011 and abs(sy - 1.0) <= 0.011
+    assert abs(tx - 0.015) <= 0.008 and abs(ty + 0.0075) <= 0.008
+    assert meta["median_diff"] <= 4
+    assert meta["applied"] is True
+    assert _hue_gap(pixel(locked, 0.5, _garment_row(0.1)), OLIVE) < 10
+    assert _hue_gap(pixel(locked, 0.5, _garment_row(0.7)), FOREST) < 10
+    # The busy background is never recolored.
+    for fx, fy in ((0.06, 0.08), (0.92, 0.3), (0.1, 0.9), (0.9, 0.95)):
+        assert pixel(locked, fx, fy) == pixel(result, fx, fy)
+
+
+def test_result_lock_spares_skin_showing_through_sheer_fabric():
+    """A leg behind sheer tulle is not fabric: grading it turned legs mustard-green."""
+    palette = extract_design_palette(look_plate_png())
+    person = person_photo_png()
+    result = tryon_result_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT, sheer_leg=SHEER_LEG)
+    leg_x = (SHEER_LEG_BOX[0] + SHEER_LEG_BOX[2]) / 2.0
+    leg_y = (SHEER_LEG_BOX[1] + SHEER_LEG_BOX[3]) / 2.0
+    assert pixel(result, leg_x, leg_y) == SHEER_LEG
+
+    locked, meta = lock_result_to_palette(result, person, palette)
+
+    assert meta["applied"] is True
+    assert pixel(locked, leg_x, leg_y) == SHEER_LEG
+    # Fabric right beside the leg is still pulled to the design color.
+    assert _hue_gap(pixel(locked, 0.34, leg_y), FOREST) < 10
+    assert _hue_gap(pixel(locked, 0.66, leg_y), FOREST) < 10
+    assert _hue_gap(pixel(locked, 0.5, _garment_row(0.1)), OLIVE) < 10
 
 
 def test_result_lock_is_fail_safe():
