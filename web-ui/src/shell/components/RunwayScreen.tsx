@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -1773,6 +1774,10 @@ function RunwayCard({
     Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
   const cardRef = useRef<HTMLLIElement | null>(null)
   const impressionSentRef = useRef(false)
+  /** Immersive double-tap like — Instagram-style (like only + heart burst). */
+  const tapStartRef = useRef<{ x: number; y: number } | null>(null)
+  const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null)
+  const [heartBurstKey, setHeartBurstKey] = useState(0)
   const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | 'tryon' | null>(
     null,
   )
@@ -1804,6 +1809,12 @@ function RunwayCard({
   useEffect(() => {
     impressionSentRef.current = false
   }, [item.id])
+
+  useEffect(() => {
+    if (heartBurstKey <= 0) return
+    const timer = window.setTimeout(() => setHeartBurstKey(0), 780)
+    return () => window.clearTimeout(timer)
+  }, [heartBurstKey])
 
   useEffect(() => {
     if (!mediaGone || !onMediaUnavailable) return
@@ -1988,6 +1999,64 @@ function RunwayCard({
       setBusy(null)
     }
   }, [busy, canReact, item, liked, onItemChange, refreshItem])
+
+  const onDoubleTapLike = useCallback(async () => {
+    if (!canReact) return
+    // Always show the burst; double-tap never unlikes (Instagram pattern).
+    setHeartBurstKey((n) => n + 1)
+    if (liked || busy) return
+    setBusy('like')
+    setActionError(null)
+    const prevCount = item.likes_count
+    onItemChange({
+      ...item,
+      liked_by_me: true,
+      likes_count: prevCount + 1,
+    })
+    try {
+      await likeGalleryItem(item.id)
+      await refreshItem()
+    } catch (err) {
+      onItemChange({ ...item, liked_by_me: false, likes_count: prevCount })
+      setActionError(err instanceof ApiError ? err.message : 'Could not update like.')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, canReact, item, liked, onItemChange, refreshItem])
+
+  const onMediaPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!canReact) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    tapStartRef.current = { x: event.clientX, y: event.clientY }
+  }, [canReact])
+
+  const onMediaPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canReact || !immersive) return
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      const start = tapStartRef.current
+      tapStartRef.current = null
+      if (!start) return
+      // Ignore scroll / drag — keep vertical feed scrolling smooth.
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 14) {
+        lastTapRef.current = null
+        return
+      }
+      const now = performance.now()
+      const last = lastTapRef.current
+      if (
+        last &&
+        now - last.t < 320 &&
+        Math.hypot(event.clientX - last.x, event.clientY - last.y) < 48
+      ) {
+        lastTapRef.current = null
+        void onDoubleTapLike()
+        return
+      }
+      lastTapRef.current = { t: now, x: event.clientX, y: event.clientY }
+    },
+    [canReact, immersive, onDoubleTapLike],
+  )
 
   const onToggleFollow = useCallback(async () => {
     if (isOwn || !viewerId || busy) return
@@ -2320,7 +2389,15 @@ function RunwayCard({
     >
       {immersive ? (
         <>
-          <div className={styles.immersiveMedia}>
+          <div
+            className={styles.immersiveMedia}
+            data-testid={`runway-double-tap-${item.id}`}
+            onPointerDown={onMediaPointerDown}
+            onPointerUp={onMediaPointerUp}
+            onPointerCancel={() => {
+              tapStartRef.current = null
+            }}
+          >
             {rank != null ? (
               <span className={badgeClass}>
                 {rank <= 3 ? <Crown size={10} aria-hidden /> : null}#{rank}
@@ -2340,6 +2417,16 @@ function RunwayCard({
               </span>
             )}
             <div className={styles.immersiveShade} aria-hidden />
+            {heartBurstKey > 0 ? (
+              <span
+                key={heartBurstKey}
+                className={styles.doubleTapHeart}
+                data-testid={`runway-like-burst-${item.id}`}
+                aria-hidden
+              >
+                <Heart size={88} fill="currentColor" />
+              </span>
+            ) : null}
           </div>
           <div className={styles.immersiveOverlay}>
             <div className={styles.immersiveMeta}>
