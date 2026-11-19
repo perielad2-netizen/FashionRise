@@ -95,10 +95,10 @@ def assert_unique_build_number_policy(raw: str, wf: dict) -> None:
             raise AssertionError("submit_to_app_store must be false")
         if "triggering" in wf:
             raise AssertionError("manual builds only — no triggering block")
-        if (wf.get("environment") or {}).get("xcode") != 26.5 and str(
-            (wf.get("environment") or {}).get("xcode")
-        ) != "26.5":
-            raise AssertionError("xcode must remain 26.5")
+        xcode_ver = (wf.get("environment") or {}).get("xcode")
+        # Float 27.0 or string "27.0" — iOS 27 SDK (ITMS-90725 / Apr 2027).
+        if xcode_ver not in (27.0, "27.0", 27) and str(xcode_ver) not in {"27.0", "27"}:
+            raise AssertionError(f"xcode must be 27.0 (got {xcode_ver!r})")
 
 
 def assert_ipad_screenshots_workflow_present(raw: str) -> None:
