@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     )
     # FashionRise Runway / public gallery publish — standardized public-publish notice.
     # Must stay byte-identical with web-ui `formatPublicPublishNoticeText()`.
-    runway_share_consent_version: str = "runway-share-2026-11-17"
+    runway_share_consent_version: str = "runway-share-2026-11-19"
     runway_share_notice_text: str = (
         "By publishing this content, I confirm that:\n\n"
         "1. I own the content or have all necessary rights and permissions for its public "
@@ -139,15 +139,21 @@ class Settings(BaseSettings):
         "6. I grant FashionRise a non-exclusive, worldwide, royalty-free license to host, "
         "reproduce, display, distribute and technically adapt this published content as "
         "reasonably necessary to operate FashionRise, including public feeds, designer "
-        "profiles, previews, rankings, sharing and competitions.\n"
+        "profiles, previews, rankings, sharing, competitions and virtual AI try-on of my "
+        "design by other users.\n"
         "7. I understand that publication makes my content visible to other users, and "
         "FashionRise may restrict or remove it in response to violations, legal complaints "
         "or applicable law.\n"
         "8. I accept responsibility for my submissions and for having the rights and "
-        "permissions required to publish them."
+        "permissions required to publish them.\n"
+        "9. I agree to let others virtually try on my design using AI and confirm I have "
+        "the necessary rights for that use.\n"
+        "10. I earn 2 Stars for each successfully completed AI try-on of my published "
+        "design by other users. My rights remain mine, and I can remove my design from "
+        "future try-ons at any time."
     )
     # My Models → FashionRise public publish (same public-publish agreement; separate purpose).
-    croquis_public_share_consent_version: str = "croquis-public-share-2026-11-17"
+    croquis_public_share_consent_version: str = "croquis-public-share-2026-11-19"
     croquis_public_share_notice_text: str = (
         "By publishing this content, I confirm that:\n\n"
         "1. I own the content or have all necessary rights and permissions for its public "
@@ -165,12 +171,18 @@ class Settings(BaseSettings):
         "6. I grant FashionRise a non-exclusive, worldwide, royalty-free license to host, "
         "reproduce, display, distribute and technically adapt this published content as "
         "reasonably necessary to operate FashionRise, including public feeds, designer "
-        "profiles, previews, rankings, sharing and competitions.\n"
+        "profiles, previews, rankings, sharing, competitions and virtual AI try-on of my "
+        "design by other users.\n"
         "7. I understand that publication makes my content visible to other users, and "
         "FashionRise may restrict or remove it in response to violations, legal complaints "
         "or applicable law.\n"
         "8. I accept responsibility for my submissions and for having the rights and "
-        "permissions required to publish them."
+        "permissions required to publish them.\n"
+        "9. I agree to let others virtually try on my design using AI and confirm I have "
+        "the necessary rights for that use.\n"
+        "10. I earn 2 Stars for each successfully completed AI try-on of my published "
+        "design by other users. My rights remain mine, and I can remove my design from "
+        "future try-ons at any time."
     )
     # Upload bounds (source photos). Separate from fabric limits.
     max_croquis_upload_size_mb: int = 10

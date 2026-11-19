@@ -315,6 +315,7 @@ def fitting_room_try_on(
         consent_acknowledged=body.consent_acknowledged,
         consent_version=body.consent_version,
         garment_category=body.garment_category,
+        source_gallery_item_id=body.source_gallery_item_id,
     )
     return AIJobRead.from_job(job)
 

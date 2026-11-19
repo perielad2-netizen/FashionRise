@@ -184,6 +184,162 @@ def test_fitting_room_success_flat_20_stars(client, db_session, monkeypatch):
     assert after == before - 20
 
 
+def test_fitting_room_social_tryon_credits_other_designer_two_stars(
+    client, db_session, monkeypatch
+):
+    """Successful Social Fitting Room try-on credits the look owner +2 (not self)."""
+    from app.models.competition import StarPayout
+    from app.models.gallery_item import GalleryItem
+    from app.models.user import User
+    from app.services.fitting_room import FITTING_ROOM_DESIGNER_TRYON_STARS
+
+    _enable_fitting_room(monkeypatch)
+    set_try_on_provider_override(MockTryOnProvider())
+
+    designer_tokens = register_with_invite(
+        client, db_session, email="fr-des@example.com", username="fr_des"
+    )
+    viewer_tokens = register_with_invite(
+        client, db_session, email="fr-viewer@example.com", username="fr_viewer"
+    )
+    designer = db_session.query(User).filter(User.username == "fr_des").one()
+    viewer = db_session.query(User).filter(User.username == "fr_viewer").one()
+    designer.ai_stars = 10
+    viewer.ai_stars = 40
+    item = GalleryItem(
+        look_id=uuid.uuid4(),
+        user_id=designer.id,
+        title="Designer look",
+        image_url="https://example.com/look.png",
+        visibility="public",
+        moderation_status="ok",
+    )
+    db_session.add(item)
+    db_session.commit()
+    gallery_id = item.id
+    designer_before = designer.ai_stars
+    viewer_before = viewer.ai_stars
+
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(viewer_tokens),
+        json={
+            "person_image_base64": _data_url((180, 120, 90, 255)),
+            "garment_pieces": [
+                {
+                    "image_base64": _data_url((40, 80, 200, 255)),
+                    "category": "dresses",
+                    "source": "fashionrise_look",
+                }
+            ],
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+            "source_gallery_item_id": str(gallery_id),
+        },
+    )
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    assert run_magic_worker_tick(db_session, limit=4) >= 1
+    db_session.expire_all()
+
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None and job.status == "completed"
+    assert (job.input_data or {}).get("source_gallery_item_id") == str(gallery_id)
+
+    designer_after = db_session.query(User).filter(User.username == "fr_des").one().ai_stars
+    viewer_after = db_session.query(User).filter(User.username == "fr_viewer").one().ai_stars
+    assert designer_after == designer_before + FITTING_ROOM_DESIGNER_TRYON_STARS
+    assert viewer_after == viewer_before - 20
+
+    payout = (
+        db_session.query(StarPayout)
+        .filter(StarPayout.payout_key == f"fitting_room_designer_tryon:{job_id}")
+        .one()
+    )
+    assert payout.user_id == designer.id
+    assert payout.amount == FITTING_ROOM_DESIGNER_TRYON_STARS
+    assert payout.reason == "fitting_room_designer_tryon"
+
+    # Own-design try-on: same designer tries their look — no extra designer credit.
+    _grant_stars(db_session, "fr_des", amount=40)
+    designer_before_own = (
+        db_session.query(User).filter(User.username == "fr_des").one().ai_stars
+    )
+    own = client.post(
+        f"{FR}/try-on",
+        headers=_auth(designer_tokens),
+        json={
+            "person_image_base64": _data_url((10, 20, 30, 255)),
+            "garment_pieces": [
+                {
+                    "image_base64": _data_url((90, 40, 10, 255)),
+                    "category": "dresses",
+                    "source": "fashionrise_look",
+                }
+            ],
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+            "source_gallery_item_id": str(gallery_id),
+        },
+    )
+    assert own.status_code == 201, own.text
+    own_job_id = own.json()["id"]
+    assert run_magic_worker_tick(db_session, limit=4) >= 1
+    db_session.expire_all()
+    designer_after_own = (
+        db_session.query(User).filter(User.username == "fr_des").one().ai_stars
+    )
+    # Spent 20 for own try-on; no +2 designer reward.
+    assert designer_after_own == designer_before_own - 20
+    assert (
+        db_session.query(StarPayout)
+        .filter(StarPayout.payout_key == f"fitting_room_designer_tryon:{own_job_id}")
+        .count()
+        == 0
+    )
+
+
+def test_fitting_room_upload_tryon_does_not_credit_designer(
+    client, db_session, monkeypatch
+):
+    """Uploaded garments (no Social gallery source) never mint designer Stars."""
+    from app.models.competition import StarPayout
+    from app.models.user import User
+
+    _enable_fitting_room(monkeypatch)
+    set_try_on_provider_override(MockTryOnProvider())
+    tokens = register_with_invite(
+        client, db_session, email="fr-up@example.com", username="fr_up"
+    )
+    _grant_stars(db_session, "fr_up", amount=40)
+
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(tokens),
+        json={
+            "person_image_base64": _data_url((180, 120, 90, 255)),
+            "garment_pieces": [
+                {"image_base64": _data_url((40, 80, 200, 255)), "category": "tops"}
+            ],
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert run_magic_worker_tick(db_session, limit=4) >= 1
+    db_session.expire_all()
+    assert (
+        db_session.query(StarPayout)
+        .filter(StarPayout.reason == "fitting_room_designer_tryon")
+        .count()
+        == 0
+    )
+    assert db_session.query(User).filter(User.username == "fr_up").one().ai_stars == 20
+
+
 def test_fitting_room_failure_no_success_status(client, db_session, monkeypatch):
     _enable_fitting_room(monkeypatch)
     mock = MockTryOnProvider(fail=ProviderNotAvailableError("provider down"))

@@ -31,6 +31,8 @@ export type FittingRoomTryOnInput = {
   consentAcknowledged: boolean
   consentVersion: string
   garmentCategory?: string
+  /** Social gallery item when try-on came from FashionRise feed (designer Stars). */
+  sourceGalleryItemId?: string
   signal?: AbortSignal
 }
 
@@ -60,6 +62,9 @@ export async function enqueueFittingRoomTryOn(
       consent_acknowledged: input.consentAcknowledged,
       consent_version: input.consentVersion,
       garment_category: input.garmentCategory ?? 'auto',
+      ...(input.sourceGalleryItemId
+        ? { source_gallery_item_id: input.sourceGalleryItemId }
+        : {}),
     },
     signal: input.signal,
   })

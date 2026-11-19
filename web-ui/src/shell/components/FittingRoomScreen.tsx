@@ -423,6 +423,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
           }
         }),
       )
+      const sourceGalleryItemId = pieces
+        .map((p) => p.galleryItemId?.trim())
+        .find((id): id is string => Boolean(id))
       const idem = `fitting_room:${userId.slice(0, 8)}:${Date.now().toString(36)}`
       const job = await enqueueFittingRoomTryOn({
         personImageBase64: personCompressed.dataUrl,
@@ -430,6 +433,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         idempotencyKey: idem,
         consentAcknowledged: true,
         consentVersion: preflight.consent_version,
+        ...(sourceGalleryItemId ? { sourceGalleryItemId } : {}),
         signal: ac.signal,
       })
       runningJobIdRef.current = job.id

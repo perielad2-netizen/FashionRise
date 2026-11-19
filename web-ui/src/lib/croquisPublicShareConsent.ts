@@ -8,7 +8,7 @@ import {
   PUBLIC_PUBLISH_CHECKBOX_LABEL,
 } from './publicPublishConsent'
 
-export const CROQUIS_PUBLIC_SHARE_NOTICE_VERSION = 'croquis-public-share-2026-11-17'
+export const CROQUIS_PUBLIC_SHARE_NOTICE_VERSION = 'croquis-public-share-2026-11-19'
 
 export const CROQUIS_PUBLIC_SHARE_NOTICE_TEXT = formatPublicPublishNoticeText()
 

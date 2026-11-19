@@ -29,6 +29,8 @@ export type FittingRoomOutfitPiece = {
   updatedAt: string
   /** Set when planted from FashionRise Social Try on me. */
   source?: 'fashionrise_look' | 'upload'
+  /** Social gallery item id when planted from FashionRise feed (designer Stars). */
+  galleryItemId?: string
 }
 
 export type FittingRoomOutfitSession = {
@@ -426,6 +428,9 @@ export async function plantFittingRoomGarment(opts: {
     mimeType: opts.mimeType,
     updatedAt,
     source: opts.source ?? 'fashionrise_look',
+    ...(opts.notice?.galleryItemId
+      ? { galleryItemId: opts.notice.galleryItemId }
+      : {}),
   }
   await writeOutfitSession({
     key: outfitKey(opts.userId),
