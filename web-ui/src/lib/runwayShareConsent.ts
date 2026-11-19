@@ -8,7 +8,7 @@ import {
   PUBLIC_PUBLISH_CHECKBOX_LABEL,
 } from './publicPublishConsent'
 
-export const RUNWAY_SHARE_NOTICE_VERSION = 'runway-share-2026-11-17'
+export const RUNWAY_SHARE_NOTICE_VERSION = 'runway-share-2026-11-19'
 
 export const RUNWAY_SHARE_NOTICE_TEXT = formatPublicPublishNoticeText()
 

@@ -503,6 +503,13 @@ class FittingRoomTryOnBody(BaseModel):
         max_length=32,
         description="Optional soft category hint when using a single garment_image_base64.",
     )
+    source_gallery_item_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "FashionRise Social gallery item id when the clothing plate came from "
+            "Try on me — used to credit the designer 2 Stars on success (other users only)."
+        ),
+    )
 
     @model_validator(mode="after")
     def _require_garment(self) -> "FittingRoomTryOnBody":

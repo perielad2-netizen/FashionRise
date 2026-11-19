@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
+from app.models.gallery_item import GalleryItem
 from app.models.user import User
 from app.services.ai_stars import assert_can_spend_fitting_room, fitting_room_cost
 from app.services.look_color_lock import (
@@ -71,6 +72,61 @@ CONFLICTING_CATEGORY_SETS: tuple[frozenset[str], ...] = (
 )
 
 MAX_OUTFIT_PIECES = 4
+# Designer reward when another user successfully tries on their published Social look.
+FITTING_ROOM_DESIGNER_TRYON_STARS = 2
+
+
+def maybe_credit_designer_tryon_stars(db: Session, job: AIJob) -> bool:
+    """Credit the Social look owner +2 Stars once per successful other-user Fitting Room try-on.
+
+    Own designs never earn. Removed / non-public gallery items skip credit.
+    Idempotent via ``star_payouts.payout_key``.
+    """
+    if job.job_type != FITTING_ROOM_JOB_TYPE or job.status != "completed":
+        return False
+    data = job.input_data if isinstance(job.input_data, dict) else {}
+    if data.get("cancel_requested") is True:
+        return False
+    sources = data.get("garment_sources") if isinstance(data.get("garment_sources"), list) else []
+    look_plate = str(data.get("garment_source") or "").strip().lower() == "fashionrise_look" or any(
+        str(s).strip().lower() == "fashionrise_look" for s in sources
+    )
+    if not look_plate:
+        return False
+    raw_gid = data.get("source_gallery_item_id")
+    if raw_gid is None or str(raw_gid).strip() == "":
+        return False
+    try:
+        gid = uuid.UUID(str(raw_gid).strip())
+    except (TypeError, ValueError):
+        return False
+    item = db.get(GalleryItem, gid)
+    if item is None:
+        return False
+    if (item.visibility or "").strip().lower() != "public":
+        return False
+    if item.user_id == job.user_id:
+        return False
+    from app.services.competition_awards import credit_payout_idempotent
+
+    credited = credit_payout_idempotent(
+        db,
+        user_id=item.user_id,
+        amount=FITTING_ROOM_DESIGNER_TRYON_STARS,
+        payout_key=f"fitting_room_designer_tryon:{job.id}",
+        reason="fitting_room_designer_tryon",
+    )
+    if credited:
+        _log = logging.getLogger(__name__)
+        _log.info(
+            "fitting_room_designer_tryon_credited job_id=%s designer_id=%s viewer_id=%s gallery_item_id=%s amount=%s",
+            job.id,
+            item.user_id,
+            job.user_id,
+            gid,
+            FITTING_ROOM_DESIGNER_TRYON_STARS,
+        )
+    return credited
 
 
 def fitting_room_enabled() -> bool:
@@ -241,6 +297,7 @@ def enqueue_fitting_room_try_on(
     consent_acknowledged: bool,
     consent_version: str,
     garment_category: str | None = None,
+    source_gallery_item_id: uuid.UUID | None = None,
 ) -> AIJob:
     if not fitting_room_enabled():
         raise HTTPException(
@@ -415,6 +472,9 @@ def enqueue_fitting_room_try_on(
             "consent_version": FITTING_ROOM_CONSENT_VERSION,
             "prompt_version": TRY_ON_PROMPT_VERSION,
             "provider": "openai",
+            "source_gallery_item_id": (
+                str(source_gallery_item_id) if source_gallery_item_id is not None else None
+            ),
         },
     )
     db.add(job)

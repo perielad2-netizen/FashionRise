@@ -233,6 +233,13 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
     if _job_cancel_requested(job):
         return
 
+    # Social Fitting Room: credit the published look's designer (+2) when another
+    # user succeeds — own designs never earn. Idempotent; independent of debit.
+    if job.job_type == "fitting_room_try_on":
+        from app.services.fitting_room import maybe_credit_designer_tryon_stars
+
+        maybe_credit_designer_tryon_stars(db, job)
+
     user = db.get(User, job.user_id)
     if user is None:
         return

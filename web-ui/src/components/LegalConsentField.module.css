@@ -16,6 +16,10 @@
   min-height: 44px;
 }
 
+.check span {
+  white-space: pre-line;
+}
+
 .check input {
   width: 1.15rem;
   height: 1.15rem;

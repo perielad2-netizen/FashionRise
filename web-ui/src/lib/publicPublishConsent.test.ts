@@ -14,7 +14,9 @@ import {
 describe('public vs upload consent separation', () => {
   it('keeps upload and publish short labels distinct', () => {
     expect(CREATE_MODEL_UPLOAD_CHECKBOX_LABEL).toMatch(/private storage and AI processing/i)
-    expect(PUBLIC_PUBLISH_CHECKBOX_LABEL).toMatch(/display it publicly/i)
+    expect(PUBLIC_PUBLISH_CHECKBOX_LABEL).toMatch(/Publish & Earn/i)
+    expect(PUBLIC_PUBLISH_CHECKBOX_LABEL).toMatch(/virtually try on my design using AI/i)
+    expect(PUBLIC_PUBLISH_CHECKBOX_LABEL).toMatch(/earn 2 Stars/i)
     expect(CREATE_MODEL_UPLOAD_CHECKBOX_LABEL).not.toEqual(PUBLIC_PUBLISH_CHECKBOX_LABEL)
   })
 
@@ -33,12 +35,14 @@ describe('public vs upload consent separation', () => {
     expect(text).toContain('7. I accept responsibility')
   })
 
-  it('publish notice includes platform operating license without advertising expansion', () => {
-    expect(PUBLIC_PUBLISH_FULL_TERMS_POINTS).toHaveLength(8)
+  it('publish notice includes try-on earn terms and platform license without advertising expansion', () => {
+    expect(PUBLIC_PUBLISH_FULL_TERMS_POINTS).toHaveLength(10)
     const text = formatPublicPublishNoticeText()
     expect(text).toContain('By publishing this content, I confirm that:')
     expect(text).toMatch(/non-exclusive, worldwide, royalty-free license/i)
     expect(text).toMatch(/operate FashionRise/i)
+    expect(text).toMatch(/virtual AI try-on/i)
+    expect(text).toMatch(/earn 2 Stars/i)
     expect(text.toLowerCase()).not.toContain('advertising')
   })
 })
