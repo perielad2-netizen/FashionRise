@@ -165,7 +165,10 @@ function AdminShell() {
                   {fmtMoney(overview.revenue.gross_list_price_usd)}
                 </div>
                 <div className={styles.kpiHint}>
-                  {fmt(overview.revenue.purchases_counted)} paid packs
+                  {fmt(overview.revenue.purchases_counted)} production packs
+                  {overview.revenue.sandbox_purchases_excluded
+                    ? ` · ${fmt(overview.revenue.sandbox_purchases_excluded)} sandbox ignored`
+                    : ''}
                 </div>
               </div>
               <div className={styles.kpi}>
