@@ -14,7 +14,8 @@ from app.auth.dependencies import get_current_user
 from app.models.user import User
 
 # Owner-designated admin usernames (case-insensitive).
-ADMIN_USERNAMES: frozenset[str] = frozenset({"shilatperi", "yanivprbk"})
+# DB account is PeriShilat; alias shilatperi kept for the spoken spelling.
+ADMIN_USERNAMES: frozenset[str] = frozenset({"shilatperi", "perishilat", "yanivprbk"})
 
 
 def user_is_admin(user: User) -> bool:
