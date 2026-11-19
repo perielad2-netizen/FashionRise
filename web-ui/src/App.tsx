@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { isRegistrationUiEnabled } from '@/config/registrationUi'
 import { useVisibleViewport } from '@/lib/useVisibleViewport'
 import { GoogleAuthCompletePage } from '@/pages/GoogleAuthCompletePage'
+import { AdminPage } from '@/pages/AdminPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RegisterPage } from '@/pages/RegisterPage'
@@ -73,6 +74,9 @@ function AppRoutes() {
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* Web-only admin console (not linked in native Capacitor shell). */}
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/*" element={<AdminPage />} />
           <Route
             path="/studio/*"
             element={
