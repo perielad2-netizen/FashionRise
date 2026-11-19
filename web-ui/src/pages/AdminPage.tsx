@@ -160,12 +160,12 @@ function AdminShell() {
                 <div className={styles.kpiHint}>+{fmt(overview.users.new_7d)} last 7 days</div>
               </div>
               <div className={styles.kpi}>
-                <div className={styles.kpiLabel}>Money earned (list)</div>
+                <div className={styles.kpiLabel}>Money earned</div>
                 <div className={styles.kpiValue}>
                   {fmtMoney(overview.revenue.gross_list_price_usd)}
                 </div>
                 <div className={styles.kpiHint}>
-                  {fmt(overview.revenue.purchases_counted)} production packs
+                  List price · {fmt(overview.revenue.purchases_counted)} production packs
                   {overview.revenue.sandbox_purchases_excluded
                     ? ` · ${fmt(overview.revenue.sandbox_purchases_excluded)} sandbox ignored`
                     : ''}
