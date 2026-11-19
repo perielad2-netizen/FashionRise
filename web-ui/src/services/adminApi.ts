@@ -44,6 +44,7 @@ export type AdminOverview = {
     currency: string
     gross_list_price_usd: number
     purchases_counted: number
+    sandbox_purchases_excluded?: number
     note: string
     product_catalog: Array<{
       product_id: string

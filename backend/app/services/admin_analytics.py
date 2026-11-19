@@ -154,7 +154,9 @@ def overview(db: Session) -> dict[str, Any]:
     )
     reports_total = _count(db, select(func.count()).select_from(ContentReport))
 
-    # Stars purchased (net of clawbacks) from verified IAP rows that still count.
+    # Stars purchased / money earned — Production App Store / Play only.
+    # Exclude Sandbox / TestFlight / Xcode buys (not real customer money).
+    _SANDBOX_ENVS = frozenset({"sandbox", "xcode", "localtesting", "test"})
     purchase_rows = db.execute(
         select(
             IapPurchase.product_id,
@@ -162,6 +164,7 @@ def overview(db: Session) -> dict[str, Any]:
             IapPurchase.stars_clawed_back,
             IapPurchase.status,
             IapPurchase.platform,
+            IapPurchase.environment,
         ).where(
             IapPurchase.status.in_(
                 (STATUS_ACTIVE, STATUS_REFUND_REVERSED, STATUS_REFUNDED, STATUS_REVOKED)
@@ -173,7 +176,12 @@ def overview(db: Session) -> dict[str, Any]:
     stars_clawed = 0
     revenue_usd = Decimal("0.00")
     purchases_count = 0
-    for product_id, credited, clawed, status, _platform in purchase_rows:
+    sandbox_excluded = 0
+    for product_id, credited, clawed, status, _platform, environment in purchase_rows:
+        env = (environment or "").strip().lower()
+        if env in _SANDBOX_ENVS or env.startswith("sandbox"):
+            sandbox_excluded += 1
+            continue
         credited_i = int(credited or 0)
         clawed_i = int(clawed or 0)
         if status in (STATUS_ACTIVE, STATUS_REFUND_REVERSED):
@@ -296,7 +304,9 @@ def overview(db: Session) -> dict[str, Any]:
             "currency": "USD",
             "gross_list_price_usd": float(revenue_usd),
             "purchases_counted": purchases_count,
+            "sandbox_purchases_excluded": sandbox_excluded,
             "note": (
+                "Production purchases only (Sandbox / TestFlight excluded). "
                 "Estimated from App Store / Play list prices "
                 f"({', '.join(f'{k}=${v}' for k, v in _PRODUCT_USD.items())}). "
                 "Not Apple/Google net proceeds."

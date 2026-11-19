@@ -83,3 +83,30 @@ def test_reports_ok_for_flag_admin(client: TestClient, db_session: Session):
     r = client.get("/api/v1/admin/reports", headers=_auth(u))
     assert r.status_code == 200
     assert "items" in r.json()
+
+
+def test_overview_excludes_sandbox_iap_from_revenue(client: TestClient, db_session: Session):
+    from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
+
+    admin = _user(db_session, username="yanivprbk")
+    buyer = _user(db_session, username="buyer_sandbox")
+    db_session.add(
+        IapPurchase(
+            user_id=buyer.id,
+            platform="ios",
+            product_id="stars_50",
+            transaction_id="sandbox-txn-1",
+            environment="Sandbox",
+            status=STATUS_ACTIVE,
+            stars_credited=50,
+            stars_clawed_back=0,
+        )
+    )
+    db_session.commit()
+    r = client.get("/api/v1/admin/overview", headers=_auth(admin))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["revenue"]["purchases_counted"] == 0
+    assert body["revenue"]["gross_list_price_usd"] == 0
+    assert body["stars"]["stars_purchased_net"] == 0
+    assert body["revenue"]["sandbox_purchases_excluded"] >= 1
