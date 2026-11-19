@@ -51,7 +51,7 @@ def _auth(user: User) -> dict[str, str]:
 
 
 def test_allowlisted_username_is_admin(db_session: Session):
-    u = _user(db_session, username="shilatperi", is_admin=False)
+    u = _user(db_session, username="PeriShilat", is_admin=False)
     assert user_is_admin(u) is True
 
 

@@ -11,7 +11,7 @@ import {
 import { isNativeShell } from '@/services/native/platform'
 import styles from './AdminPage.module.css'
 
-const ADMIN_USERNAMES = new Set(['shilatperi', 'yanivprbk'])
+const ADMIN_USERNAMES = new Set(['shilatperi', 'perishilat', 'yanivprbk'])
 
 type Tab = 'overview' | 'reports'
 
