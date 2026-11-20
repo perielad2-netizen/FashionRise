@@ -705,7 +705,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         <div className={styles.panel}>
           <h2 className={styles.panelTitle}>2 · Build Outfit</h2>
           <p className={styles.panelHint}>
-            Add or replace clothing from your gallery or camera. Previous pieces stay until you
+            Add clothing or shoes from your gallery or camera. Tag boots as{' '}
+            <strong>shoes</strong> so they stay on the try-on. Previous pieces stay until you
             remove them.
           </p>
           <div className={styles.outfitGrid}>

@@ -1200,3 +1200,103 @@ def test_native_product_prep_keeps_full_resolution():
     with Image.open(io.BytesIO(prep.pieces[0].png_bytes)) as im:
         assert im.size == (1024, 1536)
         assert im.mode == "RGB"
+
+
+def test_normalize_category_maps_boots_alias_to_shoes():
+    from app.services.fitting_room import _normalize_category
+
+    assert _normalize_category("boots") == "shoes"
+    assert _normalize_category("Boot") == "shoes"
+    assert _normalize_category("footwear") == "shoes"
+    assert _normalize_category("heels") == "shoes"
+    assert _normalize_category("dresses") == "dresses"
+
+
+def test_multi_piece_dress_plus_auto_boot_uses_outfit_footwear_max_prompt():
+    """QA: dress + boot (often tagged auto) must not use apparel-only Max prompt."""
+    from app.services.fitting_room import (
+        FITTING_ROOM_MAX_OUTFIT_PROMPT,
+        FITTING_ROOM_MAX_PROMPT,
+        _fitting_room_max_prompt,
+        _fitting_room_openai_prompt,
+        _outfit_needs_footwear_contract,
+    )
+
+    data = {
+        "garment_category": "auto",
+        "outfit_categories": ["dresses", "auto"],
+        "outfit_piece_count": 2,
+    }
+    assert _outfit_needs_footwear_contract(data)
+    max_prompt = _fitting_room_max_prompt(data)
+    assert max_prompt == FITTING_ROOM_MAX_OUTFIT_PROMPT
+    assert max_prompt != FITTING_ROOM_MAX_PROMPT
+    low = max_prompt.lower()
+    assert "boot" in low or "footwear" in low or "shoe" in low
+    assert "collage" in low
+    openai_prompt = _fitting_room_openai_prompt(data, [])
+    assert openai_prompt is not None
+    assert "boot" in openai_prompt.lower() or "footwear" in openai_prompt.lower()
+    assert len(max_prompt) <= 1000
+
+
+def test_explicit_shoes_category_uses_outfit_footwear_max_prompt():
+    from app.services.fitting_room import (
+        FITTING_ROOM_MAX_OUTFIT_PROMPT,
+        _fitting_room_max_prompt,
+        _outfit_needs_footwear_contract,
+    )
+
+    data = {
+        "garment_category": "shoes",
+        "outfit_categories": ["shoes"],
+        "outfit_piece_count": 1,
+    }
+    assert _outfit_needs_footwear_contract(data)
+    assert _fitting_room_max_prompt(data) == FITTING_ROOM_MAX_OUTFIT_PROMPT
+
+
+def test_single_dress_keeps_apparel_only_max_prompt():
+    from app.services.fitting_room import FITTING_ROOM_MAX_PROMPT, _fitting_room_max_prompt
+
+    data = {
+        "garment_category": "dresses",
+        "outfit_categories": ["dresses"],
+        "outfit_piece_count": 1,
+    }
+    assert _fitting_room_max_prompt(data) == FITTING_ROOM_MAX_PROMPT
+
+
+def test_enqueue_dress_plus_boot_emits_footwear_collage_hints(
+    client, db_session, monkeypatch
+):
+    _enable_fitting_room(monkeypatch)
+    mock = MockTryOnProvider()
+    set_try_on_provider_override(mock)
+    tokens = register_with_invite(
+        client, db_session, email="fr-boot@example.com", username="fr_boot"
+    )
+    _grant_stars(db_session, "fr_boot", amount=40)
+
+    key = f"fitting_room:{uuid.uuid4()}"
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(tokens),
+        json={
+            "person_image_base64": _data_url((180, 120, 90, 255)),
+            "garment_pieces": [
+                {"image_base64": _data_url((40, 80, 200, 255)), "category": "dresses"},
+                {"image_base64": _data_url((20, 20, 20, 255)), "category": "auto"},
+            ],
+            "idempotency_key": key,
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+        },
+    )
+    assert r.status_code == 201, r.text
+    processed = run_magic_worker_tick(db_session, limit=4)
+    assert processed >= 1
+    joined = " | ".join(mock.last_hints)
+    assert "outfit_piece_count:2" in joined
+    assert "MULTI_PIECE_COLLAGE" in joined
+    assert "boot" in joined.lower() or "footwear" in joined.lower() or "shoe" in joined.lower()

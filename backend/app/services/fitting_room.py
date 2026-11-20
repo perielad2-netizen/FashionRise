@@ -237,12 +237,46 @@ def _decode_png(raw: str, *, field: str) -> bytes:
 
 def _normalize_category(raw: str | None) -> str:
     cat = (raw or "auto").strip().lower() or "auto"
+    # Boots / footwear aliases → shoes (QA often leaves "auto" or says "boot").
+    if cat in {"boot", "boots", "footwear", "shoe", "heels", "sneakers"}:
+        cat = "shoes"
     if cat not in SUPPORTED_GARMENT_CATEGORIES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported garment category '{cat}'.",
         )
     return cat
+
+
+def _outfit_categories(data: dict[str, Any]) -> list[str]:
+    raw = data.get("outfit_categories")
+    cats = [str(c).strip().lower() for c in raw] if isinstance(raw, list) else []
+    primary = str(data.get("garment_category") or "").strip().lower()
+    if primary and primary not in cats:
+        cats = [primary, *cats]
+    return cats
+
+
+def _is_multi_piece_outfit(data: dict[str, Any]) -> bool:
+    try:
+        count = int(data.get("outfit_piece_count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if count > 1:
+        return True
+    return len(_outfit_categories(data)) > 1
+
+
+def _outfit_includes_footwear(data: dict[str, Any]) -> bool:
+    return "shoes" in _outfit_categories(data)
+
+
+def _outfit_needs_footwear_contract(data: dict[str, Any]) -> bool:
+    """Multi-piece collages and explicit shoes must keep boots/footwear on the person.
+
+    QA: dress + boot tagged ``auto`` → Max apparel-only prompt dropped the boot.
+    """
+    return _is_multi_piece_outfit(data) or _outfit_includes_footwear(data)
 
 
 def _bytes_to_rgba(png_or_jpeg: bytes) -> Image.Image:
@@ -441,8 +475,21 @@ def enqueue_fitting_room_try_on(
             )
     if len(piece_bytes) > 1:
         hints.append(
-            "Apply all clothing pieces from the garment collage onto the person photo "
-            "as one coordinated outfit without dropping earlier pieces."
+            "MULTI_PIECE_COLLAGE: apply ALL panels from the garment collage onto the "
+            "person as one coordinated outfit — clothing and footwear — without dropping "
+            "earlier pieces, boots, or shoe panels."
+        )
+    if "shoes" in piece_cats:
+        hints.append(
+            "FOOTWEAR: fit the boots/shoes from the garment collage onto the person and "
+            "replace the photo footwear — do not invent different shoes or drop the boot."
+        )
+    elif len(piece_bytes) > 1:
+        # Second+ piece often left as ``auto`` (QA dress + boot). Still demand footwear
+        # if any collage panel shows boots/shoes.
+        hints.append(
+            "If any collage panel shows boots, shoes, heels, or sneakers, fit that "
+            "footwear onto the person and replace photo shoes — never drop boot panels."
         )
 
     job = AIJob(
@@ -548,6 +595,25 @@ FITTING_ROOM_MAX_PROMPT = (
     "fabric, straps, trim, cut, and coverage with clean edges. Keep the person's identity, "
     "face, hair, pose, proportions, lighting, background, and exact natural skin tone "
     "unchanged — do not darken, bronze, tint, or recolor any skin."
+)
+
+# Multi-piece / shoes collage — Max supports footwear; apparel-only prompt was dropping boots.
+FITTING_ROOM_MAX_OUTFIT_PROMPT = (
+    "The product image may be a side-by-side collage of outfit pieces. Fit EVERY wearable "
+    "fashion item from that collage onto the person — clothing AND footwear (boots, shoes, "
+    "heels, flats, sneakers). Do not drop boot or shoe panels. Do not invent different "
+    "shoes than the collage shows. Ignore handheld props, bottles, bags, phones, and "
+    "background objects. Preserve each item's exact color, fabric, cut, and coverage. Keep "
+    "the person's identity, face, hair, pose, lighting, background, and natural skin tone "
+    "unchanged."
+)
+
+FITTING_ROOM_OPENAI_OUTFIT_PROMPT = (
+    "Create a single photorealistic photograph of the person from image 1 wearing every "
+    "outfit piece from image 2. Image 2 may be a side-by-side collage — apply ALL panels "
+    "as one coordinated look, including boots/shoes/heels when present. Never drop footwear "
+    "pieces or replace them with different shoes. Ignore props and background objects. "
+    "Keep the person's face, hair, pose, proportions, background, lighting, and skin tone."
 )
 
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
@@ -995,6 +1061,8 @@ def _look_materialized_max_prompt(palette: dict[str, Any] | None) -> str:
 
 def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
     if not _is_fashionrise_look_plate(data):
+        if _outfit_needs_footwear_contract(data):
+            return FITTING_ROOM_MAX_OUTFIT_PROMPT
         return FITTING_ROOM_MAX_PROMPT
     clause = _look_palette_clause(data)
     sheer = bool((data.get("look_analysis") or {}).get("sheer_legs")) if isinstance(data.get("look_analysis"), dict) else bool(data.get("look_sheer_legs"))
@@ -1016,8 +1084,10 @@ def _fitting_room_max_prompt(data: dict[str, Any]) -> str:
 
 
 def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str | None:
-    """Look-plate OpenAI prompt override; None → provider default try-on prompt."""
+    """Look-plate / multi-piece outfit prompt override; None → provider default."""
     if not _is_fashionrise_look_plate(data):
+        if _outfit_needs_footwear_contract(data):
+            return FITTING_ROOM_OPENAI_OUTFIT_PROMPT
         return None
     clause = _look_palette_clause(data)
     sheer = bool((data.get("look_analysis") or {}).get("sheer_legs")) if isinstance(data.get("look_analysis"), dict) else bool(data.get("look_sheer_legs"))
