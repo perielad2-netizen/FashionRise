@@ -89,7 +89,7 @@ describe('FittingRoomScreen', () => {
       stars_cost: 20,
       stars_cost_note:
         '20 Stars per successful Fitting Room preview — flat rate whether the clothing image shows one garment or several.',
-      max_outfit_pieces: 4,
+      max_outfit_pieces: 1,
       conflicting_category_sets: [['one-pieces', 'tops']],
     })
     mocks.readFittingRoomAsset.mockResolvedValue(null)

@@ -177,7 +177,17 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       if (cancelled) return
       if (person?.dataUrl) setPersonUrl(person.dataUrl)
       if (outfit?.pieces?.length) {
-        setPieces(outfit.pieces)
+        // Multi-piece sessions from older builds are not reliable on try-on —
+        // keep the first piece only so Replace still works.
+        const trimmed = outfit.pieces.slice(0, 1)
+        setPieces(trimmed)
+        if (trimmed.length !== outfit.pieces.length) {
+          await persistOutfit(trimmed)
+          showNotice(
+            'Try on one item at a time now — extra outfit pieces were cleared.',
+            'info',
+          )
+        }
       } else {
         // Migrate legacy single garment into outfit session once.
         const legacy = await readFittingRoomAsset(userId, 'garment')
@@ -229,7 +239,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             ai_gate: false,
             stars_cost: 20,
             stars_cost_note: '20 Stars per successful Fitting Room preview (flat rate).',
-            max_outfit_pieces: 4,
+            max_outfit_pieces: 1,
             conflicting_category_sets: [],
           })
         }
@@ -299,7 +309,11 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         )
       } else {
         if (pieces.length >= maxPieces) {
-          setErrorMsg(`Outfit supports up to ${maxPieces} clothing pieces. Replace one instead.`)
+          setErrorMsg(
+            maxPieces <= 1
+              ? 'Try on one item at a time. Use Replace on the current piece, or clear it first.'
+              : `Outfit supports up to ${maxPieces} clothing pieces. Replace one instead.`,
+          )
           return
         }
         next = [
@@ -703,15 +717,15 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         </div>
 
         <div className={styles.panel}>
-          <h2 className={styles.panelTitle}>2 · Build Outfit</h2>
+          <h2 className={styles.panelTitle}>2 · Choose clothing</h2>
           <p className={styles.panelHint}>
-            Add clothing or shoes from your gallery or camera. Tag boots as{' '}
-            <strong>shoes</strong> so they stay on the try-on. Previous pieces stay until you
-            remove them.
+            Add one clothing item or pair of shoes from your gallery or camera. Try on one
+            item at a time — combining dress + boots + gloves in one preview is not
+            reliable yet. Tag boots as <strong>shoes</strong>.
           </p>
           <div className={styles.outfitGrid}>
             {pieces.length === 0 ? (
-              <p className={styles.previewEmpty}>No clothing pieces yet</p>
+              <p className={styles.previewEmpty}>No clothing yet — add one item</p>
             ) : (
               pieces.map((piece) => (
                 <div key={piece.id} className={styles.outfitCard}>
@@ -794,7 +808,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               data-testid="fitting-room-garment-gallery"
               onClick={() => openGarmentPicker('gallery', null)}
             >
-              Add clothing
+              {pieces.length ? 'Replace clothing' : 'Add clothing'}
             </button>
             <button
               type="button"
@@ -803,11 +817,11 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               data-testid="fitting-room-garment-take"
               onClick={() => openGarmentPicker('camera', null)}
             >
-              Take clothing photo
+              {pieces.length ? 'Retake clothing photo' : 'Take clothing photo'}
             </button>
             {pieces.length ? (
               <button type="button" className={styles.btnGhost} onClick={() => void clearOutfit()}>
-                Clear outfit
+                Clear clothing
               </button>
             ) : null}
           </div>

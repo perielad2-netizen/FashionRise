@@ -71,7 +71,10 @@ CONFLICTING_CATEGORY_SETS: tuple[frozenset[str], ...] = (
     frozenset({"one-pieces", "dresses"}),
 )
 
-MAX_OUTFIT_PIECES = 4
+# One product image per try-on. Side-by-side collage (dress+boot+gloves) is not
+# reliable on FASHN Max / OpenAI — secondary pieces (boots, gloves) get dropped.
+# Sequential multi-pass is a future option; until then keep the product honest.
+MAX_OUTFIT_PIECES = 1
 # Designer reward when another user successfully tries on their published Social look.
 FITTING_ROOM_DESIGNER_TRYON_STARS = 2
 
@@ -170,8 +173,8 @@ def preflight_public(*, user: User) -> dict[str, Any]:
         "ai_gate": bool(settings.my_croquis_ai_enabled),
         "stars_cost": cost,
         "stars_cost_note": (
-            f"{cost} Stars per successful Fitting Room preview — flat rate whether the "
-            "clothing image shows one garment or several."
+            f"{cost} Stars per successful Fitting Room preview — one clothing or shoes "
+            "image at a time."
         ),
         "max_outfit_pieces": MAX_OUTFIT_PIECES,
         "conflicting_category_sets": [sorted(s) for s in CONFLICTING_CATEGORY_SETS],
