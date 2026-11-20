@@ -771,9 +771,9 @@ def test_analyze_look_plate_detects_sheer_legs():
 
     solid = analyze_fashionrise_look_plate(_two_tone_look_png())
     sheer = analyze_fashionrise_look_plate(_sheer_look_png())
-    assert solid["preferred_path"] == "materialize_then_max"
+    assert solid["preferred_path"] == "materialize_then_openai"
     assert sheer["sheer_legs"] is True
-    assert sheer["preferred_path"] == "materialize_then_max"
+    assert sheer["preferred_path"] == "materialize_then_openai"
 
 
 def test_sketch_texture_score_runs_on_synthetic():
@@ -916,13 +916,16 @@ def test_look_detection_kill_switch(client, db_session, monkeypatch):
     assert job.input_data["look_detection"] is None
 
 
-def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_session, monkeypatch):
-    """Full Social look path on an untagged plate; Stars stay flat 20."""
+def test_untagged_look_runs_materialize_then_openai_v28_with_color_lock(
+    client, db_session, monkeypatch
+):
+    """Social look path matches model Try On Person: materialize → OpenAI V2.8."""
     import json
 
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
+    from app.services.personal_try_on_provider import TRY_ON_PROMPT_V2_8
     from tests.look_test_images import (
         look_plate_png,
         person_photo_png,
@@ -939,7 +942,7 @@ def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_sess
     look_png = look_plate_png()
     person_png = person_photo_png()
     product_png = product_photo_png()
-    raw_max_png = tryon_result_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT)
+    raw_openai_png = tryon_result_png(bodice=DRIFT_BODICE, skirt=DRIFT_SKIRT)
     calls: list[str] = []
 
     def _fake_materialize(*, look_png: bytes, palette, color_lock: bool):
@@ -955,21 +958,26 @@ def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_sess
             "color_lock": {"stage": "product", "applied": False, "reason": "within_tolerance"},
         }
 
-    def _fake_max(*, person_png: bytes, product_png: bytes, palette, data: dict):
-        calls.append("max")
-        assert product_png == _fake_max.expected_product
-        assert palette is not None
-        assert data.get("look_materialized") is True
-        return raw_max_png, {"provider": "fashn_tryon_max", "credits_used": 4}
+    def _no_max(**_kwargs):
+        raise AssertionError("Max must not run when OpenAI V2.8 succeeds first")
 
-    _fake_max.expected_product = product_png
+    class _V28Provider(MockTryOnProvider):
+        def generate(self, *, photo_png, garment_png, design_hints=None, prompt_override=None, **kwargs):
+            calls.append("openai")
+            assert garment_png == product_png
+            self.calls += 1
+            self.last_garment_png = garment_png
+            self.last_prompt_override = prompt_override
+            prompt = prompt_override or ""
+            assert TRY_ON_PROMPT_V2_8[:80] in prompt
+            assert "mannequin" in prompt.lower()
+            assert "replace the person's original clothes" in prompt.lower()
+            return raw_openai_png, {"actual_cost_cents": 4, "provider": "openai"}
 
-    def _boom_openai(*_a, **_k):
-        raise AssertionError("OpenAI try-on must not run when materialize→Max succeeds")
-
+    openai_mock = _V28Provider()
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
-    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _fake_max)
-    monkeypatch.setattr(fr, "get_try_on_provider", _boom_openai)
+    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _no_max)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
     set_try_on_provider_override(None)
 
     job = _enqueue_look_job(
@@ -983,11 +991,11 @@ def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_sess
     db_session.expire_all()
     job = db_session.get(AIJob, job.id)
     assert job.status == "completed", job.error_message
-    assert calls == ["materialize", "max"]
+    assert calls == ["materialize", "openai"]
 
     result = job.result_data or {}
-    assert result["fitting_room_look_path"] == "materialize_then_max"
-    assert "fashn" in str(result.get("provider") or "")
+    assert result["fitting_room_look_path"] == "materialize_then_openai"
+    assert result.get("provider") == "openai"
     assert result["look_detected_by"] == "content"
     assert result["look_palette"]["multi_tone"] is True
     assert result["look_materialize"]["provider"] == "openai_look_materialize"
@@ -996,9 +1004,8 @@ def test_untagged_look_runs_materialize_then_max_with_color_lock(client, db_sess
     assert final_lock["applied"] is True
     assert final_lock["chroma_drift_after"] < final_lock["chroma_drift_before"]
     assert "look_quality" in result
-    # The stored preview is the color-locked photo, not the provider's raw output.
     assert len(_CapturingStorage.saved) == 1
-    assert _CapturingStorage.saved[0] != raw_max_png
+    assert _CapturingStorage.saved[0] != raw_openai_png
 
     assert result["stars_cost"] == 20
     after = db_session.query(User).filter(User.username == "fr_look_pipeline").one().ai_stars
@@ -1056,52 +1063,52 @@ def test_look_materialize_failure_fails_closed(client, db_session, monkeypatch):
     assert after == before
 
 
-def test_look_max_illustrated_retries_openai_with_product(client, db_session, monkeypatch):
-    """If Max pastes illustration texture, discard it and retry OpenAI with the product."""
+def test_look_openai_moderation_falls_back_to_max_with_product(client, db_session, monkeypatch):
+    """When OpenAI V2.8 is moderation-blocked, Max may run only on the product photo."""
     import app.services.look_garment_normalize as lgn
     from app.services import fitting_room as fr
-    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png
+    from app.services.personal_try_on_provider import ProviderNotAvailableError
+    from tests.look_test_images import (
+        look_plate_png,
+        person_photo_png,
+        product_photo_png,
+        tryon_result_png,
+    )
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setattr(fr, "_fashn_fallback_armed", lambda: True)
     product_png = product_photo_png()
-    soft_calls = {"n": 0}
+    calls: list[str] = []
 
     def _fake_materialize(**_kwargs):
+        calls.append("materialize")
         return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
 
-    def _fake_max(**_kwargs):
-        return b"max-illustrated-png", {"provider": "fashn_tryon_max", "credits_used": 4}
+    def _fake_max(*, person_png, product_png, palette, data):
+        calls.append("max")
+        assert product_png == _fake_max.expected
+        assert data.get("look_materialized") is True
+        return tryon_result_png(), {"provider": "fashn_tryon_max", "credits_used": 4}
 
-    def _soft(png, *, look_analysis=None):
-        soft_calls["n"] += 1
-        if soft_calls["n"] == 1:
-            return {
-                "ok": False,
-                "warnings": ["illustrated_texture_suspected"],
-                "result_skin_ratio_lower": 0.1,
-                "sheer_expected": False,
-                "texture": {"illustrated_texture_suspected": True},
-            }
-        return {
-            "ok": True,
-            "warnings": [],
-            "result_skin_ratio_lower": 0.1,
-            "sheer_expected": False,
-            "texture": {"illustrated_texture_suspected": False},
-        }
+    _fake_max.expected = product_png
 
-    openai_mock = MockTryOnProvider()
+    class _ModerationOpenAI(MockTryOnProvider):
+        def generate(self, **kwargs):
+            calls.append("openai")
+            raise ProviderNotAvailableError(
+                "OpenAI images.edit rejected: moderation_blocked"
+            )
+
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
     monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _fake_max)
-    monkeypatch.setattr(fr, "soft_check_look_tryon_result", _soft)
-    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: _ModerationOpenAI())
     set_try_on_provider_override(None)
 
     job = _enqueue_look_job(
         client,
         db_session,
-        username="fr_look_max_illust",
+        username="fr_look_mod_max",
         body=_look_try_on_body(
             look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
         ),
@@ -1110,14 +1117,11 @@ def test_look_max_illustrated_retries_openai_with_product(client, db_session, mo
     db_session.expire_all()
     job = db_session.get(AIJob, job.id)
     assert job.status == "completed", job.error_message
-    assert openai_mock.calls == 1
-    assert openai_mock.last_garment_png == product_png
+    assert calls == ["materialize", "openai", "max"]
     result = job.result_data or {}
-    assert result["fitting_room_look_path"] == "materialize_then_openai_after_max_quality"
-    assert "illustrated_texture_suspected" in (
-        (result.get("look_quality_max_rejected") or {}).get("warnings") or []
-    )
-    assert soft_calls["n"] == 2
+    assert result["fitting_room_look_path"] == "materialize_then_openai"
+    assert result.get("fallback_from") == "openai"
+    assert "fashn" in str(result.get("provider") or "")
 
 
 def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch):
@@ -1125,30 +1129,16 @@ def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch)
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
-    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png, tryon_result_png
+    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
     product_png = product_photo_png()
-    soft_calls = {"n": 0}
 
     def _fake_materialize(**_kwargs):
         return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
 
-    def _fake_max(**_kwargs):
-        return tryon_result_png(), {"provider": "fashn_tryon_max", "credits_used": 4}
-
     def _soft(png, *, look_analysis=None):
-        soft_calls["n"] += 1
-        if soft_calls["n"] == 1:
-            # Accept Max through the early gate.
-            return {
-                "ok": True,
-                "warnings": [],
-                "result_skin_ratio_lower": 0.1,
-                "sheer_expected": False,
-                "texture": {"illustrated_texture_suspected": False},
-            }
         return {
             "ok": False,
             "warnings": ["illustrated_texture_suspected"],
@@ -1157,15 +1147,14 @@ def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch)
             "texture": {"illustrated_texture_suspected": True},
         }
 
+    openai_mock = MockTryOnProvider()
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
-    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _fake_max)
     monkeypatch.setattr(fr, "soft_check_look_tryon_result", _soft)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
     monkeypatch.setattr(
         fr,
-        "get_try_on_provider",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("OpenAI must not run when Max is accepted")
-        ),
+        "_generate_look_try_on_via_max",
+        lambda **_k: (_ for _ in ()).throw(AssertionError("Max unused when OpenAI returns")),
     )
     set_try_on_provider_override(None)
 
@@ -1189,51 +1178,7 @@ def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch)
         db_session.query(User).filter(User.username == "fr_look_quality_reject").one().ai_stars
     )
     assert after == before
-    assert soft_calls["n"] == 2
-
-
-def test_look_max_failure_hands_materialized_product_to_openai(client, db_session, monkeypatch):
-    import app.services.look_garment_normalize as lgn
-    from app.services import fitting_room as fr
-    from app.services.personal_try_on_provider import ProviderNotAvailableError
-    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png
-
-    _enable_fitting_room(monkeypatch, live=True)
-    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
-    product_png = product_photo_png()
-
-    def _fake_materialize(**_kwargs):
-        return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
-
-    def _max_down(**_kwargs):
-        raise ProviderNotAvailableError("FASHN Max produced no image")
-
-    openai_mock = MockTryOnProvider()
-    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
-    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _max_down)
-    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
-    set_try_on_provider_override(None)
-
-    job = _enqueue_look_job(
-        client,
-        db_session,
-        username="fr_look_max_down",
-        body=_look_try_on_body(
-            look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
-        ),
-    )
-    assert run_magic_worker_tick(db_session) >= 1
-    db_session.expire_all()
-    job = db_session.get(AIJob, job.id)
-    assert job.status == "completed", job.error_message
     assert openai_mock.calls == 1
-    assert openai_mock.last_garment_png == product_png
-    prompt = openai_mock.last_prompt_override or ""
-    assert "mannequin" in prompt
-    assert "drawn model" not in prompt
-    result = job.result_data or {}
-    assert result["fitting_room_look_path"] == "materialize_then_openai"
-    assert result["look_materialize"]["provider"] == "openai_look_materialize"
 
 
 def test_look_prompts_keep_contract_and_fit_max_limit():

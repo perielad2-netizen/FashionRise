@@ -915,8 +915,9 @@ def analyze_fashionrise_look_plate(garment_png: bytes) -> dict[str, Any]:
         "look_color_lock": lock,
         "sheer_legs": bool(sheer.get("sheer_legs")),
         "sheer": sheer,
-        # Materialize illustration → studio product photo, then Max/OpenAI try-on.
-        "preferred_path": "materialize_then_max",
+        # Materialize illustration → studio product photo, then OpenAI V2.8 (model
+        # Try On Person path). Max only as moderation fallback.
+        "preferred_path": "materialize_then_openai",
     }
 
 
@@ -1107,24 +1108,37 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
         if len(evidence) >= 6:
             break
     if data.get("look_normalized"):
-        # Image 2 is already a photoreal product photo — fit fabric, do not re-illustrate.
-        prompt = (
-            "Create a single photograph of the person from image 1 wearing the clothing "
-            "from image 2 as real sewn fabric that drapes with gravity — never a flat "
-            "illustration paste or sticker overlay. Image 2 is a studio product photograph "
-            "of the real garment displayed on a white retail mannequin (not an illustration) "
-            "— ignore the mannequin and transfer the garment's real fabric, cut, panel "
-            "colors, hem, sheer/open regions, attached petals/leaf accents, and any shoes "
-            "on the mannequin onto the person. Opaque panels must fully cover the person's "
-            "original clothes. Keep the person's face, hair, pose, proportions, background, "
-            "and lighting. Do not invent leggings or opaque underlayers. Do not redraw the "
-            "garment as sketch/line art or leave floating detached shapes."
-            + clause
-            + sheer_boost
-            + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
+        # Match model Try On Person: same OpenAI V2.8 contract, with look-only hints
+        # so opaque panels replace street clothes (the paid Fitting Room failure mode).
+        from app.services.personal_try_on_provider import build_try_on_prompt
+
+        look_hints: list[str] = list(evidence)
+        look_hints.append(
+            "Image 2 is a studio product photograph of the real garment on a white "
+            "retail mannequin — ignore the mannequin; fit only the clothing."
         )
-    else:
-        prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause + sheer_boost + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
+        look_hints.append(
+            "Wherever the product shows opaque fabric, fully replace the person's "
+            "original clothes in those regions — do not leave street clothes showing "
+            "through opaque panels."
+        )
+        look_hints.append(
+            "Attached petals, leaves, or shoulder accents must sit on the body as "
+            "part of the garment — never floating detached shapes or stickers."
+        )
+        if clause.strip():
+            look_hints.append(clause.strip()[:120])
+        if sheer:
+            look_hints.append(
+                "Lower garment shows skin through sheer/open layers — preserve that "
+                "openness; do not invent opaque underlayers."
+            )
+        look_hints.append(
+            "If the product shows shoes/sneakers/boots, replace the person's photo "
+            "footwear with those shoes — do not keep photo boots."
+        )
+        return build_try_on_prompt(look_hints)
+    prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause + sheer_boost + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
     if evidence:
         prompt += " Design evidence: " + "; ".join(evidence) + "."
     return prompt
@@ -1394,66 +1408,17 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                 "look_sheer_legs": look_sheer,
                 "look_materialize": look_materialize_meta,
             }
+            # Prefer OpenAI V2.8 — same contract as model Try On Person on a real
+            # photo. Max-first on look plates pasted illustration texture onto people.
+            png = None
             logger.info(
-                "Fitting Room job %s Social look materialized (calls=%s lock=%s detected_by=%s)",
+                "Fitting Room job %s Social look materialized — OpenAI V2.8 next "
+                "(calls=%s lock=%s detected_by=%s)",
                 job.id,
                 look_materialize_meta.get("openai_calls"),
                 (look_materialize_meta.get("color_lock") or {}).get("applied"),
                 data.get("look_detected_by"),
             )
-            if _fashn_max_fallback_armed():
-                try:
-                    png, max_meta = _generate_look_try_on_via_max(
-                        person_png=person_png,
-                        product_png=garment_png,
-                        palette=look_palette,
-                        data=data,
-                    )
-                    if not isinstance(max_meta, dict):
-                        max_meta = {}
-                    max_quality = soft_check_look_tryon_result(
-                        png, look_analysis=look_analysis
-                    )
-                    if "illustrated_texture_suspected" in (
-                        max_quality.get("warnings") or []
-                    ):
-                        # Max pasted the illustration look — discard and try OpenAI
-                        # with the materialized product photo instead.
-                        logger.info(
-                            "Fitting Room job %s Max look result looks illustrated — "
-                            "OpenAI with materialized product next",
-                            job.id,
-                        )
-                        meta = {
-                            "fitting_room_look_path": (
-                                "materialize_then_openai_after_max_quality"
-                            ),
-                            "look_analysis": look_analysis,
-                            "look_materialize": look_materialize_meta,
-                            "look_sheer_legs": look_sheer,
-                            "look_quality_max_rejected": max_quality,
-                        }
-                        png = None
-                        used_provider = "openai"
-                        fallback_from = None
-                        openai_operator_detail = None
-                    else:
-                        max_meta["fitting_room_look_path"] = "materialize_then_max"
-                        max_meta["look_analysis"] = look_analysis
-                        max_meta["look_materialize"] = look_materialize_meta
-                        max_meta["look_sheer_legs"] = look_sheer
-                        max_meta["look_quality_max"] = max_quality
-                        meta = max_meta
-                        used_provider = str(max_meta.get("provider") or "fashn_tryon_max")
-                        fallback_from = None
-                        openai_operator_detail = None
-                except Exception:  # noqa: BLE001
-                    logger.info(
-                        "Fitting Room job %s Max after materialize failed — OpenAI try-on next",
-                        job.id,
-                        exc_info=True,
-                    )
-                    png = None
         except Exception:  # noqa: BLE001
             # Fail closed: handing the raw Fashion Magic illustration to try-on pastes
             # painted texture onto the person's photo (paid quality failure).
