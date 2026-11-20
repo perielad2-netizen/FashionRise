@@ -962,6 +962,207 @@ def soft_check_look_tryon_result(
     }
 
 
+def _look_result_looks_illustrated(quality: dict[str, Any] | None) -> bool:
+    if not isinstance(quality, dict):
+        return False
+    return "illustrated_texture_suspected" in (quality.get("warnings") or [])
+
+
+# Stronger OpenAI hints when the first try-on still looked like a Magic paste.
+_LOOK_PHOTOREAL_RECOVERY_HINTS = (
+    "CRITICAL RECOVERY: a prior try-on looked like a flat illustration paste or sticker "
+    "overlay. Re-render as a real camera photograph of sewn fabric on the person — "
+    "visible weave, gravity drape, soft contact shadows, scene lighting matched.",
+    "Opaque garment panels must fully replace the person's original clothes underneath. "
+    "No floating petals/leaves, no sketched outlines, no airbrushed concept-art shading.",
+)
+
+
+def _fitting_room_openai_recovery_prompt(data: dict[str, Any], hints: list[str]) -> str:
+    """OpenAI V2.8 + look hints + photoreal recovery boost."""
+    base = _fitting_room_openai_prompt(data, hints) or ""
+    from app.services.personal_try_on_provider import build_try_on_prompt
+
+    if not base.strip():
+        base = build_try_on_prompt(list(hints) + list(_LOOK_PHOTOREAL_RECOVERY_HINTS))
+        return base
+    # Append recovery hints (build_try_on_prompt already applied for look_normalized).
+    extra = " ".join(_LOOK_PHOTOREAL_RECOVERY_HINTS)
+    return f"{base} {extra}".strip()
+
+
+def _recover_illustrated_look_tryon(
+    *,
+    job_id: Any,
+    person_png: bytes,
+    product_png: bytes,
+    data: dict[str, Any],
+    hints: list[str],
+    look_analysis: dict[str, Any] | None,
+    look_palette: dict[str, Any] | None,
+    look_color_lock_on: bool,
+    initial_png: bytes,
+    initial_meta: dict[str, Any],
+    initial_quality: dict[str, Any],
+    initial_provider: str,
+) -> tuple[bytes, dict[str, Any], str, dict[str, Any]]:
+    """Escalate OpenAI recovery → FASHN Max until photoreal, else keep best attempt.
+
+    Never cancels a paid Fitting Room look solely because the soft texture check
+    flagged illustration — keep trying harder providers, then deliver the best image.
+    """
+    attempts: list[dict[str, Any]] = [
+        {
+            "step": "initial",
+            "provider": initial_provider,
+            "illustrated": True,
+            "warnings": list(initial_quality.get("warnings") or []),
+        }
+    ]
+    best_png = initial_png
+    best_meta = dict(initial_meta) if isinstance(initial_meta, dict) else {}
+    best_provider = initial_provider
+    best_quality = initial_quality
+
+    def _maybe_color_lock(candidate: bytes) -> bytes:
+        if not (look_palette and look_color_lock_on):
+            return candidate
+        try:
+            locked, _lock_meta = lock_result_to_palette(candidate, person_png, look_palette)
+            return locked
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Fitting Room job %s recovery color lock failed", job_id, exc_info=True
+            )
+            return candidate
+
+    # 1) OpenAI photoreal recovery retry (stronger anti-paste contract).
+    try:
+        provider = get_try_on_provider("openai")
+        recovery_prompt = _fitting_room_openai_recovery_prompt(data, hints)
+        png, meta = provider.generate(
+            photo_png=person_png,
+            garment_png=product_png,
+            design_hints=hints,
+            prompt_override=recovery_prompt,
+        )
+        if png:
+            png = _maybe_color_lock(png)
+            quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+            illustrated = _look_result_looks_illustrated(quality)
+            attempts.append(
+                {
+                    "step": "openai_photoreal_recovery",
+                    "provider": "openai",
+                    "illustrated": illustrated,
+                    "warnings": list(quality.get("warnings") or []),
+                }
+            )
+            best_png, best_meta, best_provider, best_quality = png, meta if isinstance(meta, dict) else {}, "openai", quality
+            if not illustrated:
+                best_meta = dict(best_meta)
+                best_meta["fitting_room_look_path"] = "materialize_then_openai_recovery"
+                best_meta["look_quality_recovery"] = attempts
+                if isinstance(initial_meta, dict) and initial_meta.get("look_materialize"):
+                    best_meta.setdefault("look_materialize", initial_meta.get("look_materialize"))
+                best_meta.setdefault("look_analysis", look_analysis)
+                logger.info(
+                    "Fitting Room job %s recovery succeeded via OpenAI photoreal retry",
+                    job_id,
+                )
+                return best_png, best_meta, best_provider, best_quality
+    except Exception:  # noqa: BLE001
+        attempts.append(
+            {
+                "step": "openai_photoreal_recovery",
+                "provider": "openai",
+                "error": "provider_failed",
+            }
+        )
+        logger.info(
+            "Fitting Room job %s OpenAI photoreal recovery failed — trying Max",
+            job_id,
+            exc_info=True,
+        )
+
+    # 2) FASHN Max quality · 2k on the materialized product.
+    if _fashn_max_fallback_armed():
+        try:
+            png, meta = _generate_look_try_on_via_max(
+                person_png=person_png,
+                product_png=product_png,
+                palette=look_palette,
+                data=data,
+            )
+            if png:
+                png = _maybe_color_lock(png)
+                quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+                illustrated = _look_result_looks_illustrated(quality)
+                attempts.append(
+                    {
+                        "step": "fashn_max_recovery",
+                        "provider": str((meta or {}).get("provider") or "fashn_tryon_max"),
+                        "illustrated": illustrated,
+                        "warnings": list(quality.get("warnings") or []),
+                    }
+                )
+                best_png = png
+                best_meta = meta if isinstance(meta, dict) else {}
+                best_provider = str(best_meta.get("provider") or "fashn_tryon_max")
+                best_quality = quality
+                best_meta["fitting_room_look_path"] = (
+                    "materialize_then_max_recovery"
+                    if not illustrated
+                    else "materialize_then_max_recovery_soft"
+                )
+                if isinstance(initial_meta, dict) and initial_meta.get("look_materialize"):
+                    best_meta.setdefault("look_materialize", initial_meta.get("look_materialize"))
+                best_meta.setdefault("look_analysis", look_analysis)
+                if not illustrated:
+                    best_meta["look_quality_recovery"] = attempts
+                    logger.info(
+                        "Fitting Room job %s recovery succeeded via FASHN Max",
+                        job_id,
+                    )
+                    return best_png, best_meta, best_provider, best_quality
+        except Exception:  # noqa: BLE001
+            attempts.append(
+                {
+                    "step": "fashn_max_recovery",
+                    "provider": "fashn_tryon_max",
+                    "error": "provider_failed",
+                }
+            )
+            logger.info(
+                "Fitting Room job %s Max recovery failed — keeping best prior attempt",
+                job_id,
+                exc_info=True,
+            )
+
+    # Soft check may false-positive on busy outdoor photos; never cancel after paid
+    # generation — deliver the best attempt with recovery telemetry.
+    if not isinstance(best_meta, dict):
+        best_meta = {}
+    best_meta = dict(best_meta)
+    best_meta.setdefault(
+        "fitting_room_look_path",
+        (initial_meta or {}).get("fitting_room_look_path")
+        if isinstance(initial_meta, dict)
+        else "materialize_then_openai_kept_after_recovery",
+    )
+    if isinstance(initial_meta, dict) and initial_meta.get("look_materialize"):
+        best_meta.setdefault("look_materialize", initial_meta.get("look_materialize"))
+    best_meta.setdefault("look_analysis", look_analysis)
+    best_meta["look_quality_recovery"] = attempts
+    best_meta["look_quality_kept_despite_soft_check"] = True
+    logger.info(
+        "Fitting Room job %s keeping best look attempt after recovery attempts=%s",
+        job_id,
+        len(attempts),
+    )
+    return best_png, best_meta, best_provider, best_quality
+
+
 def reinforce_look_plate_panel_colors(
     garment_png: bytes,
     lock: dict[str, Any] | None,
@@ -1635,17 +1836,33 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         look_quality = soft_check_look_tryon_result(
             png, look_analysis=look_analysis
         )
-        if "illustrated_texture_suspected" in (look_quality.get("warnings") or []):
+        if _look_result_looks_illustrated(look_quality):
+            # Do not cancel a paid look try-on on soft texture alone — escalate
+            # OpenAI photoreal recovery → FASHN Max, then keep the best attempt.
             logger.info(
-                "Fitting Room job %s rejecting illustrated look result path=%s",
+                "Fitting Room job %s illustrated soft-check — escalating recovery path=%s",
                 job.id,
                 (meta or {}).get("fitting_room_look_path") if isinstance(meta, dict) else None,
             )
-            return _fail(
-                "Fitting Room could not produce a photoreal preview of this look. "
-                "Try again in a moment. No Stars were charged.",
-                code="LOOK_QUALITY_REJECTED",
+            png, meta, used_provider, look_quality = _recover_illustrated_look_tryon(
+                job_id=job.id,
+                person_png=person_png,
+                product_png=garment_png,
+                data=data,
+                hints=hints,
+                look_analysis=look_analysis,
+                look_palette=look_palette,
+                look_color_lock_on=look_color_lock_on,
+                initial_png=png,
+                initial_meta=meta if isinstance(meta, dict) else {},
+                initial_quality=look_quality,
+                initial_provider=used_provider,
             )
+            if not png:
+                return _fail(
+                    "Fitting Room could not finish this look preview. No Stars were charged.",
+                    code="LOOK_RECOVERY_EMPTY",
+                )
 
     key = f"ai/{job.id.hex}_fitting_{uuid.uuid4().hex[:10]}.png"
     url = LocalStorageBackend().save_file(key=key, data=io.BytesIO(png), content_type="image/png")
@@ -1711,6 +1928,10 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             }
         if meta.get("look_quality_max_rejected") is not None:
             result["look_quality_max_rejected"] = meta.get("look_quality_max_rejected")
+        if meta.get("look_quality_recovery") is not None:
+            result["look_quality_recovery"] = meta.get("look_quality_recovery")
+        if meta.get("look_quality_kept_despite_soft_check"):
+            result["look_quality_kept_despite_soft_check"] = True
         if meta.get("look_analysis") is not None:
             result["look_analysis"] = meta.get("look_analysis")
         elif look_analysis is not None:

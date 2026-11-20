@@ -1124,8 +1124,8 @@ def test_look_openai_moderation_falls_back_to_max_with_product(client, db_sessio
     assert "fashn" in str(result.get("provider") or "")
 
 
-def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch):
-    """Do not charge Stars when the finished preview still looks like a paste."""
+def test_look_final_illustrated_quality_recovers_via_openai(client, db_session, monkeypatch):
+    """Soft illustrated check must escalate OpenAI recovery — never cancel the try-on."""
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
@@ -1134,6 +1134,81 @@ def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch)
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
     product_png = product_photo_png()
+    soft_calls = {"n": 0}
+
+    def _fake_materialize(**_kwargs):
+        return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
+
+    def _soft(png, *, look_analysis=None):
+        soft_calls["n"] += 1
+        # First result looks illustrated; recovery retry clears.
+        if soft_calls["n"] == 1:
+            return {
+                "ok": False,
+                "warnings": ["illustrated_texture_suspected"],
+                "result_skin_ratio_lower": 0.1,
+                "sheer_expected": False,
+                "texture": {"illustrated_texture_suspected": True},
+            }
+        return {
+            "ok": True,
+            "warnings": [],
+            "result_skin_ratio_lower": 0.1,
+            "sheer_expected": False,
+            "texture": {"illustrated_texture_suspected": False},
+        }
+
+    openai_mock = MockTryOnProvider()
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
+    monkeypatch.setattr(fr, "soft_check_look_tryon_result", _soft)
+    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
+    monkeypatch.setattr(
+        fr,
+        "_generate_look_try_on_via_max",
+        lambda **_k: (_ for _ in ()).throw(AssertionError("Max unused when OpenAI recovers")),
+    )
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_quality_recover",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
+        ),
+    )
+    before = (
+        db_session.query(User).filter(User.username == "fr_look_quality_recover").one().ai_stars
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    result = job.result_data or {}
+    assert result.get("error_code") is None
+    assert result.get("fitting_room_look_path") == "materialize_then_openai_recovery"
+    assert result.get("image_url")
+    recovery = result.get("look_quality_recovery") or []
+    assert any(step.get("step") == "openai_photoreal_recovery" for step in recovery)
+    after = (
+        db_session.query(User).filter(User.username == "fr_look_quality_recover").one().ai_stars
+    )
+    assert after == before - 20
+    assert openai_mock.calls == 2  # initial + recovery
+    assert soft_calls["n"] == 2
+
+
+def test_look_final_illustrated_quality_keeps_best_after_max(client, db_session, monkeypatch):
+    """If soft-check stays red after OpenAI+Max, still deliver the best preview (charge Stars)."""
+    import app.services.look_garment_normalize as lgn
+    from app.models.user import User
+    from app.services import fitting_room as fr
+    from tests.look_test_images import look_plate_png, person_photo_png, product_photo_png
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    product_png = product_photo_png()
+    max_calls = {"n": 0}
 
     def _fake_materialize(**_kwargs):
         return product_png, {"provider": "openai_look_materialize", "openai_calls": 1}
@@ -1147,38 +1222,44 @@ def test_look_final_illustrated_quality_rejects(client, db_session, monkeypatch)
             "texture": {"illustrated_texture_suspected": True},
         }
 
+    def _fake_max(**_kwargs):
+        max_calls["n"] += 1
+        out = _png_bytes((90, 130), (40, 50, 60, 255))
+        return out, {"provider": "fashn_tryon_max", "generation_mode": "quality", "resolution": "2k"}
+
     openai_mock = MockTryOnProvider()
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
     monkeypatch.setattr(fr, "soft_check_look_tryon_result", _soft)
     monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: openai_mock)
-    monkeypatch.setattr(
-        fr,
-        "_generate_look_try_on_via_max",
-        lambda **_k: (_ for _ in ()).throw(AssertionError("Max unused when OpenAI returns")),
-    )
+    monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _fake_max)
     set_try_on_provider_override(None)
 
     job = _enqueue_look_job(
         client,
         db_session,
-        username="fr_look_quality_reject",
+        username="fr_look_quality_keep",
         body=_look_try_on_body(
             look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
         ),
     )
     before = (
-        db_session.query(User).filter(User.username == "fr_look_quality_reject").one().ai_stars
+        db_session.query(User).filter(User.username == "fr_look_quality_keep").one().ai_stars
     )
     assert run_magic_worker_tick(db_session) >= 1
     db_session.expire_all()
     job = db_session.get(AIJob, job.id)
-    assert job.status == "failed"
-    assert (job.result_data or {}).get("error_code") == "LOOK_QUALITY_REJECTED"
+    assert job.status == "completed", job.error_message
+    result = job.result_data or {}
+    assert result.get("error_code") != "LOOK_QUALITY_REJECTED"
+    assert result.get("look_quality_kept_despite_soft_check") is True
+    assert "max_recovery" in str(result.get("fitting_room_look_path") or "")
+    assert result.get("image_url")
+    assert max_calls["n"] == 1
+    assert openai_mock.calls == 2
     after = (
-        db_session.query(User).filter(User.username == "fr_look_quality_reject").one().ai_stars
+        db_session.query(User).filter(User.username == "fr_look_quality_keep").one().ai_stars
     )
-    assert after == before
-    assert openai_mock.calls == 1
+    assert after == before - 20
 
 
 def test_look_prompts_keep_contract_and_fit_max_limit():
