@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Fitting Room boots + Magic Dual Back lock (2026-11-20 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PRs | [#455](https://github.com/perielad2-netizen/FashionRise/pull/455) boots multi-piece · [#456](https://github.com/perielad2-netizen/FashionRise/pull/456) Dual Back true-rear lock → `main` @ **`eab251ed`** |
+| Fitting Room | Dress + boot collage was dropping the boot (Max apparel-only). Outfit Max/OpenAI prompts keep footwear; tag boots as **shoes** |
+| Magic Back | Back hoodie invented holes; rear shoes looked like front shoes. **BACK OUTPUT LOCK** — figure faces away, continuous back panels, rear footwear |
+| Tip | BE `/opt/fashionrise/src` @ **`eab251ed`** · FE `/var/www/fashionrise/releases/eab251ed-boots-back` · `/version.json` → `eab251ed` |
+| Verify | `curl -sS https://fashionrise.app/version.json` → `eab251ed`; fitting-room preflight `401`; Dual Back notes mention TRUE rear |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/f0ebb2c0-admin-mobile /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | `cd /opt/fashionrise/src && sudo -u fashionriseapp git checkout --detach f0ebb2c0 && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+
 ## Deployed — Social Try on me: real fabric + design colors (2026-11-18 Asia/Jerusalem)
 
 | Field | Value |
