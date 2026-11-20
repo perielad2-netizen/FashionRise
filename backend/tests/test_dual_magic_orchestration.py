@@ -800,11 +800,49 @@ def test_back_side_prompt_language():
     assert "back" in user_text.lower()
     assert "SHARED GARMENT SPEC" in user_text
     assert "evening gown" in user_text or "garment_category" in user_text
+    assert "BACK AI FOCUS" in user_text or "true rear" in user_text.lower()
+    assert "hole" in user_text.lower()
+    assert "footwear" in user_text.lower() or "shoe" in user_text.lower()
 
     prompt = sketch_openai._build_image_prompt({"image_prompt": "back straps"}, "summary", job)
-    assert "rear" in prompt.lower() or "back" in prompt.lower()
-    assert "front-facing sketch" in prompt.lower() or "not a front" in prompt.lower()
+    lower = prompt.lower()
+    assert "rear" in lower or "back" in lower
+    assert "front-facing sketch" in lower or "not a front" in lower or "faces away" in lower
     assert "SHARED GARMENT SPEC" in prompt or "evening gown" in prompt
+    assert "back output lock" in lower
+    assert "hole" in lower or "cut-out" in lower
+    assert "heel" in lower or "rear footwear" in lower or "from behind" in lower
+    assert "front toe" in lower or "front-of-shoe" in lower or "front shoe" in lower
+
+
+def test_back_edit_prompt_locks_true_rear_no_hoodie_hole_no_front_shoes():
+    """QA: Back hoodie invented a hole; rear shoes looked like front shoes."""
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(
+        id=uuid4(),
+        job_type="sketch_polish",
+        input_data={
+            "studio_side": "back",
+            "magic_operation_id": "op-back-qa",
+            "pair_reference_base64": "data:image/png;base64,aaa",
+            "shared_garment_spec": {"garment_category": "hoodie"},
+        },
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {"image_prompt": "black hoodie back with boots"},
+        "rear hoodie",
+        job,
+    )
+    lower = prompt.lower()
+    assert "back output lock" in lower
+    assert "faces away" in lower or "true rear" in lower
+    assert "hoodie" in lower or "jacket" in lower or "continuous" in lower
+    assert "hole" in lower
+    assert "from behind" in lower or "heel counter" in lower
+    assert "front toe" in lower or "front-of-shoe" in lower or "front shoe" in lower
+    assert "pair reference" in lower
+    assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
 
 
 def test_front_side_prompt_does_not_claim_rear():
