@@ -1,8 +1,9 @@
 .scrim {
   position: fixed;
   inset: 0;
-  /* Above look-detail / sheet overlays (80) so nested confirms stay interactive. */
-  z-index: 95;
+  /* Above shell header menus (≤90) and look sheets (80). Fitting Room wait uses 1200;
+     stay below that so wait/preview can cover this Stars confirm after Approve. */
+  z-index: 1100;
   background: rgba(4, 6, 12, 0.78);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

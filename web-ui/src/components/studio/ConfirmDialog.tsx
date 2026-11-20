@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode, type SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
 import styles from './ConfirmDialog.module.css'
 
 type Action = {
@@ -94,11 +95,16 @@ export function ConfirmDialog({
     event.stopPropagation()
   }
 
-  return (
+  // Portal to document.body so position:fixed centers on the real viewport.
+  // Fitting Room / shell panes use overflow + enter animations (transform), which
+  // otherwise trap fixed dialogs and pin Approve/Cancel to the top of the scroll
+  // area (QA: Try on AI window not centered).
+  const node = (
     <div
       className={`fr-keyboard-overlay ${styles.scrim}`}
       role="presentation"
       data-testid="confirm-dialog-scrim"
+      data-portal="document-body"
       onPointerDown={stopOverlayDismiss}
       onMouseDown={stopOverlayDismiss}
       onClick={stopOverlayDismiss}
@@ -143,6 +149,9 @@ export function ConfirmDialog({
       </div>
     </div>
   )
+
+  if (typeof document === 'undefined') return node
+  return createPortal(node, document.body)
 }
 
 export { styles as confirmDialogStyles }

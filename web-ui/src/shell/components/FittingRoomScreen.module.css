@@ -624,14 +624,14 @@
   }
 }
 
+/* Opacity-only: a transform here traps position:fixed descendants (Stars Approve
+   dialog) inside the scroll pane so Try on no longer centers on the viewport. */
 @keyframes fittingRise {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
