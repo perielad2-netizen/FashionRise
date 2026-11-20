@@ -101,7 +101,6 @@ export function MagicLookPanel({
   void _onCancel
   const [compareSketch, setCompareSketch] = useState(false)
   const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
-  const [detailsOpen, setDetailsOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [downloadBusy, setDownloadBusy] = useState(false)
   const downloadInFlight = useRef(false)
@@ -196,7 +195,6 @@ export function MagicLookPanel({
     tryOnCompare === 'side_by_side' &&
     Boolean(activeLookUrl) &&
     Boolean(originalPhotoUrl)
-  const hasDetails = Boolean(activeResult?.summary || activeResult?.bullets?.length)
   const structureRejected = Boolean(activeResult?.structureRejected)
   const fidelityBanner =
     structureRejected &&
@@ -219,10 +217,10 @@ export function MagicLookPanel({
     title: tryOn ? 'Try-on look' : dualActive ? `Magic look (${activeSide})` : 'Magic look',
     imageUrl: activeLookUrl,
     imageFileName: tryOn
-      ? 'fashionrise-tryon.png'
+      ? `fashionrise-tryon-${Date.now()}.png`
       : dualActive
-        ? `fashionrise-look-${activeSide}.png`
-        : 'fashionrise-look.png',
+        ? `fashionrise-look-${activeSide}-${Date.now()}.png`
+        : `fashionrise-look-${Date.now()}.png`,
   }
   const onShareLook = () => {
     void (async () => {
@@ -515,31 +513,6 @@ export function MagicLookPanel({
         </div>
 
         {error && phase !== 'failed' ? <p className={styles.error}>{error}</p> : null}
-
-        {hasDetails && phase === 'ready' ? (
-          <div className={styles.details}>
-            <button
-              type="button"
-              className={styles.detailsToggle}
-              aria-expanded={detailsOpen}
-              onClick={() => setDetailsOpen((v) => !v)}
-            >
-              {detailsOpen ? 'Hide look notes' : 'Show look notes'}
-            </button>
-            {detailsOpen ? (
-              <>
-                {activeResult?.summary ? <p className={styles.summary}>{activeResult.summary}</p> : null}
-                {activeResult?.bullets?.length ? (
-                  <ul className={styles.bullets}>
-                    {activeResult.bullets.slice(0, 6).map((b) => (
-                      <li key={b}>{b}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : null}
 
         {tryOn &&
         phase === 'ready' &&

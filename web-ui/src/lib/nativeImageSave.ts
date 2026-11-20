@@ -133,12 +133,20 @@ export async function saveImageBlobNative(
   }
 
   const base64 = await blobToBase64(blob)
-  const cachePath = `fr-dl/${Date.now()}-${safeName}`
+  // Unique per save so Android MediaStore does not overwrite the previous download
+  // when the caller reuses a minute-stamped or fixed filename.
+  const unique =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+  const stamp = Date.now()
+  const cachePath = `fr-dl/${stamp}-${unique}-${safeName}`
   const write = deps.writeCacheFile ?? writeCacheFileForDownload
   const { uri } = await write(cachePath, base64)
   if (!uri) throw new Error('Could not write the image to device storage')
 
-  const fileNameNoExt = safeName.replace(/\.[^.]+$/, '') || 'fashionrise-look'
+  const baseNoExt = safeName.replace(/\.[^.]+$/, '') || 'fashionrise-look'
+  const fileNameNoExt = `${baseNoExt}-${stamp}-${unique}`
   const ensureAlbum = deps.ensureAlbumId ?? defaultEnsureAlbumId
   const savePhoto = deps.savePhoto ?? defaultSavePhoto
 

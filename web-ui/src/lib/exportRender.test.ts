@@ -287,10 +287,14 @@ describe('download and filename', () => {
 
   it('builds safe human-readable filenames', () => {
     const now = new Date(2026, 9, 20, 9, 5)
-    expect(exportFilename(null, now)).toBe('fashionrise-sketch-2026-10-20-0905.png')
-    expect(exportFilename('Évening Gown / v2', now)).toBe('fashionrise-evening-gown-v2-2026-10-20-0905.png')
-    expect(exportFilename('../../etc/passwd', now)).toBe('fashionrise-etc-passwd-2026-10-20-0905.png')
-    expect(exportFilename('שמלה', now)).toBe('fashionrise-sketch-2026-10-20-0905.png')
+    expect(exportFilename(null, now)).toBe('fashionrise-sketch-2026-10-20-090500000.png')
+    expect(exportFilename('Évening Gown / v2', now)).toBe(
+      'fashionrise-evening-gown-v2-2026-10-20-090500000.png',
+    )
+    expect(exportFilename('../../etc/passwd', now)).toBe(
+      'fashionrise-etc-passwd-2026-10-20-090500000.png',
+    )
+    expect(exportFilename('שמלה', now)).toBe('fashionrise-sketch-2026-10-20-090500000.png')
   })
 })
 
