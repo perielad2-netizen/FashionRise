@@ -1662,9 +1662,9 @@ export function useStudioEditor() {
           updatedAt: new Date().toISOString(),
         })
         const smartBackNotes =
-          'Smart back completion: designer left Back empty. Invent a coherent rear fashion illustration matching the Front garment silhouette, materials, proportions, and construction. Propose a professional Back view on the rear croquis — do not leave Back blank; never invent an unrelated bodysuit.'
+          'Smart back completion: designer left Back empty. Invent a TRUE rear-facing fashion illustration (figure faces away) matching the Front garment silhouette, materials, proportions, and construction. Continuous back panels — no invented hoodie/jacket holes. Draw footwear from behind (heel/counter), never front shoe faces. Propose a professional Back view on the rear croquis — do not leave Back blank; never invent an unrelated bodysuit.'
         const dualBackNotes =
-          'polish concept (back): same garment as Front per SHARED GARMENT SPEC and pair Front sketch — match category/silhouette/color story; never invent an unrelated bodysuit or different outfit; Ready is per-side success, not a perfect-match promise'
+          'polish concept (BACK AI image): TRUE rear view only — figure faces away; focus on dorsal construction (back of hood/head, center-back, rear hem). Same garment as Front per SHARED GARMENT SPEC and pair Front sketch. Continuous opaque back panels — do not invent holes/cut-outs in hoodie/jacket backs unless clearly drawn. Rear footwear perspective (heel/counter), never paste front-of-shoe onto a back-facing figure. Never invent an unrelated bodysuit or different outfit; Ready is per-side success, not a perfect-match promise'
         const enqueued = await enqueueDualPolish({
           design_id: designId,
           magic_operation_id: operationId,
@@ -3339,7 +3339,7 @@ export function useStudioEditor() {
                 : {}),
               notes:
                 side === 'back'
-                  ? 'polish concept (back) retry — match Front garment identity; preserve sibling Front result; never invent an unrelated bodysuit'
+                  ? 'polish concept (BACK AI image) retry — TRUE rear view (figure faces away); match Front garment identity; continuous back panels (no invented hoodie holes); rear footwear only; preserve sibling Front result; never invent an unrelated bodysuit'
                   : `polish concept (${side}) retry`,
               designId: stored.designId ?? designIdRef.current,
               magic_operation_id: operationId,

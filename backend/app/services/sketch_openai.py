@@ -89,11 +89,12 @@ _FABRIC_SWATCH_EDIT_CONTRACT = (
 
 # V2-0017: paired Front sketch as Image 2 when Back Dual Magic has no fabric swatch.
 _PAIR_REFERENCE_EDIT_CONTRACT = (
-    "PAIR REFERENCE (Front→Back consistency): Image 1 is the BACK sketch to polish. "
-    "Image 2 is the paired FRONT sketch from the same Dual Magic design — use it ONLY for "
-    "garment identity (category, silhouette/cut, color story, materials, construction). "
-    "Do NOT copy the front pose as a front view, invent a different garment, or substitute "
-    "a plain bodysuit/modesty panel. Deliver a coherent BACK view of the SAME garment."
+    "PAIR REFERENCE (Front→Back consistency): Image 1 is the BACK sketch to polish — the "
+    "OUTPUT must stay a true REAR view. Image 2 is the paired FRONT sketch from the same "
+    "Dual Magic design — use it ONLY for garment identity (category, silhouette/cut, color "
+    "story, materials, construction). Do NOT copy the front pose as a front view, mirror "
+    "front-facing details onto the back, invent a different garment, or substitute a plain "
+    "bodysuit/modesty panel. Deliver a coherent BACK view of the SAME garment."
 )
 
 # Text-only Dual Magic Back contract (also used when Image 2 is a fabric swatch).
@@ -101,7 +102,22 @@ _FRONT_BACK_PAIR_TEXT_CONTRACT = (
     "FRONT/BACK PAIR: This Back job is part of a coordinated Dual Magic operation. Match "
     "SHARED GARMENT SPEC and Front garment identity. Never invent an unrelated outfit or "
     "bodysuit. Each side Ready means that side succeeded — Back must still depict the same "
-    "design concept as Front."
+    "design concept as Front, drawn as a true rear-facing illustration (not a flipped Front)."
+)
+
+# Protected Back-only fidelity — true rear camera, no invented back holes, rear footwear.
+_BACK_VIEW_FIDELITY_CONTRACT = (
+    "BACK OUTPUT LOCK (critical): Produce a TRUE REAR / BACK fashion illustration — the "
+    "figure faces AWAY from the viewer. Focus the entire image on dorsal construction: "
+    "back of head/hood, upper back, center-back seams/closures, rear of sleeves, rear hem. "
+    "Do NOT output a front view, three-quarter front, or a flipped Front. "
+    "HOODIE/JACKET/TOP BACK: Keep a continuous opaque back panel. Do NOT invent a hole, "
+    "cut-out, open window, or missing fabric in the center back unless Image 1 clearly "
+    "draws that opening as intentional design. Treat accidental sketch gaps as fabric to "
+    "restore, not as designed holes. "
+    "REAR FOOTWEAR: When boots/shoes/heels are present, draw them FROM BEHIND (heel "
+    "counter, rear shaft, sole from the rear). Never paste a front toe-box / front-of-shoe "
+    "face onto a rear-facing figure."
 )
 
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.
@@ -122,7 +138,9 @@ _DESIGN_ENHANCEMENT_CONTRACT = (
     "FOOTWEAR HEELS: When Image 1 shows boots, heels, or stilettos, finish a coherent heel "
     "structure — solid sole-to-tip attachment, centered under each heel, left/right matched "
     "as designed. Especially on Back views: no melted, floating, needle-warped, or "
-    "half-missing heels; keep sketched footwear readable and structurally sound."
+    "half-missing heels; keep sketched footwear readable and structurally sound; on Back "
+    "draw footwear from the REAR (heel/counter), never a front shoe face on a back-facing "
+    "figure."
 )
 
 # Illustration-style restriction — equal priority with coverage; must not be truncated
@@ -603,25 +621,39 @@ def _studio_side_vision_clause(side: str | None, *, smart_back: bool = False) ->
             "or claim this is a rear view."
         )
     if side == "back":
+        fidelity = (
+            "BACK AI FOCUS: Your image_prompt MUST describe a true rear-facing figure "
+            "(back of head/hood, dorsal panels, rear footwear). Do NOT invent center-back "
+            "holes in hoodies/jackets unless clearly drawn. Do NOT describe front-of-shoe "
+            "views on a rear figure. "
+        )
         if smart_back:
             return (
                 "STUDIO VIEW: REAR / BACK of the SAME garment. Image 1 is the FRONT sketch used as a "
                 "design seed (Smart Back) — invent the coherent rear view of that outfit on the same "
-                "fashion figure. Preserve full garment coverage from behind (hood, cape/robe/body, "
-                "sleeves, length, hem) matching Front. Do NOT return a bare croquis, underwear/socks "
-                "only, or a different garment. Male and female croquis both require the full designed "
-                "outfit on the back. Target polished professional enhancement quality equal to Front."
+                "fashion figure facing AWAY from the viewer. Preserve full garment coverage from behind "
+                "(hood, cape/robe/body, sleeves, length, hem) matching Front — continuous back fabric, "
+                "no invented back holes. Do NOT return a bare croquis, underwear/socks only, a front "
+                "view, or a different garment. Male and female croquis both require the full designed "
+                "outfit on the back. Target polished professional enhancement quality equal to Front. "
+                f"{fidelity}"
             )
         return (
-            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch — use neutral "
+            "STUDIO VIEW: REAR / BACK of the garment. This upload is the BACK sketch — the AI "
+            "image you prepare MUST be a true rear view (figure facing away). Use neutral "
             "professional fashion-illustration language for rear garment construction "
-            "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
-            "rear hem, coverage panels as designed). Show the SAME garment coverage as Front from "
-            "behind (hoods, robes, coats, full-length pieces included). Do NOT strip the design down "
-            "to underwear/socks or a bare croquis unless Front is swimwear/lingerie. Target the same "
-            "polished professional enhancement quality as Front — not a traced or cartoon back sketch. "
-            "Do NOT claim this is the front view or invent a different garment (especially not a plain "
-            "bodysuit) that contradicts SHARED GARMENT SPEC. Works for male and female fashion croquis."
+            "(dorsal silhouette, back of hood/head, back neckline, back straps or ties, rear "
+            "closures, center-back seams, rear hem, coverage panels as designed). Show the SAME "
+            "garment coverage as Front from behind (hoods, robes, coats, full-length pieces "
+            "included) with continuous opaque back panels — do NOT invent a hole or open window "
+            "in a hoodie/jacket back unless the sketch clearly draws one. Footwear from behind "
+            "(heel/counter), never a front shoe face. Do NOT strip the design down to "
+            "underwear/socks or a bare croquis unless Front is swimwear/lingerie. Target the same "
+            "polished professional enhancement quality as Front — not a traced or cartoon back "
+            "sketch. Do NOT claim this is the front view or invent a different garment (especially "
+            "not a plain bodysuit) that contradicts SHARED GARMENT SPEC. Works for male and female "
+            "fashion croquis. "
+            f"{fidelity}"
         )
     return ""
 
@@ -633,19 +665,26 @@ def _studio_side_edit_clause(side: str | None, *, smart_back: bool = False) -> s
             "materials; polish imperfections; not a rear/back view. "
         )
     if side == "back":
+        lock = f"{_BACK_VIEW_FIDELITY_CONTRACT} "
         if smart_back:
             return (
-                "VIEW: rear/back fashion illustration invented from the Front design seed — full "
-                "matching outfit from behind (not underwear-only); same polished quality as front; "
-                "never invent a different garment that contradicts SHARED GARMENT SPEC. "
+                "VIEW: TRUE rear/back fashion illustration invented from the Front design seed — "
+                "figure faces away; full matching outfit from behind (not underwear-only); "
+                "continuous back fabric (no invented hoodie/jacket holes); rear footwear "
+                "perspective; same polished quality as front; never invent a different garment "
+                "that contradicts SHARED GARMENT SPEC. "
+                f"{lock}"
             )
         return (
-            "VIEW: rear/back fashion illustration — accurate back necklines, straps/ties, "
-            "dorsal seams, rear hem as designed; keep the SAME full garment coverage as Front "
-            "(robes/hoods/coats included); never strip to underwear/socks unless Front is "
-            "swimwear/lingerie; same polished quality as front (not traced/cartoon); never "
-            "describe this upload as a front-facing sketch; never invent a different garment or "
-            "bodysuit that contradicts SHARED GARMENT SPEC. "
+            "VIEW: TRUE rear/back fashion illustration — figure faces away from the viewer; "
+            "accurate back necklines, straps/ties, dorsal seams, rear hem as designed; keep "
+            "the SAME full garment coverage as Front (robes/hoods/coats included) with "
+            "continuous back panels (no invented center-back holes); rear footwear "
+            "perspective (not front shoe faces); never strip to underwear/socks unless Front "
+            "is swimwear/lingerie; same polished quality as front (not traced/cartoon); never "
+            "describe this upload as a front-facing sketch; never invent a different garment "
+            "or bodysuit that contradicts SHARED GARMENT SPEC. "
+            f"{lock}"
         )
     return ""
 
