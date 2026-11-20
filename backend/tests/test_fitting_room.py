@@ -99,7 +99,9 @@ def test_preflight_fail_closed(client, db_session):
     assert body["consent_version"] == FITTING_ROOM_CONSENT_VERSION
     assert "auto" in body["supported_categories"]
     assert body["stars_cost"] == 20
-    assert "flat" in (body.get("stars_cost_note") or "").lower()
+    note = (body.get("stars_cost_note") or "").lower()
+    assert "20" in note or "stars" in note
+    assert body.get("max_outfit_pieces") == 1
 
 
 def test_enqueue_blocked_when_disabled(client, db_session):
@@ -150,8 +152,6 @@ def test_fitting_room_success_flat_20_stars(client, db_session, monkeypatch):
             "person_image_base64": _data_url((180, 120, 90, 255)),
             "garment_pieces": [
                 {"image_base64": _data_url((40, 80, 200, 255)), "category": "tops"},
-                {"image_base64": _data_url((20, 160, 80, 255)), "category": "bottoms"},
-                {"image_base64": _data_url((180, 40, 40, 255)), "category": "outerwear"},
             ],
             "idempotency_key": key,
             "consent_acknowledged": True,
@@ -172,7 +172,7 @@ def test_fitting_room_success_flat_20_stars(client, db_session, monkeypatch):
     assert job is not None
     assert job.status == "completed"
     assert mock.calls == 1
-    assert any("outfit_piece_count:3" in h for h in mock.last_hints)
+    assert any("outfit_piece_count:1" in h for h in mock.last_hints)
     result = job.result_data or {}
     assert result.get("image_url")
     assert result.get("mode") == "fitting_room"
@@ -180,8 +180,48 @@ def test_fitting_room_success_flat_20_stars(client, db_session, monkeypatch):
     assert result.get("stars_debited") is True
     assert "preview" in (result.get("summary") or "").lower()
     after = db_session.query(User).filter(User.username == "fr_ok").one().ai_stars
-    # Flat 20 even for 3 pieces — not 60.
     assert after == before - 20
+
+
+def test_fitting_room_rejects_multi_piece_outfit(client, db_session, monkeypatch):
+    """Collage multi-item (dress+boot+gloves) is not reliable — enforce one piece."""
+    from app.services.fitting_room import MAX_OUTFIT_PIECES
+
+    assert MAX_OUTFIT_PIECES == 1
+    _enable_fitting_room(monkeypatch)
+    set_try_on_provider_override(MockTryOnProvider())
+    tokens = register_with_invite(
+        client, db_session, email="fr-multi@example.com", username="fr_multi"
+    )
+    _grant_stars(db_session, "fr_multi", amount=40)
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(tokens),
+        json={
+            "person_image_base64": _data_url((180, 120, 90, 255)),
+            "garment_pieces": [
+                {"image_base64": _data_url((40, 80, 200, 255)), "category": "dresses"},
+                {"image_base64": _data_url((20, 20, 20, 255)), "category": "shoes"},
+            ],
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert "at most 1" in (r.json().get("detail") or "").lower()
+
+
+def test_preflight_reports_max_one_outfit_piece(client, db_session, monkeypatch):
+    _enable_fitting_room(monkeypatch)
+    tokens = register_with_invite(
+        client, db_session, email="fr-max1@example.com", username="fr_max1"
+    )
+    r = client.get(f"{FR}/preflight", headers=_auth(tokens))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["max_outfit_pieces"] == 1
+    assert "one clothing or shoes" in (body.get("stars_cost_note") or "").lower()
 
 
 def test_fitting_room_social_tryon_credits_other_designer_two_stars(
@@ -1267,9 +1307,8 @@ def test_single_dress_keeps_apparel_only_max_prompt():
     assert _fitting_room_max_prompt(data) == FITTING_ROOM_MAX_PROMPT
 
 
-def test_enqueue_dress_plus_boot_emits_footwear_collage_hints(
-    client, db_session, monkeypatch
-):
+def test_enqueue_shoes_only_emits_footwear_hint(client, db_session, monkeypatch):
+    """Single shoes piece still gets the footwear contract (one item at a time)."""
     _enable_fitting_room(monkeypatch)
     mock = MockTryOnProvider()
     set_try_on_provider_override(mock)
@@ -1285,8 +1324,7 @@ def test_enqueue_dress_plus_boot_emits_footwear_collage_hints(
         json={
             "person_image_base64": _data_url((180, 120, 90, 255)),
             "garment_pieces": [
-                {"image_base64": _data_url((40, 80, 200, 255)), "category": "dresses"},
-                {"image_base64": _data_url((20, 20, 20, 255)), "category": "auto"},
+                {"image_base64": _data_url((20, 20, 20, 255)), "category": "shoes"},
             ],
             "idempotency_key": key,
             "consent_acknowledged": True,
@@ -1297,6 +1335,5 @@ def test_enqueue_dress_plus_boot_emits_footwear_collage_hints(
     processed = run_magic_worker_tick(db_session, limit=4)
     assert processed >= 1
     joined = " | ".join(mock.last_hints)
-    assert "outfit_piece_count:2" in joined
-    assert "MULTI_PIECE_COLLAGE" in joined
-    assert "boot" in joined.lower() or "footwear" in joined.lower() or "shoe" in joined.lower()
+    assert "outfit_piece_count:1" in joined
+    assert "FOOTWEAR" in joined or "shoes" in joined.lower()
