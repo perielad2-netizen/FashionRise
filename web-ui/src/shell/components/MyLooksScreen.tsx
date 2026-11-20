@@ -415,7 +415,7 @@ function LookDetailDialog({
                 setError(null)
                 showDownloadNotice('Saving image…', 'info')
                 setDownloadBusy(true)
-                void downloadJobImage(jobId, `${look.title}-${side}.png`)
+                void downloadJobImage(jobId, `${look.title}-${side}-${Date.now()}.png`)
                   .then((method) => {
                     setError(null)
                     // Only gallery/web are confirmed saves. Share sheet is not success.

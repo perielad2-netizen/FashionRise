@@ -845,6 +845,33 @@ def test_back_edit_prompt_locks_true_rear_no_hoodie_hole_no_front_shoes():
     assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
 
 
+def test_back_edit_prompt_keeps_top_and_bottoms_no_bare_legs():
+    """QA: Back of hoodie+bottoms dropped pants and left bare legs."""
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(
+        id=uuid4(),
+        job_type="sketch_polish",
+        input_data={
+            "studio_side": "back",
+            "magic_operation_id": "op-back-bottoms",
+            "pair_reference_base64": "data:image/png;base64,aaa",
+            "shared_garment_spec": {"garment_category": "studio"},
+            "notes": "hoodie with shorts streetwear",
+        },
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {"image_prompt": "black oversized hoodie with shorts from behind"},
+        "rear streetwear",
+        job,
+    )
+    lower = prompt.lower()
+    assert "back output lock" in lower
+    assert "pants" in lower or "shorts" in lower or "bottoms" in lower
+    assert "bare legs" in lower
+    assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+
+
 def test_front_side_prompt_does_not_claim_rear():
     from types import SimpleNamespace
 

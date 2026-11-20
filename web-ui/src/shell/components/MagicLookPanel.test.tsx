@@ -42,9 +42,9 @@ describe('MagicLookPanel', () => {
     expect(onDownload).toHaveBeenCalledTimes(1)
     expect(await screen.findByTestId('magic-download-notice')).toHaveTextContent('Saved ✓')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show look notes' }))
-    expect(screen.getByText('A couture look')).toBeTruthy()
-    expect(screen.getByText('Hat')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show look notes' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hide look notes' })).toBeNull()
+    expect(screen.queryByText('A couture look')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Compare sketch' }))
     expect(await screen.findByAltText('Original sketch')).toBeTruthy()

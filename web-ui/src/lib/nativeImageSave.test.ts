@@ -82,10 +82,32 @@ describe('nativeImageSave', () => {
       expect.objectContaining({
         path: 'file:///cache/look.png',
         albumIdentifier: 'album-1',
-        fileName: 'Blush-gown-front',
+        // Unique suffix so Android MediaStore does not overwrite the prior download.
+        fileName: expect.stringMatching(/^Blush-gown-front-\d+-[a-z0-9]+$/i),
       }),
     )
     expect(shareFiles).not.toHaveBeenCalled()
+  })
+
+  it('uses a unique MediaStore fileName on every Android save', async () => {
+    const names: string[] = []
+    const savePhoto = vi.fn(async (opts: { fileName?: string }) => {
+      names.push(String(opts.fileName || ''))
+      return { identifier: 'p' }
+    })
+    const deps = {
+      platform: () => 'android' as const,
+      writeCacheFile: async () => ({ uri: 'file:///cache/look.png' }),
+      ensureAlbumId: async () => 'album-1',
+      savePhoto,
+      shareFiles: vi.fn(),
+    }
+    await saveImageBlobNative(new Blob(['a'], { type: 'image/png' }), 'look-front.png', deps)
+    await saveImageBlobNative(new Blob(['b'], { type: 'image/png' }), 'look-front.png', deps)
+    expect(names).toHaveLength(2)
+    expect(names[0]).not.toBe(names[1])
+    expect(names[0]).toMatch(/^look-front-\d+-[a-z0-9]+$/i)
+    expect(names[1]).toMatch(/^look-front-\d+-[a-z0-9]+$/i)
   })
 
   it('falls back to Capacitor Share when gallery save fails', async () => {

@@ -494,7 +494,7 @@ export async function exportSketchPng(options: RenderOptions): Promise<SketchPng
   return { blob, referenceIncluded }
 }
 
-/** `fashionrise-<title>-YYYY-MM-DD-HHMM.png`, ASCII-only and filesystem-safe. */
+/** `fashionrise-<title>-YYYY-MM-DD-HHMMSSmmm.png`, ASCII-only and filesystem-safe. */
 export function exportFilename(title: string | null, now = new Date()): string {
   const slug = (title ?? '')
     .normalize('NFKD')
@@ -507,7 +507,7 @@ export function exportFilename(title: string | null, now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(
     now.getHours(),
-  )}${pad(now.getMinutes())}`
+  )}${pad(now.getMinutes())}${pad(now.getSeconds())}${String(now.getMilliseconds()).padStart(3, '0')}`
   return `fashionrise-${slug || 'sketch'}-${stamp}.png`
 }
 
