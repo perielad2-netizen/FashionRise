@@ -19,6 +19,8 @@ export type FittingRoomAssetRecord = {
   mimeType: string
   updatedAt: string
   garmentCategory?: string
+  /** Propagated when planted from FashionRise Social Try on me. */
+  source?: 'fashionrise_look' | 'upload'
 }
 
 export type FittingRoomOutfitPiece = {
@@ -445,6 +447,7 @@ export async function plantFittingRoomGarment(opts: {
     mimeType: piece.mimeType,
     updatedAt,
     garmentCategory: piece.category,
+    source: piece.source,
   })
   if (opts.notice && typeof sessionStorage !== 'undefined') {
     const payload: FittingRoomPlantedNotice = {
