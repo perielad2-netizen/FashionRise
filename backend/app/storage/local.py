@@ -17,6 +17,14 @@ _CROQUIS_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_COMPARE_KEY_RE = re.compile(
+    r"^"
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    r"arm_([ABC])\.png$",
+    re.IGNORECASE,
+)
+
 # Only FashionRise-generated My Model public copies may be deleted via public cleanup.
 _FASHIONRISE_MODEL_PUBLIC_KEY_RE = re.compile(
     r"^fashionrise-model-[0-9a-f]{32}\.png$",
@@ -44,6 +52,9 @@ class LocalStorageBackend:
         )
         self._private_avatar_subdir = str(
             getattr(settings, "private_avatar_subdir", "private_avatars")
+        )
+        self._private_fitting_compare_subdir = str(
+            getattr(settings, "private_fitting_compare_subdir", "private_fitting_compare")
         )
         self._public_base = settings.public_upload_base_url.rstrip("/")
         self._root.mkdir(parents=True, exist_ok=True)
@@ -83,6 +94,136 @@ class LocalStorageBackend:
         except OSError:
             pass
         return root
+
+    def private_fitting_compare_root(self) -> Path:
+        """Owner-private model-compare outputs; never mounted as static files."""
+        root = (self._root / self._private_fitting_compare_subdir).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(root, 0o700)
+        except OSError:
+            pass
+        return root
+
+    @staticmethod
+    def validate_fitting_compare_storage_key(key: str) -> tuple[uuid.UUID, uuid.UUID, str]:
+        """Reject traversal / absolute paths. Returns ``(owner_id, op_id, arm)``."""
+        if not key or not isinstance(key, str):
+            raise ValueError("private fitting-compare storage key required")
+        if "\x00" in key:
+            raise ValueError("private fitting-compare storage key is invalid")
+        if key.startswith(("/", "\\")) or "://" in key:
+            raise ValueError("absolute or URL fitting-compare keys are not allowed")
+        if ".." in key or "\\" in key:
+            raise ValueError("fitting-compare key must not contain path traversal")
+        normalized = key.strip().lstrip("/")
+        match = _COMPARE_KEY_RE.fullmatch(normalized)
+        if match is None:
+            raise ValueError(
+                "fitting-compare key must be {owner}/{operation}/arm_{A|B|C}.png"
+            )
+        return uuid.UUID(match.group(1)), uuid.UUID(match.group(2)), match.group(3).upper()
+
+    def _assert_under_fitting_compare_root(self, path: Path) -> Path:
+        private_root = self.private_fitting_compare_root()
+        public_root = self.public_upload_root()
+        self._reject_symlink_components(path, private_root=private_root)
+        resolved = path.resolve(strict=False)
+        try:
+            resolved.relative_to(private_root)
+        except ValueError as exc:
+            raise ValueError("fitting-compare path escapes private_fitting_compare root") from exc
+        try:
+            resolved.relative_to(public_root)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("refusing to store fitting-compare under public upload root")
+        return resolved
+
+    def fitting_compare_storage_key(
+        self, *, owner_id: uuid.UUID, operation_id: uuid.UUID, arm: str
+    ) -> str:
+        arm_u = (arm or "").strip().upper()
+        if arm_u not in {"A", "B", "C"}:
+            raise ValueError("arm must be A, B, or C")
+        return f"{owner_id}/{operation_id}/arm_{arm_u}.png"
+
+    def save_private_fitting_compare_file(
+        self, *, key: str, data: BinaryIO, content_type: str | None = None
+    ) -> Path:
+        """Write compare output under ``private_fitting_compare/`` (never public)."""
+        _ = content_type
+        owner_id, operation_id, arm = self.validate_fitting_compare_storage_key(key)
+        lexical = (
+            self.private_fitting_compare_root()
+            / str(owner_id)
+            / str(operation_id)
+            / f"arm_{arm}.png"
+        )
+        path = self._assert_under_fitting_compare_root(lexical)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._assert_under_fitting_compare_root(lexical)
+        try:
+            os.chmod(path.parent, 0o700)
+            os.chmod(path.parent.parent, 0o700)
+        except OSError:
+            pass
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=".tmp-compare-",
+            suffix=".png",
+            dir=str(path.parent),
+        )
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as out:
+                while chunk := data.read(1024 * 1024):
+                    out.write(chunk)
+                out.flush()
+                os.fsync(out.fileno())
+            try:
+                os.chmod(tmp_path, 0o600)
+            except OSError:
+                pass
+            os.replace(tmp_path, path)
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
+            raise
+        return path
+
+    def resolve_private_fitting_compare_file(self, *, key: str) -> Path | None:
+        try:
+            owner_id, operation_id, arm = self.validate_fitting_compare_storage_key(key)
+            lexical = (
+                self.private_fitting_compare_root()
+                / str(owner_id)
+                / str(operation_id)
+                / f"arm_{arm}.png"
+            )
+            path = self._assert_under_fitting_compare_root(lexical)
+        except ValueError:
+            return None
+        if path.is_file() and not path.is_symlink():
+            return path
+        return None
+
+    def delete_private_fitting_compare_file(self, *, key: str) -> bool:
+        path = self.resolve_private_fitting_compare_file(key=key)
+        if path is None:
+            return False
+        try:
+            path.unlink()
+        except OSError:
+            return False
+        return not path.exists()
 
     @staticmethod
     def avatar_storage_key(user_id: uuid.UUID) -> str:
@@ -526,6 +667,7 @@ class LocalStorageBackend:
             self.private_fabric_root(),
             self.private_techpack_root(),
             self.private_avatar_root(),
+            self.private_fitting_compare_root(),
         ):
             try:
                 path.relative_to(private_root)

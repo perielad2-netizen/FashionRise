@@ -485,6 +485,63 @@ class FittingRoomGarmentPiece(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class FittingRoomModelCompareBody(BaseModel):
+    """Owner-only clean A/B/C model comparison (no Stars, no live path change).
+
+    Default ``authorize_paid=false`` is a dry-run plan only. Paid runs require
+    explicit authorization plus compare live_http + owner allowlist + consent +
+    a server-enforced one-shot paid budget (idempotent).
+    """
+
+    person_image_base64: str = Field(..., min_length=32, max_length=40_000_000)
+    design_image_base64: str = Field(..., min_length=32, max_length=40_000_000)
+    authorize_paid: bool = False
+    arms: list[str] | None = Field(
+        default=None,
+        description="Subset of A/B/C. Default all three.",
+    )
+    consent_acknowledged: bool = False
+    consent_version: str = Field(default="", max_length=64)
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="Required for authorize_paid=true; enables replay protection.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FittingRoomModelCompareRead(BaseModel):
+    status: str
+    prompt_version: str
+    prompt: str
+    person_fingerprint: str | None = None
+    design_fingerprint: str | None = None
+    authorize_paid: bool = False
+    live_http: bool = False
+    stars_touched: bool = False
+    paid_calls: int = 0
+    dispatched_requests: int | None = None
+    successful_outputs: int | None = None
+    operation_id: str | None = None
+    idempotency_key: str | None = None
+    replay: bool | None = None
+    budget: dict | None = None
+    consent_version: str | None = None
+    notice_text: str | None = None
+    arms: list[dict] = Field(default_factory=list)
+    human_review: dict = Field(default_factory=dict)
+    compare_dimensions: list[str] = Field(default_factory=list)
+    enabled: bool | None = None
+    owner_allowlisted: bool | None = None
+    armed: bool | None = None
+    notes: list[str] | None = None
+    error_detail: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
 class FittingRoomTryOnBody(BaseModel):
     """Person photo + clothing image(s) → Fitting Room try-on job.
 
