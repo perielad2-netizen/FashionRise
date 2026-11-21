@@ -3,17 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Merged (not deployed) — Fitting Room clean model A/B/C compare · PR #470 (2026-11-21 Asia/Jerusalem)
+## Deployed — Fitting Room model-compare infrastructure (fail-closed) · PR #470 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) merged → `main` @ **`81f015e7`** (head approved `58acb9e8`) |
-| Goal | One native call each: **A** `chatgpt-image-latest` · **B** `gpt-image-2.6-sunburst` · **C** FASHN `tryon-max` — same person+design, **no** materialize/mask/composite/color-lock/retry |
-| Migration | Alembic **`038`** (operations ledger) — **not applied on production yet** |
-| Compare flags (defaults) | `FITTING_ROOM_MODEL_COMPARE_ENABLED=false` · `LIVE_HTTP=false` · empty allowlist — **remain disabled** |
-| Identity lock | **`FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED=false`** (do not re-enable) · Direct Edit V2 stays as currently set in prod |
-| Production this action | **No VPS deploy · no prod migration · no live_http · no paid OpenAI/FASHN calls · no Stars changes** |
-| Next production-deployment step | On VPS only when authorized: (1) pull `main` @ `81f015e7`, (2) `alembic upgrade head` → **038**, (3) set owner allowlist + `ENABLED` (keep `LIVE_HTTP=false` until paid authorize), (4) restart API workers, (5) confirm preflight `provider_gates.all_ready`, (6) then explicit one bounded paid run. Human compare Face·Dress·Shoulders·Pose·Background. |
+| PR | [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) merged → `main` @ **`81f015e7`** (approved head `58acb9e8`); docs tip **`31af6ca6`** |
+| Deployed SHA | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** on `/opt/fashionrise/src` (detached) — includes merge + project-status update |
+| Previous SHA | `ea754217` (#469 identity-preserve merge) |
+| Backup | `/root/fashionrise-backups/pr470-20261121T180009Z/` — `backend.env` + `fashionrise_beta-*.sql.gz` (~200 MB, gzip OK) · Asia/Jerusalem ~20:00 |
+| Migration | **`037` → `038` (head)** applied; table `fitting_room_model_compare_operations` present; ledger **0** ops |
+| Restart | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` — all **active** |
+| Health | `/health` → `{"status":"ok"}` · `/ready` → `{"status":"ready","database":"ok"}` · `https://fashionrise.app/` **200** |
+| Safety flags (prod `.env`) | `FITTING_ROOM_MODEL_COMPARE_ENABLED=false` · `LIVE_HTTP=false` · `OWNER_ALLOWLIST=` (empty) · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · `LOOK_IDENTITY_LOCK_ENABLED=false` · `LOOK_DIRECT_EDIT_V2_ENABLED=true` |
+| Compare access | Unauth routes → **401**; `assert_model_compare_allowed` → **403** “disabled”; **no** paid provider journal hits; ledger empty |
+| Private storage | `private_fitting_compare` **not** under StaticFiles (`/static/uploads` only); nginx **403** on `/static/uploads/`; no nginx private mounts; SPA HTML fallback only on public site paths |
+| Maintenance | Competition tick loop (900s) wired with `tick_model_compare_maintenance`; startup tick silent (empty ledger); **no** ERROR/Traceback since restart |
+| Provider readiness (no-network) | **OpenAI ready = true** · **FASHN tryon-max ready = true** (keys present; FASHN live flags already true for other paths — compare still fail-closed) |
+| Not done (STOP) | Compare **not** enabled · live HTTP **not** armed · **no** paid A/B/C · identity lock **not** re-enabled · no real photos submitted |
+| Exact next action | **Authorize separately:** set owner allowlist + `FITTING_ROOM_MODEL_COMPARE_ENABLED=true` while keeping `LIVE_HTTP=false`, restart, confirm preflight `armed=false` / gates ready; **then** a second explicit authorize to set `LIVE_HTTP=true` for **one** bounded paid A/B/C run (max 1 op / 3 provider calls). Human score Face·Dress·Shoulders·Pose·Background. Do **not** re-enable identity lock. |
 
 ## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem) — ROLLED BACK composite
 
