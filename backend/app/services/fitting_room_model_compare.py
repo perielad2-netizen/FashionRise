@@ -8,8 +8,10 @@ Arms:
   B) OpenAI ``gpt-image-2.6-sunburst`` via ``images.edit`` (person + design)
   C) FASHN ``tryon-max`` (model_image + product_image)
 
-Fail closed: feature flag + owner allowlist + explicit ``authorize_paid``.
+Fail closed: feature flag + owner allowlist + explicit consent +
+``authorize_paid`` + server-enforced one-shot paid budget.
 Does **not** change the live Fitting Room path or Stars billing.
+Private outputs never land under ``/static/uploads``.
 """
 
 from __future__ import annotations
@@ -20,18 +22,39 @@ import io
 import logging
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import HTTPException, status
+from PIL import Image, ImageOps
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.upload_validation import probe_image_dimensions, sniff_image_kind
+from app.models.fitting_room_model_compare import (
+    MODEL_COMPARE_GLOBAL_LOCK_KEY,
+    OP_STATUS_COMPLETED,
+    OP_STATUS_EXHAUSTED,
+    OP_STATUS_FAILED,
+    OP_STATUS_RUNNING,
+    FittingRoomModelCompareOperation,
+)
 from app.models.user import User
 from app.storage.local import LocalStorageBackend
 
 logger = logging.getLogger(__name__)
 
 COMPARE_PROMPT_VERSION = "fitting-room-model-compare-v1"
-COMPARE_CONSENT = "fitting-room-model-compare-v1"
+COMPARE_CONSENT_VERSION = "fitting-room-model-compare-v1"
+COMPARE_NOTICE = (
+    "Owner-only model comparison sends your person photo and fashion design to "
+    "third-party AI providers (OpenAI and/or FASHN) for one native generation per "
+    "selected arm. Outputs are stored in private, owner-only storage for this "
+    "experiment and are not published. Stars are not charged."
+)
 
 # Short prompt — intentionally minimal. No enormous instruction set.
 COMPARE_PROMPT = (
@@ -45,6 +68,9 @@ COMPARE_PROMPT = (
 _OPENAI_HIGH_PORTRAIT_ESTIMATE_CENTS = 6
 _FASHN_MAX_QUALITY_2K_CREDITS = 4
 _FASHN_CREDIT_CENTS = 8
+
+# Base64 string ceiling ≈ decoded max_upload_bytes * 4/3 + data-URL header slack.
+_B64_HEADER_SLACK = 128
 
 ARM_SPECS: tuple[dict[str, str], ...] = (
     {
@@ -106,21 +132,81 @@ def assert_model_compare_allowed(user: User) -> None:
         )
 
 
-def _decode_data_url_png(raw: str, *, field: str) -> bytes:
-    text = (raw or "").strip()
-    if not text:
+def _max_provider_calls() -> int:
+    return max(1, int(get_settings().fitting_room_model_compare_max_provider_calls or 3))
+
+
+def _max_paid_ops() -> int:
+    return max(0, int(get_settings().fitting_room_model_compare_max_paid_ops or 0))
+
+
+def _retention_hours() -> int:
+    return max(1, int(get_settings().fitting_room_model_compare_retention_hours or 72))
+
+
+def _max_b64_chars() -> int:
+    max_bytes = get_settings().max_upload_bytes
+    return (max_bytes * 4 // 3) + _B64_HEADER_SLACK
+
+
+def _decode_and_validate_image(raw: str, *, field: str) -> bytes:
+    """Bound base64 size, sniff type/dims, orient to PNG for provider compatibility."""
+    if not isinstance(raw, str) or not raw.strip():
         raise HTTPException(status_code=400, detail=f"Missing {field} image.")
+    text = raw.strip()
+    if len(text) > _max_b64_chars():
+        raise HTTPException(status_code=400, detail=f"{field} payload exceeds upload limit.")
     if "," in text and text.lower().startswith("data:"):
         text = text.split(",", 1)[1]
+    if len(text) > _max_b64_chars():
+        raise HTTPException(status_code=400, detail=f"{field} payload exceeds upload limit.")
     try:
         data = base64.b64decode(text, validate=False)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Invalid {field} image.") from exc
-    if len(data) < 32 or data[:8] != b"\x89PNG\r\n\x1a\n":
-        # Accept JPEG too — providers can ingest; normalize later if needed.
-        if not (data[:2] == b"\xff\xd8" or data[:4] == b"RIFF"):
-            raise HTTPException(status_code=400, detail=f"{field} must be an image.")
-    return data
+    settings = get_settings()
+    if len(data) < 32:
+        raise HTTPException(status_code=400, detail=f"{field} is empty.")
+    if len(data) > settings.max_upload_bytes:
+        raise HTTPException(status_code=400, detail=f"{field} is too large.")
+    kind = sniff_image_kind(data)
+    if kind not in {"png", "jpeg"}:
+        raise HTTPException(status_code=400, detail=f"{field} must be a PNG or JPEG image.")
+    max_dim = max(
+        int(settings.max_fabric_dimension_px or 2048),
+        int(settings.max_croquis_dimension_px or 4096),
+    )
+    probed = probe_image_dimensions(data, kind)
+    if probed is not None:
+        w, h = probed
+        if w < 1 or h < 1 or w > max_dim or h > max_dim:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field} dimensions exceed allowed limits.",
+            )
+    try:
+        opened = Image.open(io.BytesIO(data))
+        oriented = ImageOps.exif_transpose(opened) or opened
+        oriented.load()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"{field} is not a readable image.") from exc
+    if oriented.mode in ("RGBA", "LA") or (
+        oriented.mode == "P" and "transparency" in oriented.info
+    ):
+        converted = oriented.convert("RGBA")
+    else:
+        converted = oriented.convert("RGB")
+    if converted.width > max_dim or converted.height > max_dim:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field} dimensions exceed allowed limits.",
+        )
+    buf = io.BytesIO()
+    converted.save(buf, format="PNG", optimize=True)
+    out = buf.getvalue()
+    if len(out) > settings.max_upload_bytes:
+        raise HTTPException(status_code=400, detail=f"{field} is too large.")
+    return out
 
 
 def _fingerprint(png: bytes) -> str:
@@ -133,20 +219,75 @@ def _estimate_cents(arm: dict[str, str]) -> int:
     return _FASHN_MAX_QUALITY_2K_CREDITS * _FASHN_CREDIT_CENTS
 
 
-def preflight_model_compare(user: User) -> dict[str, Any]:
+def _require_consent(*, consent_acknowledged: bool, consent_version: str) -> None:
+    if not consent_acknowledged:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Model compare requires explicit consent that the person photo "
+                "will be sent to third-party AI providers (OpenAI / FASHN)."
+            ),
+        )
+    if (consent_version or "").strip() != COMPARE_CONSENT_VERSION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Model compare consent version is outdated.",
+        )
+
+
+def _budget_snapshot(db: Session) -> dict[str, Any]:
+    max_ops = _max_paid_ops()
+    claimed = (
+        db.scalar(
+            select(func.count())
+            .select_from(FittingRoomModelCompareOperation)
+            .where(
+                FittingRoomModelCompareOperation.status.in_(
+                    (
+                        OP_STATUS_RUNNING,
+                        OP_STATUS_COMPLETED,
+                        OP_STATUS_FAILED,
+                        OP_STATUS_EXHAUSTED,
+                    )
+                )
+            )
+        )
+        or 0
+    )
+    dispatched = (
+        db.scalar(
+            select(func.coalesce(func.sum(FittingRoomModelCompareOperation.dispatched_requests), 0))
+        )
+        or 0
+    )
+    return {
+        "max_paid_ops": max_ops,
+        "ops_claimed": int(claimed),
+        "ops_remaining": max(0, max_ops - int(claimed)),
+        "max_provider_calls": _max_provider_calls(),
+        "provider_calls_dispatched": int(dispatched),
+        "authorization_exhausted": int(claimed) >= max_ops or max_ops <= 0,
+    }
+
+
+def preflight_model_compare(user: User, db: Session) -> dict[str, Any]:
     s = get_settings()
     allowlisted = user_on_model_compare_allowlist(user)
+    budget = _budget_snapshot(db)
     return {
         "status": "preflight",
         "enabled": bool(s.fitting_room_model_compare_enabled),
         "live_http": bool(s.fitting_room_model_compare_live_http),
-        "armed": model_compare_armed() and allowlisted,
+        "armed": model_compare_armed() and allowlisted and not budget["authorization_exhausted"],
         "owner_allowlisted": allowlisted,
         "prompt_version": COMPARE_PROMPT_VERSION,
         "prompt": COMPARE_PROMPT,
+        "consent_version": COMPARE_CONSENT_VERSION,
+        "notice_text": COMPARE_NOTICE,
         "authorize_paid": False,
         "stars_touched": False,
         "paid_calls": 0,
+        "budget": budget,
         "arms": [
             {
                 **spec,
@@ -173,16 +314,110 @@ def preflight_model_compare(user: User) -> dict[str, Any]:
         "notes": [
             "One native call per arm. No materialize, mask, face composite, or color-lock.",
             "authorize_paid=false returns a dry-run plan only (0 paid calls).",
+            "Paid budget is server-enforced (default 1 op / 3 provider calls). No auto retries.",
+            "Results are private owner-only files — never public /static/uploads URLs.",
             "Does not change live Fitting Room, Stars, or other AI features.",
         ],
     }
 
 
-def _save_private_png(png: bytes, *, label: str) -> str:
-    key = f"private/fitting_room_compare/{uuid.uuid4().hex[:12]}_{label}.png"
-    return LocalStorageBackend().save_file(
+def _result_ref(*, operation_id: uuid.UUID, arm: str) -> dict[str, str]:
+    arm_u = arm.upper()
+    return {
+        "operation_id": str(operation_id),
+        "arm": arm_u,
+        "retrieval_path": (
+            f"/api/v1/ai/fitting-room/model-compare/results/{operation_id}/{arm_u}"
+        ),
+    }
+
+
+def _save_private_arm_png(
+    *,
+    owner_id: uuid.UUID,
+    operation_id: uuid.UUID,
+    arm: str,
+    png: bytes,
+) -> str:
+    storage = LocalStorageBackend()
+    key = storage.fitting_compare_storage_key(
+        owner_id=owner_id, operation_id=operation_id, arm=arm
+    )
+    path = storage.save_private_fitting_compare_file(
         key=key, data=io.BytesIO(png), content_type="image/png"
     )
+    # Refuse accidental public placement.
+    try:
+        path.resolve().relative_to(storage.public_upload_root())
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("refusing public placement of compare output")
+    return key
+
+
+def _purge_expired_outputs(db: Session, *, owner_id: uuid.UUID | None = None) -> int:
+    """Best-effort retention cleanup for expired compare outputs."""
+    now = datetime.now(timezone.utc)
+    q = select(FittingRoomModelCompareOperation).where(
+        FittingRoomModelCompareOperation.expires_at.is_not(None),
+        FittingRoomModelCompareOperation.expires_at < now,
+    )
+    if owner_id is not None:
+        q = q.where(FittingRoomModelCompareOperation.owner_id == owner_id)
+    rows = list(db.scalars(q).all())
+    storage = LocalStorageBackend()
+    removed = 0
+    for row in rows:
+        report = row.report if isinstance(row.report, dict) else {}
+        for arm in report.get("arms") or []:
+            if not isinstance(arm, dict):
+                continue
+            key = arm.get("storage_key")
+            if isinstance(key, str) and key:
+                if storage.delete_private_fitting_compare_file(key=key):
+                    removed += 1
+                arm["storage_key"] = None
+                arm["result_ref"] = None
+                arm["expired"] = True
+        row.report = report
+    if rows:
+        db.flush()
+    return removed
+
+
+def resolve_compare_result_file(
+    db: Session, user: User, operation_id: uuid.UUID, arm: str
+) -> Path:
+    """Authenticated owner-only retrieval with path validation + retention."""
+    assert_model_compare_allowed(user)
+    _purge_expired_outputs(db, owner_id=user.id)
+    arm_u = (arm or "").strip().upper()
+    if arm_u not in {"A", "B", "C"}:
+        raise HTTPException(status_code=404, detail="Compare result not found.")
+    op = db.get(FittingRoomModelCompareOperation, operation_id)
+    if op is None or op.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Compare result not found.")
+    if op.expires_at is not None and op.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="Compare result expired.")
+    storage = LocalStorageBackend()
+    key = storage.fitting_compare_storage_key(
+        owner_id=user.id, operation_id=operation_id, arm=arm_u
+    )
+    # Ownership is encoded in the validated key + DB owner check above.
+    path = storage.resolve_private_fitting_compare_file(key=key)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Compare result not found.")
+    # Defense in depth: path must stay under private root and match owner.
+    try:
+        storage.validate_fitting_compare_storage_key(key)
+        path.relative_to(storage.private_fitting_compare_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Compare result not found.") from exc
+    owner_segment = path.parent.parent.name
+    if owner_segment.lower() != str(user.id).lower():
+        raise HTTPException(status_code=404, detail="Compare result not found.")
+    return path
 
 
 def _run_openai_images_edit(
@@ -227,6 +462,7 @@ def _run_openai_images_edit(
         base_url=settings.openai_base_url or None,
         timeout=float(settings.openai_timeout_seconds or 180),
     )
+    # max_retries=0 — no automatic paid retries.
     result = client.with_options(max_retries=0).images.edit(**kwargs)
     png = extract_edit_png_bytes(result)
     ms = int((time.perf_counter() - t0) * 1000)
@@ -279,9 +515,9 @@ def _run_fashn_tryon_max_raw(
     if not bool(settings.fashn_try_on_live_http):
         raise RuntimeError("FASHN_TRY_ON_LIVE_HTTP is false")
 
+    # Provider-compatibility normalize only (RGB/JPEG-ish), not garment materialize.
     model_bytes = _ensure_rgb_jpegish_png(person_png)
     product_bytes = _ensure_rgb_jpegish_png(design_png)
-    # FASHN Max prompt field is separate from OpenAI image-index wording.
     fashn_prompt = (
         "Fit the exact garment from the product image onto the person. "
         "Preserve the person's original face, hair, body, pose, and background. "
@@ -346,6 +582,7 @@ def _run_fashn_tryon_max_raw(
     elif isinstance(item, dict) and item.get("b64_json"):
         png = base64.b64decode(item["b64_json"])
     else:
+        # Ambiguous shape — fail closed; do not invent another provider call.
         raise RuntimeError("Unrecognized FASHN Max output shape")
 
     ms = int((time.perf_counter() - t0) * 1000)
@@ -390,33 +627,182 @@ def set_model_compare_runners_for_tests(
     _fashn_runner = fashn_runner
 
 
+def _claim_paid_operation(
+    db: Session,
+    *,
+    user: User,
+    idempotency_key: str,
+    consent_version: str,
+    arms: list[str],
+    person_fp: str,
+    design_fp: str,
+) -> tuple[FittingRoomModelCompareOperation, bool]:
+    """Atomically claim the one-shot budget or return an idempotent replay.
+
+    Returns ``(operation, is_replay)``.
+    """
+    key = (idempotency_key or "").strip()
+    if not key or len(key) < 8 or len(key) > 128:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="idempotency_key is required (8–128 chars).",
+        )
+
+    # Serialize claims globally so concurrent POSTs cannot double-spend budget.
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": MODEL_COMPARE_GLOBAL_LOCK_KEY})
+
+    existing = db.scalar(
+        select(FittingRoomModelCompareOperation).where(
+            FittingRoomModelCompareOperation.owner_id == user.id,
+            FittingRoomModelCompareOperation.idempotency_key == key,
+        )
+    )
+    if existing is not None:
+        return existing, True
+
+    budget = _budget_snapshot(db)
+    if budget["authorization_exhausted"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Model compare paid authorization is exhausted "
+                f"({budget['ops_claimed']}/{budget['max_paid_ops']} ops used)."
+            ),
+        )
+
+    op = FittingRoomModelCompareOperation(
+        id=uuid.uuid4(),
+        owner_id=user.id,
+        idempotency_key=key,
+        status=OP_STATUS_RUNNING,
+        consent_version=consent_version,
+        arms_requested=list(arms),
+        dispatched_requests=0,
+        successful_outputs=0,
+        max_provider_calls=_max_provider_calls(),
+        person_fingerprint=person_fp,
+        design_fingerprint=design_fp,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=_retention_hours()),
+    )
+    try:
+        with db.begin_nested():
+            db.add(op)
+            db.flush()
+    except IntegrityError as exc:
+        # Concurrent same-key insert — reload replay (savepoint keeps outer txn alive).
+        replay = db.scalar(
+            select(FittingRoomModelCompareOperation).where(
+                FittingRoomModelCompareOperation.owner_id == user.id,
+                FittingRoomModelCompareOperation.idempotency_key == key,
+            )
+        )
+        if replay is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Could not claim compare operation; retry dry-run only.",
+            ) from exc
+        return replay, True
+    return op, False
+
+
+def _report_from_operation(op: FittingRoomModelCompareOperation) -> dict[str, Any]:
+    if isinstance(op.report, dict) and op.report:
+        out = dict(op.report)
+        out["operation_id"] = str(op.id)
+        out["idempotency_key"] = op.idempotency_key
+        out["replay"] = True
+        out["dispatched_requests"] = op.dispatched_requests
+        out["successful_outputs"] = op.successful_outputs
+        return out
+    return {
+        "status": op.status,
+        "operation_id": str(op.id),
+        "idempotency_key": op.idempotency_key,
+        "prompt_version": COMPARE_PROMPT_VERSION,
+        "prompt": COMPARE_PROMPT,
+        "consent_version": op.consent_version,
+        "person_fingerprint": op.person_fingerprint,
+        "design_fingerprint": op.design_fingerprint,
+        "authorize_paid": True,
+        "live_http": model_compare_armed(),
+        "stars_touched": False,
+        "paid_calls": int(op.dispatched_requests or 0),
+        "dispatched_requests": int(op.dispatched_requests or 0),
+        "successful_outputs": int(op.successful_outputs or 0),
+        "replay": True,
+        "arms": [],
+        "human_review": {
+            "instruction": (
+                "Compare Face · Dress · Shoulders · Pose · Background. "
+                "Do not auto-select a winner — human visual approval required."
+            ),
+            "winner": None,
+        },
+        "compare_dimensions": [
+            "identity_face",
+            "dress_accuracy",
+            "shoulder_decorations",
+            "pose",
+            "background",
+        ],
+        "error_detail": op.error_detail,
+    }
+
+
 def run_model_compare(
     *,
+    db: Session,
     user: User,
     person_image_base64: str,
     design_image_base64: str,
     authorize_paid: bool = False,
     arms: list[str] | None = None,
+    consent_acknowledged: bool = False,
+    consent_version: str = "",
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Run (or dry-run) the A/B/C comparison. Never charges Stars."""
     assert_model_compare_allowed(user)
-    person_png = _decode_data_url_png(person_image_base64, field="person")
-    design_png = _decode_data_url_png(design_image_base64, field="design")
+    _purge_expired_outputs(db, owner_id=user.id)
+
+    # Consent required for any paid path; dry-run also asks so the owner sees the notice.
+    _require_consent(
+        consent_acknowledged=consent_acknowledged,
+        consent_version=consent_version,
+    )
+
+    person_png = _decode_and_validate_image(person_image_base64, field="person")
+    design_png = _decode_and_validate_image(design_image_base64, field="design")
     wanted = {a.strip().upper() for a in (arms or ["A", "B", "C"]) if a.strip()}
     selected = [spec for spec in ARM_SPECS if spec["arm"] in wanted]
     if not selected:
         raise HTTPException(status_code=400, detail="Select at least one arm: A, B, C.")
+    if len(selected) > _max_provider_calls():
+        raise HTTPException(
+            status_code=400,
+            detail=f"At most {_max_provider_calls()} arms allowed for one compare operation.",
+        )
+
+    person_fp = _fingerprint(person_png)
+    design_fp = _fingerprint(design_png)
+    budget = _budget_snapshot(db)
 
     report: dict[str, Any] = {
         "status": "dry_run" if not authorize_paid else "completed",
         "prompt_version": COMPARE_PROMPT_VERSION,
         "prompt": COMPARE_PROMPT,
-        "person_fingerprint": _fingerprint(person_png),
-        "design_fingerprint": _fingerprint(design_png),
+        "consent_version": COMPARE_CONSENT_VERSION,
+        "notice_text": COMPARE_NOTICE,
+        "person_fingerprint": person_fp,
+        "design_fingerprint": design_fp,
         "authorize_paid": bool(authorize_paid),
         "live_http": model_compare_armed(),
         "stars_touched": False,
         "paid_calls": 0,
+        "dispatched_requests": 0,
+        "successful_outputs": 0,
+        "budget": budget,
+        "replay": False,
         "arms": [],
         "human_review": {
             "instruction": (
@@ -443,8 +829,12 @@ def run_model_compare(
                     "estimate_cents": _estimate_cents(spec),
                     "preprocessing": "none",
                     "postprocessing": "none",
+                    "result_ref": None,
                     "result_url": None,
-                    "note": "Dry-run only. Set authorize_paid=true after explicit approval.",
+                    "note": (
+                        "Dry-run only. Set authorize_paid=true with consent + "
+                        "idempotency_key after explicit approval."
+                    ),
                 }
             )
         return report
@@ -458,13 +848,50 @@ def run_model_compare(
             ),
         )
 
+    op, is_replay = _claim_paid_operation(
+        db,
+        user=user,
+        idempotency_key=idempotency_key or "",
+        consent_version=COMPARE_CONSENT_VERSION,
+        arms=[s["arm"] for s in selected],
+        person_fp=person_fp,
+        design_fp=design_fp,
+    )
+    if is_replay:
+        return _report_from_operation(op)
+
+    report["operation_id"] = str(op.id)
+    report["idempotency_key"] = op.idempotency_key
+    report["status"] = "running"
+
     for spec in selected:
         arm_result: dict[str, Any] = {
             **spec,
             "estimate_cents": _estimate_cents(spec),
             "preprocessing": "none",
             "postprocessing": "none",
+            "result_url": None,  # never public
         }
+
+        # Budget check before dispatch — fail closed, no call.
+        if int(op.dispatched_requests) >= int(op.max_provider_calls):
+            arm_result.update(
+                {
+                    "status": "skipped_budget",
+                    "error_type": "BudgetExhausted",
+                    "error": "Provider call budget exhausted for this operation.",
+                    "result_ref": None,
+                }
+            )
+            report["arms"].append(arm_result)
+            continue
+
+        # Increment dispatched BEFORE the call so hangs/timeouts still consume budget.
+        op.dispatched_requests = int(op.dispatched_requests) + 1
+        db.flush()
+        report["dispatched_requests"] = int(op.dispatched_requests)
+        report["paid_calls"] = int(op.dispatched_requests)
+
         try:
             if spec["provider"] == "openai":
                 runner = _openai_runner or _run_openai_images_edit
@@ -476,20 +903,31 @@ def run_model_compare(
             else:
                 runner = _fashn_runner or _run_fashn_tryon_max_raw
                 png, meta = runner(person_png=person_png, design_png=design_png)
-            url = _save_private_png(png, label=f"arm_{spec['arm']}")
+
+            # Ambiguous empty output → fail this arm; do not retry.
+            if not png or len(png) < 32:
+                raise RuntimeError("Provider returned empty/ambiguous image")
+
+            storage_key = _save_private_arm_png(
+                owner_id=user.id,
+                operation_id=op.id,
+                arm=spec["arm"],
+                png=png,
+            )
+            op.successful_outputs = int(op.successful_outputs) + 1
+            db.flush()
             arm_result.update(
                 {
                     "status": "ok",
-                    "result_url": url,
+                    "storage_key": storage_key,
+                    "result_ref": _result_ref(operation_id=op.id, arm=spec["arm"]),
                     "meta": meta,
                     "duration_ms": meta.get("duration_ms"),
                     "estimate_cents": meta.get("estimate_cents", arm_result["estimate_cents"]),
                 }
             )
-            report["paid_calls"] = int(report["paid_calls"]) + int(
-                meta.get("openai_calls") or meta.get("fashn_calls") or 1
-            )
         except Exception as exc:  # noqa: BLE001
+            # Ambiguous / failed outcomes do NOT trigger another attempt.
             logger.info(
                 "model-compare arm %s failed: %s",
                 spec["arm"],
@@ -501,10 +939,23 @@ def run_model_compare(
                     "status": "failed",
                     "error_type": type(exc).__name__,
                     "error": str(exc)[:200],
-                    "result_url": None,
+                    "result_ref": None,
+                    "storage_key": None,
+                    "no_retry": True,
                 }
             )
         report["arms"].append(arm_result)
+        report["successful_outputs"] = int(op.successful_outputs)
 
     report["status"] = "completed"
+    report["budget"] = _budget_snapshot(db)
+    report["human_review"]["winner"] = None
+    op.status = OP_STATUS_COMPLETED
+    op.report = {
+        k: v
+        for k, v in report.items()
+        if k not in {"notice_text"}  # keep ledger lean; notice is static
+    }
+    # Persist without secrets / raw images.
+    db.flush()
     return report

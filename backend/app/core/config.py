@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     private_croquis_subdir: str = "private_croquis"
     # Private profile avatars — served only via /profiles/{id}/avatar (never /static/uploads).
     private_avatar_subdir: str = "private_avatars"
+    # Private Fitting Room model-compare outputs — never under /static/uploads.
+    private_fitting_compare_subdir: str = "private_fitting_compare"
     # Max raw bytes accepted for a profile avatar upload (before server normalize).
     max_avatar_upload_bytes: int = 8 * 1024 * 1024
     # Square output edge length for stored avatars.
@@ -282,6 +284,12 @@ class Settings(BaseSettings):
     fitting_room_model_compare_live_http: bool = False
     # Comma-separated emails / usernames / user ids. Empty = nobody.
     fitting_room_model_compare_owner_allowlist: str = ""
+    # Hard server budget: exactly one approved paid operation by default.
+    fitting_room_model_compare_max_paid_ops: int = 1
+    # Hard cap on dispatched provider generation requests across that operation.
+    fitting_room_model_compare_max_provider_calls: int = 3
+    # Bounded retention for private compare outputs (hours).
+    fitting_room_model_compare_retention_hours: int = 72
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.

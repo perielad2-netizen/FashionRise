@@ -3,20 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C (2026-11-21 Asia/Jerusalem)
+## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C + PR #470 hardening (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Branch | `cursor/web-fitting-model-compare-77c6` |
+| Branch / PR | `cursor/web-fitting-model-compare-77c6` · [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) |
 | Why | Identity-lock face composite made results worse (seams, shoulder loss). Stop polishing bad raw outputs. |
 | Goal | One native call each: **A** `chatgpt-image-latest` · **B** `gpt-image-2.6-sunburst` · **C** FASHN `tryon-max` — same person+design, **no** materialize/mask/composite/color-lock/retry |
 | Prompt | `fitting-room-model-compare-v1` (short: fit garment, preserve person, keep colors/silhouette) |
-| API | `GET/POST /api/v1/ai/fitting-room/model-compare[/preflight]` — owner allowlist; default **dry-run** (`authorize_paid=false`) |
-| Flags | `FITTING_ROOM_MODEL_COMPARE_ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` (all fail-closed) |
-| Live Fitting Room | **Unchanged** by this branch — no deploy of compare; identity-lock stays as previously set until ops flips it |
-| Stars | Never touched |
-| Tests | `pytest tests/test_fitting_room_model_compare.py` (mocked) |
-| Next action | Human authorize **one bounded paid run** (`authorize_paid=true`, live_http on, allowlist set). Compare Face·Dress·Shoulders·Pose·Background. Do not auto-pick a winner. |
+| API | `GET/POST /api/v1/ai/fitting-room/model-compare[/preflight]` · `GET .../results/{operation_id}/{arm}` (owner-auth only) |
+| Consent | `consent_acknowledged` + `consent_version=fitting-room-model-compare-v1` — person photo sent to OpenAI/FASHN |
+| Private storage | `private_fitting_compare/` (never `/static/uploads`); retrieval is authenticated + ownership/path validated; retention `FITTING_ROOM_MODEL_COMPARE_RETENTION_HOURS` (default 72) |
+| Paid budget | Server-enforced: **1** paid op (`MAX_PAID_OPS`) · **≤3** dispatched provider calls · idempotency replay · advisory lock concurrency · dispatch counted before call · no auto retries |
+| Flags | `ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` (all fail-closed / defaults safe) |
+| Live Fitting Room | **Unchanged** — no deploy; Stars untouched; no auto winner |
+| Tests | `pytest tests/test_fitting_room_model_compare.py` (private storage, consent, replay, budget, ambiguous no-retry, upload bounds) |
+| Deploy state | **Not deployed.** No paid provider calls run by this amendment. |
+| Next action | Review #470 hardening → merge when approved → then explicitly authorize **one** bounded paid run (`authorize_paid=true` + consent + idempotency_key + live_http + allowlist). Human compare Face·Dress·Shoulders·Pose·Background. Do not auto-pick a winner. |
 
 ## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem)
 

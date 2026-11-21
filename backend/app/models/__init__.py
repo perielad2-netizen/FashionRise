@@ -5,6 +5,7 @@ from app.models.content_report import ContentReport
 from app.models.design_export import DesignExport
 from app.models.design_revision import DesignRevision
 from app.models.fabric_asset import FabricAsset
+from app.models.fitting_room_model_compare import FittingRoomModelCompareOperation
 from app.models.gallery_comment import GalleryComment
 from app.models.gallery_comment_like import GalleryCommentLike
 from app.models.gallery_impression import GalleryImpression
@@ -61,6 +62,7 @@ __all__ = [
     "DesignExport",
     "DesignRevision",
     "FabricAsset",
+    "FittingRoomModelCompareOperation",
     "GalleryComment",
     "GalleryCommentLike",
     "GalleryImpression",
