@@ -8,7 +8,10 @@
 | Field | Value |
 | --- | --- |
 | Verdict | Owner floral + pink heels test **approved** → Model B rolled out to **all users** |
-| PR | [#477](https://github.com/perielad2-netizen/FashionRise/pull/477) (GA commit on same branch) |
+| Merge | [#477](https://github.com/perielad2-netizen/FashionRise/pull/477) **MERGED** `2b737170` |
+| FE tip | `/var/www/fashionrise/releases/695ca0dc-model-b-ga` · `/version.json` → `695ca0dc` |
+| BE tip | `/opt/fashionrise/src` @ **`2b73717`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1f104378-identity-keyboard /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | Behavior | When `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=true` and allowlist **empty**, Model B is the **default** single-look Fitting Room path (no checkbox; prefer flag not required) |
 | Optional restrict | Non-empty allowlist still limits to listed users (ops kill-switch) |
 | Prod flags | `ENABLED=true` · allowlist **empty** · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` |
