@@ -23,6 +23,17 @@ OP_STATUS_RUNNING = "running"
 OP_STATUS_COMPLETED = "completed"
 OP_STATUS_FAILED = "failed"
 OP_STATUS_EXHAUSTED = "exhausted"
+OP_STATUS_RECONCILIATION = "reconciliation_required"
+
+# Terminal statuses — never dispatch again.
+TERMINAL_OP_STATUSES = frozenset(
+    {
+        OP_STATUS_COMPLETED,
+        OP_STATUS_FAILED,
+        OP_STATUS_EXHAUSTED,
+        OP_STATUS_RECONCILIATION,
+    }
+)
 
 # Serialize paid compare claims (distinct from croquis spend lock).
 MODEL_COMPARE_GLOBAL_LOCK_KEY = 0x46524D43  # "FRMC"

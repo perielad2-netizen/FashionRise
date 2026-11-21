@@ -3,25 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C + PR #470 hardening (2026-11-21 Asia/Jerusalem)
+## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C + PR #470 TX safety (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | Branch / PR | `cursor/web-fitting-model-compare-77c6` · [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) |
-| Why | Identity-lock face composite made results worse (seams, shoulder loss). Stop polishing bad raw outputs. |
+| Why | Identity-lock face composite made results worse. Stop polishing bad raw outputs; compare raw models instead. |
 | Goal | One native call each: **A** `chatgpt-image-latest` · **B** `gpt-image-2.6-sunburst` · **C** FASHN `tryon-max` — same person+design, **no** materialize/mask/composite/color-lock/retry |
-| Prompt | `fitting-room-model-compare-v1` (short: fit garment, preserve person, keep colors/silhouette) |
-| API | `GET/POST /api/v1/ai/fitting-room/model-compare[/preflight]` · `GET .../results/{operation_id}/{arm}` (owner-auth only) |
-| Consent | `consent_acknowledged` + `consent_version=fitting-room-model-compare-v1` — person photo sent to OpenAI/FASHN |
-| Private storage | `private_fitting_compare/` (never `/static/uploads`); retrieval is authenticated + ownership/path validated; retention `FITTING_ROOM_MODEL_COMPARE_RETENTION_HOURS` (default 72) |
-| Paid budget | Server-enforced: **1** paid op (`MAX_PAID_OPS`) · **≤3** dispatched provider calls · idempotency replay · advisory lock concurrency · dispatch counted before call · no auto retries |
-| Flags | `ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` (all fail-closed / defaults safe) |
-| Live Fitting Room | **Unchanged** — no deploy; Stars untouched; no auto winner |
-| Tests | `pytest tests/test_fitting_room_model_compare.py` (private storage, consent, replay, budget, ambiguous no-retry, upload bounds) |
-| Deploy state | **Not deployed.** No paid provider calls run by this amendment. |
-| Next action | Review #470 hardening → merge when approved → then explicitly authorize **one** bounded paid run (`authorize_paid=true` + consent + idempotency_key + live_http + allowlist). Human compare Face·Dress·Shoulders·Pose·Background. Do not auto-pick a winner. |
+| Production rollback (already done) | Live Fitting Room: **`FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED=false`** (composite OFF) · **`FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED=true`** (direct edit remains). Compare flags stay OFF. |
+| Private storage | `private_fitting_compare/` + owner-auth retrieval; **retention sweeper** `run_model_compare_retention_sweep` (default 72h) deletes files — not retrieval-only |
+| Paid budget TX | **COMMIT claim before any provider call** · advisory lock + budget check + insert + commit atomic · **COMMIT each arm dispatch before paid call** · crash after dispatch → `reconciliation_required` / unknown, budget retained, **no retry** · idempotency rejects different fingerprints/arms |
+| Flags | `ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · `RETENTION_HOURS=72` (fail-closed) |
+| Live Fitting Room / Stars | **Unchanged by this PR** — no deploy of compare; no Stars changes; no auto winner |
+| Tests | `pytest tests/test_fitting_room_model_compare.py` + `tests/test_fitting_room_model_compare_tx.py` (independent Postgres sessions: concurrent claims, crash-after-dispatch, rollback, retention sweep) |
+| Deploy state | **Not deployed. No paid provider calls.** |
+| Remaining blockers | Final PM review of TX durability on #470 → merge when approved → then explicit one-shot paid authorize |
+| Next action | Approve #470 → merge → migrate `038` → arm compare flags for owner only → one bounded paid run with consent + idempotency_key. Human compare Face·Dress·Shoulders·Pose·Background. |
 
-## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem)
+## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem) — ROLLED BACK composite
 
 | Field | Value |
 | --- | --- |
@@ -32,7 +31,7 @@
 | Flags | `FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED` + `FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED` |
 | Path | `chatgpt_direct_edit_v2_identity` — person×2 + garment, prompt `fitting-room-identity-v1`, then face composite |
 | Cost | Still **1** `images.edit` on success (composite is local) |
-| Rollback | `FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED=false` |
+| Production state now | **Identity lock OFF** (`FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED=false`); Direct Edit V2 remains **ON**. Composite path not used pending model compare. |
 
 ## Deployed — Fitting Room direct-edit v2 A/B (2026-11-21 Asia/Jerusalem)
 

@@ -479,6 +479,58 @@ def test_concurrent_claims_single_operation(client, db_session, monkeypatch, tmp
     get_settings.cache_clear()
 
 
+def test_idempotency_identity_mismatch_rejected(client, db_session, monkeypatch, tmp_path):
+    from app.services import fitting_room_model_compare as cmp
+
+    _enable_compare(monkeypatch, username="owner_idmiss")
+    monkeypatch.setenv("FITTING_ROOM_MODEL_COMPARE_LIVE_HTTP", "true")
+    monkeypatch.setenv("LOCAL_STORAGE_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+
+    def _ok(**_k):
+        return _png((5, 5, 5)), {
+            "provider": "openai",
+            "model": "chatgpt-image-latest",
+            "openai_calls": 1,
+            "duration_ms": 1,
+            "estimate_cents": 6,
+            "preprocessing": "none",
+            "postprocessing": "none",
+        }
+
+    cmp.set_model_compare_runners_for_tests(openai_runner=_ok, fashn_runner=_ok)
+    tokens = register_with_invite(
+        client, db_session, email="owner_idmiss@example.com", username="owner_idmiss"
+    )
+    first = client.post(
+        COMPARE,
+        headers=_auth(tokens),
+        json=_consent_payload(
+            authorize_paid=True,
+            arms=["A"],
+            idempotency_key="identity-mismatch-key",
+        ),
+    )
+    assert first.status_code == 200, first.text
+    # Same key, different design image → 409
+    other_design = Image.new("RGB", (64, 96), (200, 10, 10))
+    buf = io.BytesIO()
+    other_design.save(buf, format="PNG")
+    second = client.post(
+        COMPARE,
+        headers=_auth(tokens),
+        json=_consent_payload(
+            authorize_paid=True,
+            arms=["A"],
+            idempotency_key="identity-mismatch-key",
+            design_image_base64=_b64(buf.getvalue()),
+        ),
+    )
+    assert second.status_code == 409
+    cmp.set_model_compare_runners_for_tests(openai_runner=None, fashn_runner=None)
+    get_settings.cache_clear()
+
+
 def test_preflight_lists_arms_and_budget(client, db_session, monkeypatch):
     _enable_compare(monkeypatch, username="owner_pf")
     tokens = register_with_invite(

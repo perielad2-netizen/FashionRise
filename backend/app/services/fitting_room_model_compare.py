@@ -39,7 +39,9 @@ from app.models.fitting_room_model_compare import (
     OP_STATUS_COMPLETED,
     OP_STATUS_EXHAUSTED,
     OP_STATUS_FAILED,
+    OP_STATUS_RECONCILIATION,
     OP_STATUS_RUNNING,
+    TERMINAL_OP_STATUSES,
     FittingRoomModelCompareOperation,
 )
 from app.models.user import User
@@ -248,6 +250,7 @@ def _budget_snapshot(db: Session) -> dict[str, Any]:
                         OP_STATUS_COMPLETED,
                         OP_STATUS_FAILED,
                         OP_STATUS_EXHAUSTED,
+                        OP_STATUS_RECONCILIATION,
                     )
                 )
             )
@@ -270,9 +273,63 @@ def _budget_snapshot(db: Session) -> dict[str, Any]:
     }
 
 
+def _durable_commit(db: Session) -> None:
+    """Persist the current unit of work. Fail closed if the commit fails."""
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not persist model-compare ledger; no provider call made.",
+        ) from exc
+
+
+def _arm_ledger(op: FittingRoomModelCompareOperation) -> dict[str, Any]:
+    report = op.report if isinstance(op.report, dict) else {}
+    ledger = report.get("arm_ledger")
+    return dict(ledger) if isinstance(ledger, dict) else {}
+
+
+def _set_arm_ledger(op: FittingRoomModelCompareOperation, ledger: dict[str, Any]) -> None:
+    report = dict(op.report) if isinstance(op.report, dict) else {}
+    report["arm_ledger"] = ledger
+    op.report = report
+
+
+def _assert_idempotency_identity(
+    op: FittingRoomModelCompareOperation,
+    *,
+    person_fp: str,
+    design_fp: str,
+    arms: list[str],
+) -> None:
+    existing_arms = [str(a).upper() for a in (op.arms_requested or [])]
+    if (
+        (op.person_fingerprint or "") != person_fp
+        or (op.design_fingerprint or "") != design_fp
+        or existing_arms != list(arms)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "idempotency_key already used with different person/design fingerprints "
+                "or selected arms."
+            ),
+        )
+
+
 def preflight_model_compare(user: User, db: Session) -> dict[str, Any]:
     s = get_settings()
     allowlisted = user_on_model_compare_allowlist(user)
+    # Retention sweeper on preflight (best-effort; does not require paid path).
+    try:
+        run_model_compare_retention_sweep(db, dry_run=False, commit=True)
+    except Exception:  # noqa: BLE001
+        logger.info("model-compare retention sweep skipped on preflight", exc_info=True)
     budget = _budget_snapshot(db)
     return {
         "status": "preflight",
@@ -356,8 +413,18 @@ def _save_private_arm_png(
     return key
 
 
-def _purge_expired_outputs(db: Session, *, owner_id: uuid.UUID | None = None) -> int:
-    """Best-effort retention cleanup for expired compare outputs."""
+def run_model_compare_retention_sweep(
+    db: Session,
+    *,
+    dry_run: bool = False,
+    commit: bool = True,
+    owner_id: uuid.UUID | None = None,
+) -> dict[str, int]:
+    """Delete expired private compare outputs (offline-capable sweeper).
+
+    Expiration-on-retrieval alone is not enough — this walks expired ledger rows
+    and unlinks files under ``private_fitting_compare/``.
+    """
     now = datetime.now(timezone.utc)
     q = select(FittingRoomModelCompareOperation).where(
         FittingRoomModelCompareOperation.expires_at.is_not(None),
@@ -367,23 +434,58 @@ def _purge_expired_outputs(db: Session, *, owner_id: uuid.UUID | None = None) ->
         q = q.where(FittingRoomModelCompareOperation.owner_id == owner_id)
     rows = list(db.scalars(q).all())
     storage = LocalStorageBackend()
+    examined = len(rows)
     removed = 0
     for row in rows:
-        report = row.report if isinstance(row.report, dict) else {}
-        for arm in report.get("arms") or []:
+        report = dict(row.report) if isinstance(row.report, dict) else {}
+        arms = list(report.get("arms") or [])
+        changed = False
+        for arm in arms:
             if not isinstance(arm, dict):
                 continue
             key = arm.get("storage_key")
             if isinstance(key, str) and key:
-                if storage.delete_private_fitting_compare_file(key=key):
+                if dry_run:
                     removed += 1
-                arm["storage_key"] = None
-                arm["result_ref"] = None
-                arm["expired"] = True
-        row.report = report
-    if rows:
-        db.flush()
-    return removed
+                elif storage.delete_private_fitting_compare_file(key=key):
+                    removed += 1
+                    arm["storage_key"] = None
+                    arm["result_ref"] = None
+                    arm["expired"] = True
+                    changed = True
+        # Also unlink any ledger keys not mirrored in arms[].
+        ledger = report.get("arm_ledger") if isinstance(report.get("arm_ledger"), dict) else {}
+        for arm_key, entry in list(ledger.items()):
+            if not isinstance(entry, dict):
+                continue
+            key = entry.get("storage_key")
+            if isinstance(key, str) and key:
+                if dry_run:
+                    removed += 1
+                elif storage.delete_private_fitting_compare_file(key=key):
+                    removed += 1
+                    entry["storage_key"] = None
+                    entry["expired"] = True
+                    ledger[arm_key] = entry
+                    changed = True
+        if changed and not dry_run:
+            report["arms"] = arms
+            report["arm_ledger"] = ledger
+            row.report = report
+    if rows and not dry_run:
+        if commit:
+            _durable_commit(db)
+        else:
+            db.flush()
+    return {"examined": examined, "files_removed": removed, "dry_run": int(dry_run)}
+
+
+def _purge_expired_outputs(db: Session, *, owner_id: uuid.UUID | None = None) -> int:
+    """Compatibility wrapper — prefer ``run_model_compare_retention_sweep``."""
+    result = run_model_compare_retention_sweep(
+        db, dry_run=False, commit=False, owner_id=owner_id
+    )
+    return int(result["files_removed"])
 
 
 def resolve_compare_result_file(
@@ -391,7 +493,7 @@ def resolve_compare_result_file(
 ) -> Path:
     """Authenticated owner-only retrieval with path validation + retention."""
     assert_model_compare_allowed(user)
-    _purge_expired_outputs(db, owner_id=user.id)
+    run_model_compare_retention_sweep(db, dry_run=False, commit=True, owner_id=user.id)
     arm_u = (arm or "").strip().upper()
     if arm_u not in {"A", "B", "C"}:
         raise HTTPException(status_code=404, detail="Compare result not found.")
@@ -637,9 +739,10 @@ def _claim_paid_operation(
     person_fp: str,
     design_fp: str,
 ) -> tuple[FittingRoomModelCompareOperation, bool]:
-    """Atomically claim the one-shot budget or return an idempotent replay.
+    """Atomically claim + COMMIT the one-shot budget, or return a durable replay.
 
-    Returns ``(operation, is_replay)``.
+    The advisory transaction lock, budget check, insert, and COMMIT are one unit.
+    Returns ``(operation, is_replay)``. Replay never dispatches again.
     """
     key = (idempotency_key or "").strip()
     if not key or len(key) < 8 or len(key) > 128:
@@ -658,6 +761,9 @@ def _claim_paid_operation(
         )
     )
     if existing is not None:
+        _assert_idempotency_identity(
+            existing, person_fp=person_fp, design_fp=design_fp, arms=arms
+        )
         return existing, True
 
     budget = _budget_snapshot(db)
@@ -683,6 +789,13 @@ def _claim_paid_operation(
         person_fingerprint=person_fp,
         design_fingerprint=design_fp,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=_retention_hours()),
+        report={
+            "status": "running",
+            "arms": [],
+            "arm_ledger": {},
+            "dispatched_requests": 0,
+            "successful_outputs": 0,
+        },
     )
     try:
         with db.begin_nested():
@@ -701,8 +814,71 @@ def _claim_paid_operation(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Could not claim compare operation; retry dry-run only.",
             ) from exc
+        _assert_idempotency_identity(
+            replay, person_fp=person_fp, design_fp=design_fp, arms=arms
+        )
         return replay, True
+
+    # Durable claim — must land before any provider generation request.
+    _durable_commit(db)
+    db.refresh(op)
     return op, False
+
+
+def _finalize_replay_without_dispatch(
+    db: Session, op: FittingRoomModelCompareOperation
+) -> dict[str, Any]:
+    """HTTP/worker replay of an existing op — never dispatch again.
+
+    Pending ``dispatched`` arms (crash after commit, before outcome) become
+    ``unknown`` and the operation moves to ``reconciliation_required``.
+    """
+    if op.status not in TERMINAL_OP_STATUSES:
+        ledger = _arm_ledger(op)
+        changed = False
+        for arm_key, entry in list(ledger.items()):
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("status") == "dispatched":
+                entry["status"] = "unknown"
+                entry["error_type"] = "ReconciliationRequired"
+                entry["error"] = (
+                    "Provider outcome unknown after crash/timeout; budget retained; no retry."
+                )
+                entry["no_retry"] = True
+                ledger[arm_key] = entry
+                changed = True
+        if changed or op.status == OP_STATUS_RUNNING:
+            _set_arm_ledger(op, ledger)
+            report = dict(op.report) if isinstance(op.report, dict) else {}
+            # Mirror unknown arms into arms[] for the API report.
+            arms_out = list(report.get("arms") or [])
+            by_arm = {
+                str(a.get("arm")).upper(): a for a in arms_out if isinstance(a, dict) and a.get("arm")
+            }
+            for arm_key, entry in ledger.items():
+                if entry.get("status") == "unknown":
+                    row = dict(by_arm.get(arm_key) or {"arm": arm_key})
+                    row.update(
+                        {
+                            "status": "unknown",
+                            "error_type": entry.get("error_type"),
+                            "error": entry.get("error"),
+                            "no_retry": True,
+                            "result_ref": None,
+                            "result_url": None,
+                        }
+                    )
+                    by_arm[arm_key] = row
+            report["arms"] = list(by_arm.values())
+            report["status"] = OP_STATUS_RECONCILIATION
+            op.report = report
+            op.status = OP_STATUS_RECONCILIATION
+            op.error_detail = (op.error_detail or "reconciliation_required")[:512]
+            _durable_commit(db)
+            db.refresh(op)
+
+    return _report_from_operation(op)
 
 
 def _report_from_operation(op: FittingRoomModelCompareOperation) -> dict[str, Any]:
@@ -710,9 +886,35 @@ def _report_from_operation(op: FittingRoomModelCompareOperation) -> dict[str, An
         out = dict(op.report)
         out["operation_id"] = str(op.id)
         out["idempotency_key"] = op.idempotency_key
+        out["status"] = op.status if op.status in TERMINAL_OP_STATUSES else out.get("status", op.status)
         out["replay"] = True
         out["dispatched_requests"] = op.dispatched_requests
         out["successful_outputs"] = op.successful_outputs
+        out["person_fingerprint"] = op.person_fingerprint
+        out["design_fingerprint"] = op.design_fingerprint
+        out["authorize_paid"] = True
+        out["stars_touched"] = False
+        out["paid_calls"] = int(op.dispatched_requests or 0)
+        out.setdefault(
+            "human_review",
+            {
+                "instruction": (
+                    "Compare Face · Dress · Shoulders · Pose · Background. "
+                    "Do not auto-select a winner — human visual approval required."
+                ),
+                "winner": None,
+            },
+        )
+        out.setdefault(
+            "compare_dimensions",
+            [
+                "identity_face",
+                "dress_accuracy",
+                "shoulder_decorations",
+                "pose",
+                "background",
+            ],
+        )
         return out
     return {
         "status": op.status,
@@ -749,6 +951,156 @@ def _report_from_operation(op: FittingRoomModelCompareOperation) -> dict[str, An
     }
 
 
+def _commit_arm_dispatch(
+    db: Session,
+    op: FittingRoomModelCompareOperation,
+    *,
+    arm: str,
+    spec: dict[str, str],
+) -> dict[str, Any]:
+    """Durably record a dispatched attempt BEFORE the paid provider call."""
+    # Re-lock the row so concurrent workers cannot double-dispatch.
+    locked = db.scalar(
+        select(FittingRoomModelCompareOperation)
+        .where(FittingRoomModelCompareOperation.id == op.id)
+        .with_for_update()
+    )
+    if locked is None:
+        raise HTTPException(status_code=409, detail="Compare operation missing.")
+    if locked.status in TERMINAL_OP_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail="Compare operation is terminal; no further provider calls.",
+        )
+    ledger = _arm_ledger(locked)
+    if arm in ledger:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Arm {arm} was already dispatched; no retry.",
+        )
+    if int(locked.dispatched_requests) >= int(locked.max_provider_calls):
+        raise HTTPException(
+            status_code=403,
+            detail="Provider call budget exhausted for this operation.",
+        )
+
+    locked.dispatched_requests = int(locked.dispatched_requests) + 1
+    entry = {
+        "arm": arm,
+        "status": "dispatched",
+        "provider": spec.get("provider"),
+        "model": spec.get("model"),
+        "path": spec.get("path"),
+        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+        "no_retry": True,
+    }
+    ledger[arm] = entry
+    report = dict(locked.report) if isinstance(locked.report, dict) else {}
+    report["arm_ledger"] = ledger
+    report["dispatched_requests"] = locked.dispatched_requests
+    arms_out = list(report.get("arms") or [])
+    arms_out.append(
+        {
+            **spec,
+            "status": "dispatched",
+            "estimate_cents": _estimate_cents(spec),
+            "preprocessing": "none",
+            "postprocessing": "none",
+            "result_url": None,
+            "no_retry": True,
+        }
+    )
+    report["arms"] = arms_out
+    locked.report = report
+    _durable_commit(db)
+    db.refresh(locked)
+    # Keep caller reference in sync.
+    op.dispatched_requests = locked.dispatched_requests
+    op.report = locked.report
+    op.status = locked.status
+    return entry
+
+
+def _commit_arm_outcome(
+    db: Session,
+    op: FittingRoomModelCompareOperation,
+    *,
+    arm: str,
+    arm_result: dict[str, Any],
+) -> None:
+    locked = db.scalar(
+        select(FittingRoomModelCompareOperation)
+        .where(FittingRoomModelCompareOperation.id == op.id)
+        .with_for_update()
+    )
+    if locked is None:
+        return
+    ledger = _arm_ledger(locked)
+    entry = dict(ledger.get(arm) or {"arm": arm})
+    entry["status"] = arm_result.get("status")
+    entry["storage_key"] = arm_result.get("storage_key")
+    entry["result_ref"] = arm_result.get("result_ref")
+    entry["error_type"] = arm_result.get("error_type")
+    entry["error"] = arm_result.get("error")
+    entry["no_retry"] = True
+    entry["completed_at"] = datetime.now(timezone.utc).isoformat()
+    ledger[arm] = entry
+
+    if arm_result.get("status") == "ok":
+        locked.successful_outputs = int(locked.successful_outputs) + 1
+
+    report = dict(locked.report) if isinstance(locked.report, dict) else {}
+    report["arm_ledger"] = ledger
+    report["successful_outputs"] = locked.successful_outputs
+    report["dispatched_requests"] = locked.dispatched_requests
+    arms_out = []
+    replaced = False
+    for existing in report.get("arms") or []:
+        if isinstance(existing, dict) and str(existing.get("arm")).upper() == arm:
+            arms_out.append({**existing, **arm_result})
+            replaced = True
+        elif isinstance(existing, dict):
+            arms_out.append(existing)
+    if not replaced:
+        arms_out.append(arm_result)
+    report["arms"] = arms_out
+    locked.report = report
+    _durable_commit(db)
+    db.refresh(locked)
+    op.successful_outputs = locked.successful_outputs
+    op.dispatched_requests = locked.dispatched_requests
+    op.report = locked.report
+
+
+def _commit_operation_finished(
+    db: Session,
+    op: FittingRoomModelCompareOperation,
+    *,
+    report: dict[str, Any],
+    final_status: str,
+) -> None:
+    locked = db.scalar(
+        select(FittingRoomModelCompareOperation)
+        .where(FittingRoomModelCompareOperation.id == op.id)
+        .with_for_update()
+    )
+    if locked is None:
+        return
+    locked.status = final_status
+    lean = {
+        k: v
+        for k, v in report.items()
+        if k not in {"notice_text"}
+    }
+    lean["status"] = final_status
+    lean["arm_ledger"] = _arm_ledger(locked)
+    locked.report = lean
+    _durable_commit(db)
+    db.refresh(locked)
+    op.status = locked.status
+    op.report = locked.report
+
+
 def run_model_compare(
     *,
     db: Session,
@@ -763,7 +1115,7 @@ def run_model_compare(
 ) -> dict[str, Any]:
     """Run (or dry-run) the A/B/C comparison. Never charges Stars."""
     assert_model_compare_allowed(user)
-    _purge_expired_outputs(db, owner_id=user.id)
+    run_model_compare_retention_sweep(db, dry_run=False, commit=True, owner_id=user.id)
 
     # Consent required for any paid path; dry-run also asks so the owner sees the notice.
     _require_consent(
@@ -786,6 +1138,7 @@ def run_model_compare(
     person_fp = _fingerprint(person_png)
     design_fp = _fingerprint(design_png)
     budget = _budget_snapshot(db)
+    selected_arms = [s["arm"] for s in selected]
 
     report: dict[str, Any] = {
         "status": "dry_run" if not authorize_paid else "completed",
@@ -853,42 +1206,45 @@ def run_model_compare(
         user=user,
         idempotency_key=idempotency_key or "",
         consent_version=COMPARE_CONSENT_VERSION,
-        arms=[s["arm"] for s in selected],
+        arms=selected_arms,
         person_fp=person_fp,
         design_fp=design_fp,
     )
     if is_replay:
-        return _report_from_operation(op)
+        return _finalize_replay_without_dispatch(db, op)
 
     report["operation_id"] = str(op.id)
     report["idempotency_key"] = op.idempotency_key
     report["status"] = "running"
 
     for spec in selected:
+        arm = spec["arm"]
         arm_result: dict[str, Any] = {
             **spec,
             "estimate_cents": _estimate_cents(spec),
             "preprocessing": "none",
             "postprocessing": "none",
             "result_url": None,  # never public
+            "no_retry": True,
         }
 
-        # Budget check before dispatch — fail closed, no call.
-        if int(op.dispatched_requests) >= int(op.max_provider_calls):
-            arm_result.update(
-                {
-                    "status": "skipped_budget",
-                    "error_type": "BudgetExhausted",
-                    "error": "Provider call budget exhausted for this operation.",
-                    "result_ref": None,
-                }
-            )
-            report["arms"].append(arm_result)
-            continue
+        # Durably COMMIT the dispatch attempt before any paid provider call.
+        try:
+            _commit_arm_dispatch(db, op, arm=arm, spec=spec)
+        except HTTPException as exc:
+            if exc.status_code in {403, 409}:
+                arm_result.update(
+                    {
+                        "status": "skipped_budget",
+                        "error_type": "BudgetExhausted",
+                        "error": str(exc.detail),
+                        "result_ref": None,
+                    }
+                )
+                report["arms"].append(arm_result)
+                continue
+            raise
 
-        # Increment dispatched BEFORE the call so hangs/timeouts still consume budget.
-        op.dispatched_requests = int(op.dispatched_requests) + 1
-        db.flush()
         report["dispatched_requests"] = int(op.dispatched_requests)
         report["paid_calls"] = int(op.dispatched_requests)
 
@@ -911,16 +1267,14 @@ def run_model_compare(
             storage_key = _save_private_arm_png(
                 owner_id=user.id,
                 operation_id=op.id,
-                arm=spec["arm"],
+                arm=arm,
                 png=png,
             )
-            op.successful_outputs = int(op.successful_outputs) + 1
-            db.flush()
             arm_result.update(
                 {
                     "status": "ok",
                     "storage_key": storage_key,
-                    "result_ref": _result_ref(operation_id=op.id, arm=spec["arm"]),
+                    "result_ref": _result_ref(operation_id=op.id, arm=arm),
                     "meta": meta,
                     "duration_ms": meta.get("duration_ms"),
                     "estimate_cents": meta.get("estimate_cents", arm_result["estimate_cents"]),
@@ -930,7 +1284,7 @@ def run_model_compare(
             # Ambiguous / failed outcomes do NOT trigger another attempt.
             logger.info(
                 "model-compare arm %s failed: %s",
-                spec["arm"],
+                arm,
                 type(exc).__name__,
                 exc_info=True,
             )
@@ -944,18 +1298,16 @@ def run_model_compare(
                     "no_retry": True,
                 }
             )
+
+        _commit_arm_outcome(db, op, arm=arm, arm_result=arm_result)
         report["arms"].append(arm_result)
         report["successful_outputs"] = int(op.successful_outputs)
 
     report["status"] = "completed"
     report["budget"] = _budget_snapshot(db)
     report["human_review"]["winner"] = None
-    op.status = OP_STATUS_COMPLETED
-    op.report = {
-        k: v
-        for k, v in report.items()
-        if k not in {"notice_text"}  # keep ledger lean; notice is static
-    }
-    # Persist without secrets / raw images.
-    db.flush()
+    report["dispatched_requests"] = int(op.dispatched_requests)
+    report["paid_calls"] = int(op.dispatched_requests)
+    _commit_operation_finished(db, op, report=report, final_status=OP_STATUS_COMPLETED)
+    report["status"] = OP_STATUS_COMPLETED
     return report
