@@ -469,8 +469,8 @@ class FittingRoomPreflightRead(BaseModel):
     stars_cost_note: str = ""
     max_outfit_pieces: int = 4
     conflicting_category_sets: list[list[str]] = Field(default_factory=list)
-    # Owner-only Model B (gpt-image-2.6-sunburst) raw path — available only when
-    # the feature flag is on AND this user is on the owner allowlist.
+    # Model B (gpt-image-2.6-sunburst) raw path — true when the feature flag is
+    # on and the optional allowlist permits this user (empty allowlist = all).
     look_model_b_sunburst_available: bool = False
     look_model_b_sunburst_model: str = "gpt-image-2.6-sunburst"
 
@@ -574,9 +574,9 @@ class FittingRoomTryOnBody(BaseModel):
     prefer_model_b_sunburst: bool = Field(
         default=False,
         description=(
-            "Owner-only: request the raw Model B (gpt-image-2.6-sunburst) Fitting Room "
-            "path for a single fashion-look illustration. Ignored unless the feature "
-            "flag is on and the caller is on the owner allowlist."
+            "Legacy client hint for the Model B (gpt-image-2.6-sunburst) Fitting Room "
+            "path. When the feature flag is on, Model B is already the default single-"
+            "look path for permitted users; this field is accepted but not required."
         ),
     )
 

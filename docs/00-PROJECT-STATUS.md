@@ -3,21 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## LIVE — Owner Model B website testing ready (2026-11-21 Asia/Jerusalem)
+## LIVE — Model B Fitting Room for everyone (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | [#477](https://github.com/perielad2-netizen/FashionRise/pull/477) · tip **`b88515e2`** (FE UI + non-owner auth test + docs) |
-| Goal | **NoaPeri** can run one Model B try-on manually on **fashionrise.app** (not via Cursor) |
-| FE tip | `/var/www/fashionrise/releases/b88515e2-model-b-owner-ui` · `/version.json` → `b88515e2` |
-| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1f104378-identity-keyboard /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
-| UI | Fitting Room shows Model B checkbox only when preflight `look_model_b_sunburst_available=true`; selecting it sends `prefer_model_b_sunburst=true` |
-| Auth verified on prod | Owner preflight `look_model_b_sunburst_available=true` · non-owner (PeriShilat) `false` · allowlist gate independent of FE |
-| Prod flags | `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=true` · allowlist `perielad@gmail.com,a812d6c8-89c9-492c-8695-bbacf88d87cd,noaperi` · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` · look model still **`chatgpt-image-latest`** for customers |
-| Health | API `:8010/health` → `{"status":"ok"}` · FE home **200** · workers 1–3 active |
-| Cursor | **No** real image generation / provider calls from Cursor |
-| After owner one test | Disable again: `ENABLED=false`, empty allowlist, restart API+workers — until the image is reviewed |
-| Exact next action | Owner signs in as **NoaPeri** → Fitting Room → enable Model B → upload person + floral design → Generate once → review heels/dress/face/pose/background |
+| Verdict | Owner floral + pink heels test **approved** → Model B rolled out to **all users** |
+| PR | [#477](https://github.com/perielad2-netizen/FashionRise/pull/477) (GA commit on same branch) |
+| Behavior | When `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=true` and allowlist **empty**, Model B is the **default** single-look Fitting Room path (no checkbox; prefer flag not required) |
+| Optional restrict | Non-empty allowlist still limits to listed users (ops kill-switch) |
+| Prod flags | `ENABLED=true` · allowlist **empty** · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` |
+| UX | Existing upload / design / consent / Stars / results unchanged; experiment checkbox removed |
+| Exact next action | Owner tests Fitting Room on **iOS + Android**; watch Stars + heels/dress fidelity |
+
 
 ## Deployed — Fitting Room Model B sunburst path (flags OFF) · PR #474 (2026-11-21 Asia/Jerusalem)
 

@@ -293,11 +293,11 @@ class Settings(BaseSettings):
     # Running ops with no ledger heartbeat older than this are treated as interrupted.
     fitting_room_model_compare_stale_seconds: int = 900
     # Fitting Room Model B (gpt-image-2.6-sunburst) raw person+design path.
-    # Proven in owner A/B/C compare. OFF by default. Owner allowlist + explicit
-    # prefer_model_b_sunburst on the try-on request. No mask / face patch /
-    # materialize / color-lock / paid fallback. Identity lock stays OFF.
+    # When enabled, Model B is the default single-look try-on path. No mask /
+    # face patch / materialize / color-lock / paid fallback. Identity lock OFF.
     fitting_room_look_model_b_sunburst_enabled: bool = False
-    # Comma-separated emails / usernames / user ids. Empty = nobody.
+    # Optional restriction: comma-separated emails / usernames / user ids.
+    # Empty = everyone when the flag is on. Non-empty = only listed users.
     fitting_room_look_model_b_sunburst_owner_allowlist: str = ""
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).

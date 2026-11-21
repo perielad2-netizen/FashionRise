@@ -188,7 +188,7 @@ def test_model_b_shared_helper_person_then_design_one_call(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_preflight_model_b_available_only_when_flag_and_allowlist(
+def test_preflight_model_b_available_when_flag_on_empty_allowlist_means_everyone(
     client, db_session, monkeypatch
 ):
     tokens = register_with_invite(
@@ -202,12 +202,20 @@ def test_preflight_model_b_available_only_when_flag_and_allowlist(
     assert body["look_model_b_sunburst_available"] is False
     assert body["look_model_b_sunburst_model"] == MODEL_B_SUNBURST_MODEL
 
+    # Flag on + empty allowlist = GA for everyone.
     monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED", "true")
-    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "mb_pre")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "")
     get_settings.cache_clear()
     r2 = client.get(f"{FR}/preflight", headers=_auth(tokens))
     assert r2.status_code == 200
     assert r2.json()["look_model_b_sunburst_available"] is True
+
+    # Non-empty allowlist still restricts.
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "someone_else")
+    get_settings.cache_clear()
+    r3 = client.get(f"{FR}/preflight", headers=_auth(tokens))
+    assert r3.status_code == 200
+    assert r3.json()["look_model_b_sunburst_available"] is False
 
 
 def test_model_b_job_path_one_generation_no_materialize_no_fallback(
@@ -326,10 +334,10 @@ def test_model_b_job_path_one_generation_no_materialize_no_fallback(
     assert after == before - 20
 
 
-def test_model_b_prefer_ignored_for_non_allowlisted_user(
+def test_model_b_restricted_allowlist_blocks_non_listed_user(
     client, db_session, monkeypatch
 ):
-    """Manual prefer_model_b_sunburst=true cannot activate Model B without allowlist."""
+    """When an allowlist is set, non-listed users cannot activate Model B."""
     from app.services import fitting_room as fr
     from tests.look_test_images import (
         floral_blue_look_plate_png,
@@ -369,7 +377,6 @@ def test_model_b_prefer_ignored_for_non_allowlisted_user(
     )
     _grant_stars(db_session, "mb_stranger", amount=40)
 
-    # Preflight must report unavailable for this user.
     r_pf = client.get(f"{FR}/preflight", headers=_auth(tokens))
     assert r_pf.status_code == 200
     assert r_pf.json()["look_model_b_sunburst_available"] is False
@@ -389,10 +396,10 @@ def test_model_b_prefer_ignored_for_non_allowlisted_user(
     assert model_b_calls["n"] == 0
 
 
-def test_model_b_ignored_without_prefer_even_when_allowlisted(
+def test_model_b_default_path_without_prefer_when_enabled(
     client, db_session, monkeypatch
 ):
-    """Flag+allowlist alone does not hijack ordinary look try-ons."""
+    """Flag on + empty allowlist uses Model B by default (prefer not required)."""
     from app.services import fitting_room as fr
     from tests.look_test_images import (
         floral_blue_look_plate_png,
@@ -402,35 +409,40 @@ def test_model_b_ignored_without_prefer_even_when_allowlisted(
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED", "true")
-    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "mb_nopref")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "")
     monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "true")
     monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "false")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED", "false")
     get_settings.cache_clear()
 
-    model_b_calls = {"n": 0}
+    calls: list[str] = []
 
-    def _spy_model_b(*_a, **_k):
-        model_b_calls["n"] += 1
-        raise AssertionError("Model B must not run without prefer_model_b_sunburst")
+    def _model_b_ok(*_a, **_k):
+        calls.append("model_b")
+        return (
+            floral_blue_tryon_good_png(),
+            {
+                "provider": "openai_images_edit",
+                "model": MODEL_B_SUNBURST_MODEL,
+                "fitting_room_look_path": MODEL_B_SUNBURST_PATH,
+                "openai_calls": 1,
+            },
+            "openai",
+            None,
+        )
 
-    def _direct_v2(*, person_png, look_png, prompt, identity_lock=False):
-        return floral_blue_tryon_good_png(), {
-            "provider": "openai_images_edit",
-            "model": "chatgpt-image-latest",
-            "direct_edit_v2": True,
-            "chatgpt_clone": True,
-            "image_order": ["person", "garment"],
-            "fitting_room_look_path": "chatgpt_direct_edit_v2",
-        }
+    def _no_v2(*_a, **_k):
+        calls.append("direct_edit_v2")
+        raise AssertionError("direct-edit-v2 must not run when Model B is default")
 
-    monkeypatch.setattr(fr, "_try_model_b_sunburst_look_fit", _spy_model_b)
-    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _direct_v2)
+    monkeypatch.setattr(fr, "_try_model_b_sunburst_look_fit", _model_b_ok)
+    monkeypatch.setattr(fr, "_try_direct_edit_v2_look_fit", _no_v2)
     set_try_on_provider_override(None)
 
     tokens = register_with_invite(
-        client, db_session, email="mb-nopref@example.com", username="mb_nopref"
+        client, db_session, email="mb-ga@example.com", username="mb_ga"
     )
-    _grant_stars(db_session, "mb_nopref", amount=40)
+    _grant_stars(db_session, "mb_ga", amount=40)
     body = _look_body(
         look_png=floral_blue_look_plate_png(),
         person_png=wings_outdoor_person_png(),
@@ -442,8 +454,8 @@ def test_model_b_ignored_without_prefer_even_when_allowlisted(
     db_session.expire_all()
     job = db_session.get(AIJob, uuid.UUID(r.json()["id"]))
     assert job.status == "completed", job.error_message
-    assert (job.result_data or {}).get("fitting_room_look_path") == "chatgpt_direct_edit_v2"
-    assert model_b_calls["n"] == 0
+    assert (job.result_data or {}).get("fitting_room_look_path") == MODEL_B_SUNBURST_PATH
+    assert calls == ["model_b"]
 
 
 def test_model_b_fail_closed_no_paid_fallback(client, db_session, monkeypatch):

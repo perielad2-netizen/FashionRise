@@ -125,7 +125,7 @@ describe('FittingRoomScreen', () => {
     expect(tryBtn).toBeDisabled()
   })
 
-  it('shows Model B option only when preflight marks it available and sends prefer flag', async () => {
+  it('hides Model B experiment UI even when preflight marks Model B available', async () => {
     mocks.fetchFittingRoomPreflight.mockResolvedValue({
       enabled: true,
       live_http: true,
@@ -142,63 +142,10 @@ describe('FittingRoomScreen', () => {
       look_model_b_sunburst_available: true,
       look_model_b_sunburst_model: 'gpt-image-2.6-sunburst',
     })
-    mocks.readFittingRoomAsset.mockResolvedValue({
-      key: 'u1:person',
-      kind: 'person',
-      userId: 'u1',
-      dataUrl: 'data:image/png;base64,person',
-      mimeType: 'image/png',
-      updatedAt: new Date().toISOString(),
-    })
-    const { readOutfitSession } = await import('@/lib/fittingRoomStore')
-    vi.mocked(readOutfitSession).mockResolvedValue({
-      key: 'u1:outfit',
-      userId: 'u1',
-      pieces: [
-        {
-          id: 'piece_1',
-          dataUrl: 'data:image/png;base64,garment',
-          mimeType: 'image/png',
-          category: 'dresses',
-          source: 'fashionrise_look',
-          addedAt: new Date().toISOString(),
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    })
-    mocks.enqueueFittingRoomTryOn.mockResolvedValue({ id: 'job-mb-1' })
-    mocks.pollAiJobUntilSettled.mockResolvedValue({ id: 'job-mb-1', status: 'completed' })
-    mocks.fetchJobImageBlob.mockResolvedValue(
-      new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
-    )
-    class FakeFileReader {
-      result: string | null = null
-      onload: ((ev: ProgressEvent<FileReader>) => void) | null = null
-      onerror: ((ev: ProgressEvent<FileReader>) => void) | null = null
-      readAsDataURL() {
-        this.result = 'data:image/png;base64,autosaved'
-        this.onload?.({} as ProgressEvent<FileReader>)
-      }
-    }
-    vi.stubGlobal('FileReader', FakeFileReader as unknown as typeof FileReader)
-
     render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
     await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
-    expect(screen.getByTestId('fitting-room-model-b-option')).toBeInTheDocument()
-    const modelB = screen.getByTestId('fitting-room-model-b-toggle')
-    expect(modelB).not.toBeChecked()
-    await userEvent.click(modelB)
-    expect(modelB).toBeChecked()
-    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
-    const tryBtn = screen.getByTestId('fitting-room-try-on')
-    await waitFor(() => expect(tryBtn).not.toBeDisabled())
-    await userEvent.click(tryBtn)
-    await userEvent.click(await screen.findByRole('button', { name: /Approve −20/i }))
-    await waitFor(() => expect(mocks.enqueueFittingRoomTryOn).toHaveBeenCalled())
-    const payload = mocks.enqueueFittingRoomTryOn.mock.calls[0]?.[0] as {
-      preferModelBSunburst?: boolean
-    }
-    expect(payload.preferModelBSunburst).toBe(true)
+    expect(screen.queryByTestId('fitting-room-model-b-option')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Model B experiment/i)).not.toBeInTheDocument()
   })
 
   it('offers gallery and camera pickers for person photo and clothing', async () => {
