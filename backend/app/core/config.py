@@ -276,6 +276,12 @@ class Settings(BaseSettings):
     # differ. OFF by default. When ON with direct-edit v2, also send person×2 +
     # garment and use the identity-v1 prompt. No auto paid retries on reject.
     fitting_room_look_identity_lock_enabled: bool = False
+    # Owner-only clean A/B/C model compare (no mask/composite/materialize).
+    # Fail closed. Does not alter the live Fitting Room try-on path or Stars.
+    fitting_room_model_compare_enabled: bool = False
+    fitting_room_model_compare_live_http: bool = False
+    # Comma-separated emails / usernames / user ids. Empty = nobody.
+    fitting_room_model_compare_owner_allowlist: str = ""
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.

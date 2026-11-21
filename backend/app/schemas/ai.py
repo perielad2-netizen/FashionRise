@@ -485,6 +485,45 @@ class FittingRoomGarmentPiece(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class FittingRoomModelCompareBody(BaseModel):
+    """Owner-only clean A/B/C model comparison (no Stars, no live path change).
+
+    Default ``authorize_paid=false`` is a dry-run plan only. Paid runs require
+    explicit authorization plus compare live_http + owner allowlist.
+    """
+
+    person_image_base64: str = Field(..., min_length=32)
+    design_image_base64: str = Field(..., min_length=32)
+    authorize_paid: bool = False
+    arms: list[str] | None = Field(
+        default=None,
+        description="Subset of A/B/C. Default all three.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FittingRoomModelCompareRead(BaseModel):
+    status: str
+    prompt_version: str
+    prompt: str
+    person_fingerprint: str | None = None
+    design_fingerprint: str | None = None
+    authorize_paid: bool = False
+    live_http: bool = False
+    stars_touched: bool = False
+    paid_calls: int = 0
+    arms: list[dict] = Field(default_factory=list)
+    human_review: dict = Field(default_factory=dict)
+    compare_dimensions: list[str] = Field(default_factory=list)
+    enabled: bool | None = None
+    owner_allowlisted: bool | None = None
+    armed: bool | None = None
+    notes: list[str] | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
 class FittingRoomTryOnBody(BaseModel):
     """Person photo + clothing image(s) → Fitting Room try-on job.
 

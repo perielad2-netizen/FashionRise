@@ -11,6 +11,8 @@ from app.schemas.ai import (
     AcceptedGarmentRealismJobRead,
     AIJobCreate,
     AIJobRead,
+    FittingRoomModelCompareBody,
+    FittingRoomModelCompareRead,
     FittingRoomPreflightRead,
     FittingRoomTryOnBody,
     MagicOperationJobsRead,
@@ -26,6 +28,7 @@ from app.schemas.ai import (
 )
 from app.services import ai_service
 from app.services import fitting_room as fitting_room_service
+from app.services import fitting_room_model_compare as model_compare_service
 from app.services import personal_try_on as try_on_service
 
 router = APIRouter()
@@ -318,6 +321,36 @@ def fitting_room_try_on(
         source_gallery_item_id=body.source_gallery_item_id,
     )
     return AIJobRead.from_job(job)
+
+
+@router.get("/fitting-room/model-compare/preflight", response_model=FittingRoomModelCompareRead)
+@limiter.limit("30/minute")
+def fitting_room_model_compare_preflight(
+    request: Request, user: CurrentUser
+) -> FittingRoomModelCompareRead:
+    """Owner-only clean A/B/C compare gate — no billable work."""
+    _ = request.url
+    model_compare_service.assert_model_compare_allowed(user)
+    return FittingRoomModelCompareRead(**model_compare_service.preflight_model_compare(user))
+
+
+@router.post("/fitting-room/model-compare", response_model=FittingRoomModelCompareRead)
+@limiter.limit("6/minute")
+def fitting_room_model_compare(
+    request: Request,
+    user: CurrentUser,
+    body: FittingRoomModelCompareBody,
+) -> FittingRoomModelCompareRead:
+    """Owner-only raw model A/B/C. Default dry-run; paid only with authorize_paid."""
+    _ = request.url
+    report = model_compare_service.run_model_compare(
+        user=user,
+        person_image_base64=body.person_image_base64,
+        design_image_base64=body.design_image_base64,
+        authorize_paid=bool(body.authorize_paid),
+        arms=body.arms,
+    )
+    return FittingRoomModelCompareRead(**report)
 
 
 @router.post("/jobs", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)

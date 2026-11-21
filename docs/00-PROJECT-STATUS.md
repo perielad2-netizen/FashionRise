@@ -3,7 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Deploying — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem)
+## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-fitting-model-compare-77c6` |
+| Why | Identity-lock face composite made results worse (seams, shoulder loss). Stop polishing bad raw outputs. |
+| Goal | One native call each: **A** `chatgpt-image-latest` · **B** `gpt-image-2.6-sunburst` · **C** FASHN `tryon-max` — same person+design, **no** materialize/mask/composite/color-lock/retry |
+| Prompt | `fitting-room-model-compare-v1` (short: fit garment, preserve person, keep colors/silhouette) |
+| API | `GET/POST /api/v1/ai/fitting-room/model-compare[/preflight]` — owner allowlist; default **dry-run** (`authorize_paid=false`) |
+| Flags | `FITTING_ROOM_MODEL_COMPARE_ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` (all fail-closed) |
+| Live Fitting Room | **Unchanged** by this branch — no deploy of compare; identity-lock stays as previously set until ops flips it |
+| Stars | Never touched |
+| Tests | `pytest tests/test_fitting_room_model_compare.py` (mocked) |
+| Next action | Human authorize **one bounded paid run** (`authorize_paid=true`, live_http on, allowlist set). Compare Face·Dress·Shoulders·Pose·Background. Do not auto-pick a winner. |
+
+## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
