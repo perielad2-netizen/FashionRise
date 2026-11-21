@@ -108,6 +108,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [draftCategory, setDraftCategory] = useState('auto')
   const [preflight, setPreflight] = useState<FittingRoomPreflight | null>(null)
   const [consent, setConsent] = useState(false)
+  /** Owner-only Model B opt-in; only meaningful when preflight marks it available. */
+  const [preferModelB, setPreferModelB] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -241,6 +243,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             stars_cost_note: '20 Stars per successful Fitting Room preview (flat rate).',
             max_outfit_pieces: 1,
             conflicting_category_sets: [],
+            look_model_b_sunburst_available: false,
+            look_model_b_sunburst_model: 'gpt-image-2.6-sunburst',
           })
         }
       }
@@ -249,6 +253,14 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       cancelled = true
     }
   }, [userId, persistOutfit, showNotice])
+
+  const modelBAvailable = Boolean(preflight?.look_model_b_sunburst_available)
+  const modelBLabel =
+    preflight?.look_model_b_sunburst_model?.trim() || 'gpt-image-2.6-sunburst'
+
+  useEffect(() => {
+    if (!modelBAvailable && preferModelB) setPreferModelB(false)
+  }, [modelBAvailable, preferModelB])
 
   const starsCost = preflight?.stars_cost ?? costs.fitting_room ?? 20
   const maxPieces = preflight?.max_outfit_pieces ?? 4
@@ -448,6 +460,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         consentAcknowledged: true,
         consentVersion: preflight.consent_version,
         ...(sourceGalleryItemId ? { sourceGalleryItemId } : {}),
+        ...(modelBAvailable && preferModelB ? { preferModelBSunburst: true } : {}),
         signal: ac.signal,
       })
       runningJobIdRef.current = job.id
@@ -842,6 +855,22 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                 'I understand this is a visual concept preview only — not an accurate size or fit guarantee. Your photo and clothing image stay private.'}
             </label>
           </div>
+          {modelBAvailable ? (
+            <div className={styles.consent} data-testid="fitting-room-model-b-option">
+              <input
+                id="fr-model-b"
+                type="checkbox"
+                checked={preferModelB}
+                onChange={(e) => setPreferModelB(e.target.checked)}
+                disabled={!preflight?.enabled || phase === 'running'}
+                data-testid="fitting-room-model-b-toggle"
+              />
+              <label htmlFor="fr-model-b">
+                Use Model B experiment ({modelBLabel}) — owner test only. Same Stars cost;
+                one generation, no automatic fallback.
+              </label>
+            </div>
+          ) : null}
           <div className={styles.tryRow}>
             <button
               type="button"

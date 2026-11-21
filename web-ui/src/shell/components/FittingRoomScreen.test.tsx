@@ -75,7 +75,7 @@ vi.mock('@/shell/components/StarsShopModal', () => ({
 }))
 
 describe('FittingRoomScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mocks.isFittingRoomUiEnabled.mockReturnValue(true)
     mocks.fetchFittingRoomPreflight.mockResolvedValue({
       enabled: true,
@@ -91,6 +91,8 @@ describe('FittingRoomScreen', () => {
         '20 Stars per successful Fitting Room preview — flat rate whether the clothing image shows one garment or several.',
       max_outfit_pieces: 1,
       conflicting_category_sets: [['one-pieces', 'tops']],
+      look_model_b_sunburst_available: false,
+      look_model_b_sunburst_model: 'gpt-image-2.6-sunburst',
     })
     mocks.readFittingRoomAsset.mockResolvedValue(null)
     mocks.listSavedResults.mockResolvedValue([])
@@ -98,6 +100,8 @@ describe('FittingRoomScreen', () => {
     mocks.enqueueFittingRoomTryOn.mockReset()
     mocks.pollAiJobUntilSettled.mockReset()
     mocks.fetchJobImageBlob.mockReset()
+    const { readOutfitSession } = await import('@/lib/fittingRoomStore')
+    vi.mocked(readOutfitSession).mockResolvedValue(null)
   })
 
   it('renders gated-off copy when UI flag is false', () => {
@@ -112,12 +116,89 @@ describe('FittingRoomScreen', () => {
     expect(screen.getByTestId('fitting-room-screen')).toBeInTheDocument()
     expect(screen.queryByTestId('fitting-room-stars-cost')).not.toBeInTheDocument()
     expect(screen.queryByText(/on success/i)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('fitting-room-model-b-option')).not.toBeInTheDocument()
     const tryBtn = screen.getByTestId('fitting-room-try-on')
     expect(tryBtn).toBeDisabled()
     expect(tryBtn).toHaveTextContent(/^Try on$/i)
     expect(tryBtn).not.toHaveTextContent(/Stars/i)
     await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
     expect(tryBtn).toBeDisabled()
+  })
+
+  it('shows Model B option only when preflight marks it available and sends prefer flag', async () => {
+    mocks.fetchFittingRoomPreflight.mockResolvedValue({
+      enabled: true,
+      live_http: true,
+      consent_version: 'fitting-room-preview-v1',
+      notice_text: 'Preview only — not a fit guarantee.',
+      prompt_version: 'v-test',
+      supported_categories: ['auto', 'tops', 'dresses'],
+      preview_disclaimer: 'Concept preview only — not a fit guarantee.',
+      ai_gate: true,
+      stars_cost: 20,
+      stars_cost_note: '20 Stars per successful Fitting Room preview.',
+      max_outfit_pieces: 1,
+      conflicting_category_sets: [],
+      look_model_b_sunburst_available: true,
+      look_model_b_sunburst_model: 'gpt-image-2.6-sunburst',
+    })
+    mocks.readFittingRoomAsset.mockResolvedValue({
+      key: 'u1:person',
+      kind: 'person',
+      userId: 'u1',
+      dataUrl: 'data:image/png;base64,person',
+      mimeType: 'image/png',
+      updatedAt: new Date().toISOString(),
+    })
+    const { readOutfitSession } = await import('@/lib/fittingRoomStore')
+    vi.mocked(readOutfitSession).mockResolvedValue({
+      key: 'u1:outfit',
+      userId: 'u1',
+      pieces: [
+        {
+          id: 'piece_1',
+          dataUrl: 'data:image/png;base64,garment',
+          mimeType: 'image/png',
+          category: 'dresses',
+          source: 'fashionrise_look',
+          addedAt: new Date().toISOString(),
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    })
+    mocks.enqueueFittingRoomTryOn.mockResolvedValue({ id: 'job-mb-1' })
+    mocks.pollAiJobUntilSettled.mockResolvedValue({ id: 'job-mb-1', status: 'completed' })
+    mocks.fetchJobImageBlob.mockResolvedValue(
+      new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+    )
+    class FakeFileReader {
+      result: string | null = null
+      onload: ((ev: ProgressEvent<FileReader>) => void) | null = null
+      onerror: ((ev: ProgressEvent<FileReader>) => void) | null = null
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,autosaved'
+        this.onload?.({} as ProgressEvent<FileReader>)
+      }
+    }
+    vi.stubGlobal('FileReader', FakeFileReader as unknown as typeof FileReader)
+
+    render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
+    await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
+    expect(screen.getByTestId('fitting-room-model-b-option')).toBeInTheDocument()
+    const modelB = screen.getByTestId('fitting-room-model-b-toggle')
+    expect(modelB).not.toBeChecked()
+    await userEvent.click(modelB)
+    expect(modelB).toBeChecked()
+    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
+    const tryBtn = screen.getByTestId('fitting-room-try-on')
+    await waitFor(() => expect(tryBtn).not.toBeDisabled())
+    await userEvent.click(tryBtn)
+    await userEvent.click(await screen.findByRole('button', { name: /Approve −20/i }))
+    await waitFor(() => expect(mocks.enqueueFittingRoomTryOn).toHaveBeenCalled())
+    const payload = mocks.enqueueFittingRoomTryOn.mock.calls[0]?.[0] as {
+      preferModelBSunburst?: boolean
+    }
+    expect(payload.preferModelBSunburst).toBe(true)
   })
 
   it('offers gallery and camera pickers for person photo and clothing', async () => {

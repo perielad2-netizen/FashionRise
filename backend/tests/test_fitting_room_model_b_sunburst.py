@@ -326,6 +326,69 @@ def test_model_b_job_path_one_generation_no_materialize_no_fallback(
     assert after == before - 20
 
 
+def test_model_b_prefer_ignored_for_non_allowlisted_user(
+    client, db_session, monkeypatch
+):
+    """Manual prefer_model_b_sunburst=true cannot activate Model B without allowlist."""
+    from app.services import fitting_room as fr
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        floral_blue_tryon_good_png,
+        wings_outdoor_person_png,
+    )
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST", "real_owner_only")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "false")
+    get_settings.cache_clear()
+
+    model_b_calls = {"n": 0}
+
+    def _spy_model_b(*_a, **_k):
+        model_b_calls["n"] += 1
+        raise AssertionError("Model B must not run for non-allowlisted users")
+
+    def _direct_v2(*, person_png, look_png, prompt, identity_lock=False):
+        return floral_blue_tryon_good_png(), {
+            "provider": "openai_images_edit",
+            "model": "chatgpt-image-latest",
+            "direct_edit_v2": True,
+            "chatgpt_clone": True,
+            "image_order": ["person", "garment"],
+            "fitting_room_look_path": "chatgpt_direct_edit_v2",
+        }
+
+    monkeypatch.setattr(fr, "_try_model_b_sunburst_look_fit", _spy_model_b)
+    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _direct_v2)
+    set_try_on_provider_override(None)
+
+    tokens = register_with_invite(
+        client, db_session, email="mb-stranger@example.com", username="mb_stranger"
+    )
+    _grant_stars(db_session, "mb_stranger", amount=40)
+
+    # Preflight must report unavailable for this user.
+    r_pf = client.get(f"{FR}/preflight", headers=_auth(tokens))
+    assert r_pf.status_code == 200
+    assert r_pf.json()["look_model_b_sunburst_available"] is False
+
+    body = _look_body(
+        look_png=floral_blue_look_plate_png(),
+        person_png=wings_outdoor_person_png(),
+        prefer_model_b=True,
+    )
+    r = client.post(f"{FR}/try-on", json=body, headers=_auth(tokens))
+    assert r.status_code == 201, r.text
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, uuid.UUID(r.json()["id"]))
+    assert job.status == "completed", job.error_message
+    assert (job.result_data or {}).get("fitting_room_look_path") == "chatgpt_direct_edit_v2"
+    assert model_b_calls["n"] == 0
+
+
 def test_model_b_ignored_without_prefer_even_when_allowlisted(
     client, db_session, monkeypatch
 ):

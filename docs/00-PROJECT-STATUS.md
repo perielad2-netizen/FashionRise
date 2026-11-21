@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Ready — Owner Model B website testing (UI + NoaPeri allowlist) (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Goal | Let **NoaPeri** run one Model B try-on manually on **fashionrise.app** (not via Cursor) |
+| UI | Fitting Room shows Model B checkbox only when preflight `look_model_b_sunburst_available=true`; selecting it sends `prefer_model_b_sunburst=true` |
+| Auth | Server still requires flag + owner allowlist; non-owners cannot activate Model B by forging the request body |
+| Prod flags (this deploy) | `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=true` · allowlist **NoaPeri** (`perielad@gmail.com` + uuid + username) · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` · customer default provider unchanged |
+| Cursor | **No** real image generation / provider calls from Cursor |
+| After owner test | Disable Model B again (`ENABLED=false`, empty allowlist) until the image is reviewed |
+| Exact next action | Owner signs in → Fitting Room → check Model B → upload person + floral design → Generate once → review heels/dress/face/pose/background |
+
 ## Deployed — Fitting Room Model B sunburst path (flags OFF) · PR #474 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
