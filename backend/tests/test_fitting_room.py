@@ -647,12 +647,15 @@ def test_look_plate_openai_prompt_demands_photoreal_not_sketch():
         ],
     )
     assert prompt is not None
-    assert "photorealistic" in prompt.lower()
-    assert "sketch" in prompt.lower()
-    assert "one-to-one" in prompt.lower() or "1:1" in prompt
+    low = prompt.lower()
+    assert "photoreal" in low or "realism" in low or "real fabric" in low
+    assert "edit image 1 only" in low
+    assert "drawn model" in low or "drawn figure" in low
+    assert "sketch" in low
+    assert "one-to-one" in low or "1:1" in prompt
     assert lock["bodice_hex"] in prompt
     assert "COLOR LOCK" in prompt
-    assert "footwear" in prompt.lower() or "shoes" in prompt.lower()
+    assert "footwear" in low or "shoes" in low or "boot" in low
 
 
 def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
@@ -664,9 +667,10 @@ def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
     assert len(prompt) <= 1000
 
 
-def test_look_tryon_prompts_replace_photo_footwear_with_look_shoes():
-    """Social looks that draw shoes must not keep the person's photo boots."""
+def test_look_tryon_prompts_keep_photo_footwear_by_default():
+    """Social look try-on keeps photo boots; illustration heels must not win."""
     from app.services.fitting_room import (
+        FITTING_ROOM_CHATGPT_CLONE_PROMPT,
         FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
         FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
         _fitting_room_max_prompt,
@@ -688,17 +692,37 @@ def test_look_tryon_prompts_replace_photo_footwear_with_look_shoes():
         _fitting_room_openai_prompt(
             {"garment_source": "fashionrise_look", "look_normalized": True}, []
         ),
+        FITTING_ROOM_CHATGPT_CLONE_PROMPT,
+        FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
     )
-    for prompt in (*max_prompts, *openai_prompts, FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE):
+    for prompt in (*max_prompts, *openai_prompts):
         assert prompt is not None
         low = prompt.lower()
-        assert "shoe" in low or "footwear" in low
-        assert "replace" in low
-        assert "keep the person's existing footwear" not in low
+        assert "shoe" in low or "footwear" in low or "boot" in low
+        assert "keep" in low and ("footwear" in low or "boot" in low or "shoe" in low)
+        assert "do not swap photo boots" in low or "unless the dress hem" in low
     for prompt in max_prompts:
         assert len(prompt) <= 1000
     assert "shoes" in LOOK_MATERIALIZE_PROMPT.lower()
     assert "footwear" in LOOK_MATERIALIZE_PROMPT.lower() or "sneakers" in LOOK_MATERIALIZE_PROMPT.lower()
+
+
+def test_chatgpt_clone_prompt_locks_person_identity_and_scene():
+    from app.services.fitting_room import (
+        FITTING_ROOM_CHATGPT_CLONE_PROMPT,
+        _chatgpt_style_look_prompt,
+    )
+
+    low = FITTING_ROOM_CHATGPT_CLONE_PROMPT.lower()
+    assert "images 1 and 2 are the same real person photo" in low
+    assert "image 3 is clothing design reference only" in low
+    assert "do not invent a new model" in low
+    assert "ignore the drawn model" in low
+    assert "wings" in low
+    assert "short mini stays short" in low
+    assert "never crush" in low or "black" in low
+    built = _chatgpt_style_look_prompt({"garment_source": "fashionrise_look"}, [])
+    assert "do not invent a new model" in built.lower()
 
 
 def test_look_productized_max_prompt_is_product_fit_not_illustration():
@@ -1299,15 +1323,19 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
         calls.append("chatgpt_clone")
         assert person_png and look_png
         lowered = prompt.lower()
-        assert "fit the colourful design" in lowered
+        assert "images 1 and 2 are the same real person photo" in lowered
+        assert "image 3 is clothing design reference only" in lowered
         assert "do not change her face" in lowered
+        assert "do not invent a new model" in lowered
         assert "never crush" in lowered or "black" in lowered
+        assert "wings" in lowered
         assert "mannequin" not in lowered
         return tryon_result_png(), {
             "provider": "openai_images_edit",
             "model": "chatgpt-image-latest",
             "quality": "high",
             "chatgpt_clone": True,
+            "identity_image_count": 2,
         }
 
     def _no_lock(*_a, **_k):
