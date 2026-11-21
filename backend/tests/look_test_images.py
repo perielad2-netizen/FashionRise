@@ -25,6 +25,13 @@ GARMENT_BOTTOM = 0.72
 # Where ``tryon_result_png(sheer_leg=...)`` shows a leg through the skirt (x0, y0, x1, y1).
 SHEER_LEG_BOX = (0.44, 0.45, 0.54, 0.7)
 
+# Failure-case palette (wings outdoor photo + floral blue bodice look).
+FLORAL_BLUE = (40, 120, 220)
+FLORAL_PINK = (220, 80, 160)
+FLORAL_PURPLE = (170, 110, 210)
+FLORAL_GREEN = (70, 150, 80)
+FLORAL_BOOT = (220, 205, 180)
+
 
 def _png(im: Image.Image) -> bytes:
     buf = io.BytesIO()
@@ -124,6 +131,89 @@ def person_photo_png(
     _draw_figure(draw, size, body=SKIN, bodice=None, skirt=None, split=0.26)
     draw.rectangle(_box(size, 0.38, GARMENT_TOP, 0.62, 0.6), fill=NAVY)
     return _png(_crop_to(im, keep_height))
+
+
+def wings_outdoor_person_png(
+    *, size: tuple[int, int] = (400, 600), boots: bool = True
+) -> bytes:
+    """Synthetic outdoor steps + golden wings scene with beige boots.
+
+    Mirrors the reported Social try-on failure photo layout for fixture tests.
+    """
+    im = _scene(size, textured=True)
+    draw = ImageDraw.Draw(im)
+    # Golden wing sculpture behind the figure.
+    draw.ellipse(_box(size, 0.05, 0.08, 0.38, 0.55), fill=(210, 170, 55))
+    draw.ellipse(_box(size, 0.62, 0.08, 0.95, 0.55), fill=(210, 170, 55))
+    _draw_figure(draw, size, body=SKIN, bodice=None, skirt=None, split=0.26)
+    draw.rectangle(_box(size, 0.38, GARMENT_TOP, 0.62, 0.6), fill=NAVY)
+    if boots:
+        draw.rectangle(_box(size, 0.40, 0.78, 0.48, 0.96), fill=FLORAL_BOOT)
+        draw.rectangle(_box(size, 0.52, 0.78, 0.60, 0.96), fill=FLORAL_BOOT)
+    return _png(im)
+
+
+def floral_blue_look_plate_png(*, size: tuple[int, int] = LOOK_SIZE) -> bytes:
+    """Bright blue bodice + pink petal skirt + green leaves (failure-case design)."""
+    im = Image.new("RGB", size, PAPER)
+    draw = ImageDraw.Draw(im)
+    _draw_figure(
+        draw,
+        size,
+        body=SKIN,
+        bodice=FLORAL_BLUE,
+        skirt=FLORAL_PINK,
+        split=0.30,
+    )
+    # Purple shoulder accents + green leaf belt / skirt accents.
+    draw.ellipse(_box(size, 0.30, 0.16, 0.40, 0.24), fill=FLORAL_PURPLE)
+    draw.ellipse(_box(size, 0.60, 0.16, 0.70, 0.24), fill=FLORAL_PURPLE)
+    mid = split_row(0.30)
+    draw.rectangle(_box(size, 0.36, mid - 0.02, 0.64, mid + 0.02), fill=FLORAL_GREEN)
+    draw.ellipse(_box(size, 0.32, 0.52, 0.42, 0.60), fill=FLORAL_GREEN)
+    draw.ellipse(_box(size, 0.58, 0.55, 0.68, 0.63), fill=FLORAL_GREEN)
+    # Design shows shoes (distinct from photo boots) — short heels.
+    draw.polygon(
+        [
+            (int(size[0] * 0.42), int(size[1] * 0.90)),
+            (int(size[0] * 0.48), int(size[1] * 0.90)),
+            (int(size[0] * 0.49), int(size[1] * 0.96)),
+            (int(size[0] * 0.41), int(size[1] * 0.96)),
+        ],
+        fill=(40, 40, 45),
+    )
+    draw.polygon(
+        [
+            (int(size[0] * 0.52), int(size[1] * 0.90)),
+            (int(size[0] * 0.58), int(size[1] * 0.90)),
+            (int(size[0] * 0.59), int(size[1] * 0.96)),
+            (int(size[0] * 0.51), int(size[1] * 0.96)),
+        ],
+        fill=(40, 40, 45),
+    )
+    return _png(im)
+
+
+def floral_blue_tryon_good_png(*, size: tuple[int, int] = (400, 600)) -> bytes:
+    """Photoreal-ish good result: blue bodice kept, short pink hem, outdoor scene."""
+    return tryon_result_png(
+        bodice=FLORAL_BLUE,
+        skirt=FLORAL_PINK,
+        size=size,
+        split=0.30,
+        textured=True,
+    )
+
+
+def floral_blue_tryon_black_crush_png(*, size: tuple[int, int] = (400, 600)) -> bytes:
+    """Bad result: bright blue crushed to near-black bodice."""
+    return tryon_result_png(
+        bodice=(18, 18, 20),
+        skirt=FLORAL_PINK,
+        size=size,
+        split=0.30,
+        textured=True,
+    )
 
 
 def tryon_result_png(

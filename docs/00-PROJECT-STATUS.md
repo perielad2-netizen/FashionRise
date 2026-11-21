@@ -3,6 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Ready (not deployed) — Fitting Room direct-edit v2 A/B (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Branch | `cursor/web-fitting-chatgpt-clone-77c6` |
+| Goal | Match ChatGPT-documented `images.edit` try-on: person photo = edit target, design artwork = clothing reference |
+| Root cause (evidence) | Live path after #467 was **materialize → person×2 + product clone**. Materialize + result color-lock historically crushed bright blues to black; look-plate drawn faces competed for identity; photo boots could persist when the design showed shoes. Soft-check `color_crush_to_dark` flags black-bodice outputs. Raw API vs postprocess must be compared under the v2 flag (no result color-lock on this path). |
+| Production default (unchanged) | `FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED=false` → existing materialize→chatgpt-clone |
+| New path (flag ON) | One `images.edit`: image1=`person.png`, image2=`garment.png` (original design). Path label `chatgpt_direct_edit_v2`. No materialize, no person duplication, no result color-lock. Soft-check is telemetry only. |
+| Models | `FITTING_ROOM_LOOK_OPENAI_MODEL=chatgpt-image-latest` **or** `gpt-image-2.6-sunburst`. Unsupported ids **fail closed** (no silent substitute) on v2. |
+| Request shape | `model`, `image=[person, garment]`, `prompt` (direct-edit v2), `size=1024x1536`, `quality=high`, `output_format=png`, `n=1` |
+| Stars / pricing | Unchanged (flat success charge). No auto paid retries. |
+| Cost | v2 success = **1** OpenAI `images.edit` (~same as one clone call). Avoids materialize’s extra edit when the flag path wins. |
+| A/B plan | Same person+design pair; flip only `FITTING_ROOM_LOOK_OPENAI_MODEL` between the two models with v2 ON; compare `result_data.model`, `fitting_room_look_path`, `look_quality.warnings`, and raw output (blue bodice / shoes / identity). |
+| Enable (ops) | In `/opt/fashionrise/src/backend/.env`: `FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED=true`, set model, then `systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` — **only with separate approval** |
+| Rollback | `FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED=false` + restart workers (returns to materialize→clone) |
+| Tests | `pytest tests/test_fitting_room.py` — direct-edit v2 prompt/contract/flag-off/floral soft-check |
+| Next action | Human approve paid A/B on staging/prod tip; do **not** auto-deploy this branch |
+
 ## Deployed — Fitting Room boots + Magic Dual Back lock (2026-11-20 Asia/Jerusalem)
 
 | Field | Value |

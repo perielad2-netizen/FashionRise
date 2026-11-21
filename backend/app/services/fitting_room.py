@@ -1098,6 +1098,51 @@ def _look_result_needs_recovery(quality: dict[str, Any] | None) -> bool:
     )
 
 
+# ChatGPT-documented Social look edit (2 images): person = edit target, design =
+# garment reference. Used only when ``fitting_room_look_direct_edit_v2_enabled``.
+# Does not require a materialized product plate.
+FITTING_ROOM_DIRECT_EDIT_V2_PROMPT = (
+    "Edit IMAGE 1, the real photograph.\n"
+    "\n"
+    "IMAGE 1 is the authoritative person and scene.\n"
+    "IMAGE 2 is the authoritative garment design.\n"
+    "\n"
+    "Dress the person in IMAGE 1 with the EXACT garment shown in IMAGE 2.\n"
+    "\n"
+    "PRESERVE FROM IMAGE 1:\n"
+    "- Face, identity, hairstyle, expression and skin tone\n"
+    "- Body proportions, pose and camera angle\n"
+    "- Background, lighting and environment\n"
+    "- Original shoes unless the design explicitly shows different footwear\n"
+    "\n"
+    "TRANSFER FROM IMAGE 2:\n"
+    "- Exact garment silhouette and length\n"
+    "- All colors and their placement\n"
+    "- Neckline, sleeves, seams, panels and layers\n"
+    "- Patterns, decorations and distinctive details "
+    "(petals, leaves, shoulder accents)\n"
+    "\n"
+    "CRITICAL COLOR RULE:\n"
+    "Black sketch outlines are NOT black fabric.\n"
+    "Never recolor bright blue, pink, purple or green garment panels into black, "
+    "charcoal or gray.\n"
+    "Preserve the actual colors visible in the design.\n"
+    "\n"
+    "FOOTWEAR:\n"
+    "If IMAGE 2 shows shoes, heels, flats, sneakers, or boots as part of the outfit, "
+    "replace IMAGE 1 footwear with those design shoes (same style, color, pattern). "
+    "Do not keep photo boots when the design shows different shoes. "
+    "Only keep IMAGE 1 footwear when IMAGE 2 shows no shoes.\n"
+    "\n"
+    "Replace only the clothing. Render the result as a natural photorealistic "
+    "photograph with realistic fabric texture, folds, drape and contact shadows.\n"
+    "\n"
+    "The illustration's drawn face, body and background must NOT replace the real "
+    "person.\n"
+    "\n"
+    "Output one completed photograph, not a collage."
+)
+
 # OpenAI cookbook try-on: edit the real photo; clothing refs only change clothes.
 # Prefer a face-free product plate (materialize) as image 3 — look illustrations
 # include a drawn model that otherwise competes for identity.
@@ -1187,6 +1232,182 @@ def _chatgpt_style_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
     return prompt
 
 
+def _direct_edit_v2_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
+    """2-image ChatGPT-style prompt: IMAGE 1 person, IMAGE 2 original design."""
+    prompt = FITTING_ROOM_DIRECT_EDIT_V2_PROMPT
+    clause = ""
+    raw = data.get("look_palette_clause")
+    if isinstance(raw, str) and raw.strip():
+        clause = raw.strip()
+    else:
+        clause = (_look_palette_clause(data) or "").strip()
+    # Measured hexes are hints only — never a destructive post color-lock.
+    if clause and "COLOR LOCK" not in prompt:
+        prompt = f"{prompt}\n\n{clause}"
+    evidence: list[str] = []
+    for raw_h in hints:
+        tip = " ".join(str(raw_h).split())
+        if tip and tip not in evidence:
+            evidence.append(tip[:100])
+        if len(evidence) >= 3:
+            break
+    if evidence:
+        prompt = f"{prompt}\n\nDesign notes: " + "; ".join(evidence) + "."
+    return prompt
+
+
+def _resolve_look_openai_model(*, allow_legacy_fallback: bool) -> str:
+    """Resolve Social look images.edit model from settings.
+
+    When ``allow_legacy_fallback`` is False (direct-edit v2), never silently
+    substitute a different model — unsupported / retired ids raise before HTTP.
+    Legacy ChatGPT-clone may fall back to ``gpt-image-2`` for older deploys.
+    """
+    from app.services.sketch_openai import assert_image_model_editable, image_edit_capabilities
+
+    settings = get_settings()
+    model = (settings.fitting_room_look_openai_model or "chatgpt-image-latest").strip()
+    if allow_legacy_fallback:
+        caps = image_edit_capabilities(model)
+        if caps is None or caps.status != "supported":
+            model = "gpt-image-2"
+    assert_image_model_editable(model)
+    return model
+
+
+def _run_direct_edit_v2_images_edit(
+    *,
+    person_png: bytes,
+    look_png: bytes,
+    prompt: str,
+) -> tuple[bytes, dict[str, Any]]:
+    """One OpenAI images.edit — person (image 1) + original design (image 2).
+
+    Matches the ChatGPT-documented try-on shape: edit the real photo; design is
+    clothing reference only. No materialize, no person duplication, no result
+    color-lock. Model comes from ``fitting_room_look_openai_model`` with no
+    silent substitution.
+    """
+    from io import BytesIO
+
+    from openai import OpenAI
+
+    from app.services.personal_croquis_provider import extract_edit_png_bytes
+    from app.services.sketch_openai import build_image_edit_kwargs
+
+    settings = get_settings()
+    if not (settings.openai_api_key or "").strip():
+        raise ProviderNotAvailableError("OPENAI_API_KEY missing")
+
+    model = _resolve_look_openai_model(allow_legacy_fallback=False)
+    quality = (settings.fitting_room_look_openai_quality or "high").strip()
+    size = (settings.openai_image_size or "1024x1536").strip()
+
+    kwargs = build_image_edit_kwargs(
+        model=model,
+        prompt=prompt,
+        sketch=(person_png, "image/png"),
+        size=size,
+        quality=quality,
+        fabric_swatch=(look_png, "image/png"),
+    )
+    # Explicit ChatGPT ordering: person = edit target, garment = clothing ref.
+    kwargs["image"] = [
+        ("person.png", BytesIO(person_png), "image/png"),
+        ("garment.png", BytesIO(look_png), "image/png"),
+    ]
+    kwargs["n"] = 1
+    kwargs["output_format"] = "png"
+    kwargs.pop("background", None)
+    extra = dict(kwargs.get("extra_body") or {})
+    extra["moderation"] = "low"
+    kwargs["extra_body"] = extra
+
+    logger.info(
+        "Fitting Room direct-edit-v2 images.edit model=%s size=%s quality=%s "
+        "images=person+garment",
+        kwargs.get("model"),
+        kwargs.get("size"),
+        kwargs.get("quality"),
+    )
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or None,
+        timeout=float(settings.openai_timeout_seconds or 180),
+    )
+    result = client.with_options(max_retries=0).images.edit(**kwargs)
+    png = extract_edit_png_bytes(result)
+    meta: dict[str, Any] = {
+        "provider": "openai_images_edit",
+        "model": kwargs.get("model"),
+        "quality": kwargs.get("quality"),
+        "size": kwargs.get("size"),
+        "chatgpt_clone": True,
+        "direct_edit_v2": True,
+        "input_fidelity": kwargs.get("input_fidelity"),
+        "identity_image_count": 1,
+        "design_image_count": 1,
+        "image_order": ["person", "garment"],
+    }
+    return png, meta
+
+
+def _try_direct_edit_v2_look_fit(
+    *,
+    job_id: Any,
+    person_png: bytes,
+    look_png: bytes,
+    data: dict[str, Any],
+    hints: list[str],
+    look_analysis: dict[str, Any] | None,
+) -> tuple[bytes, dict[str, Any], str, dict[str, Any]] | None:
+    """Flagged ChatGPT-style direct edit: original person + original design only.
+
+    Soft-checks are telemetry — never run result color-lock (black-bodice crush).
+    """
+    settings = get_settings()
+    if not bool(settings.fitting_room_look_direct_edit_v2_enabled):
+        return None
+    prompt = _direct_edit_v2_look_prompt(data, hints)
+    try:
+        png, meta = _run_direct_edit_v2_images_edit(
+            person_png=person_png,
+            look_png=look_png,
+            prompt=prompt,
+        )
+    except Exception:  # noqa: BLE001
+        logger.info(
+            "Fitting Room job %s direct-edit-v2 images.edit failed",
+            job_id,
+            exc_info=True,
+        )
+        return None
+    if not png:
+        return None
+    quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+    if not isinstance(meta, dict):
+        meta = {}
+    meta = dict(meta)
+    meta["fitting_room_look_path"] = "chatgpt_direct_edit_v2"
+    meta["look_analysis"] = look_analysis
+    meta["look_quality"] = quality
+    meta["look_color_lock_skipped"] = True
+    if _look_result_needs_recovery(quality):
+        meta["look_quality_kept_despite_soft_check"] = True
+        logger.info(
+            "Fitting Room job %s direct-edit-v2 soft warnings=%s — keeping result",
+            job_id,
+            quality.get("warnings"),
+        )
+    logger.info(
+        "Fitting Room job %s direct-edit-v2 accepted model=%s path=chatgpt_direct_edit_v2",
+        job_id,
+        meta.get("model"),
+    )
+    return png, meta, "openai", quality
+
+
 def _run_chatgpt_clone_images_edit(
     *,
     person_png: bytes,
@@ -1205,18 +1426,13 @@ def _run_chatgpt_clone_images_edit(
     from openai import OpenAI
 
     from app.services.personal_croquis_provider import extract_edit_png_bytes
-    from app.services.sketch_openai import assert_image_model_editable, build_image_edit_kwargs
+    from app.services.sketch_openai import build_image_edit_kwargs
 
     settings = get_settings()
     if not (settings.openai_api_key or "").strip():
         raise ProviderNotAvailableError("OPENAI_API_KEY missing")
-    from app.services.sketch_openai import image_edit_capabilities
 
-    model = (settings.fitting_room_look_openai_model or "chatgpt-image-latest").strip()
-    caps = image_edit_capabilities(model)
-    if caps is None or caps.status != "supported":
-        model = "gpt-image-2"
-    assert_image_model_editable(model)
+    model = _resolve_look_openai_model(allow_legacy_fallback=True)
     quality = (settings.fitting_room_look_openai_quality or "high").strip()
     size = (settings.openai_image_size or "1024x1536").strip()
 
@@ -1963,6 +2179,8 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     look_plate = _is_fashionrise_look_plate(data)
     # Social look plates are illustrations with a drawn model. Pipeline:
+    # 0) Optional flagged direct-edit v2: person + original design (2 images) —
+    #    OFF by default; A/B vs materialize→clone. No extra paid chain on success.
     # 1) Materialize → face-free product plate (identity-safe)
     # 2) ChatGPT clone: person×2 + product (dress + design shoes)
     # 3) If materialize fails → clone on raw look; then V2.8 / Max recovery
@@ -1991,9 +2209,43 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if look_plate and _try_on_provider_override is None:
         settings = get_settings()
         product_png: bytes | None = None
+
+        # 0) Flagged ChatGPT-documented direct edit (person + original artwork).
+        # On success: one images.edit only. On failure: fall through unchanged.
+        if bool(settings.fitting_room_look_direct_edit_v2_enabled):
+            direct_v2 = _try_direct_edit_v2_look_fit(
+                job_id=job.id,
+                person_png=person_png,
+                look_png=look_plate_original_png,
+                data=data,
+                hints=hints,
+                look_analysis=look_analysis,
+            )
+            if direct_v2 is not None:
+                png, meta, used_provider, look_direct_quality = direct_v2
+                data["look_direct_openai"] = True
+                data["look_chatgpt_clone"] = True
+                data["look_direct_edit_v2"] = True
+                data["look_materialized"] = False
+                data["look_normalized"] = False
+                data.pop("look_productized", None)
+                logger.info(
+                    "Fitting Room job %s Social look via direct-edit-v2 images.edit "
+                    "model=%s path=chatgpt_direct_edit_v2 detected_by=%s",
+                    job.id,
+                    (meta or {}).get("model") if isinstance(meta, dict) else None,
+                    data.get("look_detected_by"),
+                )
+            else:
+                logger.info(
+                    "Fitting Room job %s direct-edit-v2 missed — falling through to "
+                    "materialize/chatgpt-clone production path",
+                    job.id,
+                )
+
         # 1) Materialize first when enabled — removes the drawn model's face so
         # ChatGPT-clone cannot identity-swap toward the illustration.
-        if bool(settings.fitting_room_look_materialize_enabled):
+        if png is None and bool(settings.fitting_room_look_materialize_enabled):
             try:
                 import app.services.look_garment_normalize as look_materialize
 
@@ -2026,120 +2278,121 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                     exc_info=True,
                 )
 
-        clone_ref = product_png or look_plate_original_png
-        path_label = (
-            "chatgpt_clone_product" if product_png is not None else "chatgpt_clone_direct"
-        )
-        direct = _try_chatgpt_style_look_fit(
-            job_id=job.id,
-            person_png=person_png,
-            look_png=clone_ref,
-            data=data,
-            hints=hints,
-            look_analysis=look_analysis,
-            look_palette=look_palette,
-            look_color_lock_on=look_color_lock_on,
-            path_label=path_label,
-        )
-        if direct is not None:
-            png, meta, used_provider, look_direct_quality = direct
-            if look_materialize_meta is not None and isinstance(meta, dict):
-                meta = dict(meta)
-                meta["look_materialize"] = look_materialize_meta
-            data["look_direct_openai"] = True
-            data["look_chatgpt_clone"] = True
-            if product_png is None:
-                data["look_materialized"] = False
-                data["look_normalized"] = False
-                data.pop("look_productized", None)
-            logger.info(
-                "Fitting Room job %s Social look via ChatGPT-clone images.edit "
-                "model=%s path=%s detected_by=%s",
-                job.id,
-                (meta or {}).get("model") if isinstance(meta, dict) else None,
-                path_label,
-                data.get("look_detected_by"),
+        if png is None:
+            clone_ref = product_png or look_plate_original_png
+            path_label = (
+                "chatgpt_clone_product" if product_png is not None else "chatgpt_clone_direct"
             )
-        elif product_png is not None:
-            # Clone failed after materialize — fall through to V2.8 on product plate.
-            meta = {
-                "fitting_room_look_path": "materialize_then_openai",
-                "look_analysis": look_analysis,
-                "look_sheer_legs": look_sheer,
-                "look_materialize": look_materialize_meta,
-                "look_chatgpt_clone_attempted": True,
-            }
-            png = None
-            logger.info(
-                "Fitting Room job %s ChatGPT-clone failed after materialize — OpenAI V2.8 next",
-                job.id,
+            direct = _try_chatgpt_style_look_fit(
+                job_id=job.id,
+                person_png=person_png,
+                look_png=clone_ref,
+                data=data,
+                hints=hints,
+                look_analysis=look_analysis,
+                look_palette=look_palette,
+                look_color_lock_on=look_color_lock_on,
+                path_label=path_label,
             )
-        else:
-            # No product + clone failed — try materialize for V2.8 path (legacy).
-            try:
-                import app.services.look_garment_normalize as look_materialize
-
-                garment_png, look_materialize_meta = look_materialize.materialize_fashionrise_look(
-                    look_png=look_plate_original_png,
-                    palette=look_palette,
-                    color_lock=look_color_lock_on,
+            if direct is not None:
+                png, meta, used_provider, look_direct_quality = direct
+                if look_materialize_meta is not None and isinstance(meta, dict):
+                    meta = dict(meta)
+                    meta["look_materialize"] = look_materialize_meta
+                data["look_direct_openai"] = True
+                data["look_chatgpt_clone"] = True
+                if product_png is None:
+                    data["look_materialized"] = False
+                    data["look_normalized"] = False
+                    data.pop("look_productized", None)
+                logger.info(
+                    "Fitting Room job %s Social look via ChatGPT-clone images.edit "
+                    "model=%s path=%s detected_by=%s",
+                    job.id,
+                    (meta or {}).get("model") if isinstance(meta, dict) else None,
+                    path_label,
+                    data.get("look_detected_by"),
                 )
-                data["look_materialized"] = True
-                data["look_normalized"] = True
-                data["look_productized"] = True
+            elif product_png is not None:
+                # Clone failed after materialize — fall through to V2.8 on product plate.
                 meta = {
                     "fitting_room_look_path": "materialize_then_openai",
                     "look_analysis": look_analysis,
                     "look_sheer_legs": look_sheer,
                     "look_materialize": look_materialize_meta,
-                    "look_direct_openai_attempted": True,
+                    "look_chatgpt_clone_attempted": True,
                 }
                 png = None
                 logger.info(
-                    "Fitting Room job %s Social look materialized after clone fail — "
-                    "OpenAI V2.8 next (calls=%s lock=%s detected_by=%s)",
+                    "Fitting Room job %s ChatGPT-clone failed after materialize — OpenAI V2.8 next",
                     job.id,
-                    look_materialize_meta.get("openai_calls"),
-                    (look_materialize_meta.get("color_lock") or {}).get("applied"),
-                    data.get("look_detected_by"),
                 )
-            except Exception:  # noqa: BLE001
-                logger.info(
-                    "Fitting Room job %s look materialize failed — retrying raw-look direct fit",
-                    job.id,
-                    exc_info=True,
-                )
-                data["look_materialized"] = False
-                data["look_normalized"] = False
-                data.pop("look_productized", None)
-                # Force-accept a second direct attempt even if soft-check is noisy.
+            else:
+                # No product + clone failed — try materialize for V2.8 path (legacy).
                 try:
-                    provider = get_try_on_provider("openai")
-                    prompt = _chatgpt_style_look_prompt(data, hints)
-                    png, meta = provider.generate(
-                        photo_png=person_png,
-                        garment_png=look_plate_original_png,
-                        design_hints=hints,
-                        prompt_override=prompt,
+                    import app.services.look_garment_normalize as look_materialize
+
+                    garment_png, look_materialize_meta = look_materialize.materialize_fashionrise_look(
+                        look_png=look_plate_original_png,
+                        palette=look_palette,
+                        color_lock=look_color_lock_on,
                     )
-                    if not isinstance(meta, dict):
-                        meta = {}
-                    meta["fitting_room_look_path"] = "direct_openai_after_materialize_fail"
-                    meta["look_analysis"] = look_analysis
-                    used_provider = "openai"
-                    if not png:
-                        raise ProviderNotAvailableError("empty direct look result")
+                    data["look_materialized"] = True
+                    data["look_normalized"] = True
+                    data["look_productized"] = True
+                    meta = {
+                        "fitting_room_look_path": "materialize_then_openai",
+                        "look_analysis": look_analysis,
+                        "look_sheer_legs": look_sheer,
+                        "look_materialize": look_materialize_meta,
+                        "look_direct_openai_attempted": True,
+                    }
+                    png = None
+                    logger.info(
+                        "Fitting Room job %s Social look materialized after clone fail — "
+                        "OpenAI V2.8 next (calls=%s lock=%s detected_by=%s)",
+                        job.id,
+                        look_materialize_meta.get("openai_calls"),
+                        (look_materialize_meta.get("color_lock") or {}).get("applied"),
+                        data.get("look_detected_by"),
+                    )
                 except Exception:  # noqa: BLE001
-                    slim = dict(data)
-                    slim.pop("person_image_base64", None)
-                    slim.pop("garment_image_base64", None)
-                    slim["images_stripped"] = True
-                    job.input_data = slim
-                    return _fail(
-                        "Fitting Room could not finish this look preview. "
-                        "Try again in a moment. No Stars were charged.",
-                        code="LOOK_MATERIALIZE_FAILED",
+                    logger.info(
+                        "Fitting Room job %s look materialize failed — retrying raw-look direct fit",
+                        job.id,
+                        exc_info=True,
                     )
+                    data["look_materialized"] = False
+                    data["look_normalized"] = False
+                    data.pop("look_productized", None)
+                    # Force-accept a second direct attempt even if soft-check is noisy.
+                    try:
+                        provider = get_try_on_provider("openai")
+                        prompt = _chatgpt_style_look_prompt(data, hints)
+                        png, meta = provider.generate(
+                            photo_png=person_png,
+                            garment_png=look_plate_original_png,
+                            design_hints=hints,
+                            prompt_override=prompt,
+                        )
+                        if not isinstance(meta, dict):
+                            meta = {}
+                        meta["fitting_room_look_path"] = "direct_openai_after_materialize_fail"
+                        meta["look_analysis"] = look_analysis
+                        used_provider = "openai"
+                        if not png:
+                            raise ProviderNotAvailableError("empty direct look result")
+                    except Exception:  # noqa: BLE001
+                        slim = dict(data)
+                        slim.pop("person_image_base64", None)
+                        slim.pop("garment_image_base64", None)
+                        slim["images_stripped"] = True
+                        job.input_data = slim
+                        return _fail(
+                            "Fitting Room could not finish this look preview. "
+                            "Try again in a moment. No Stars were charged.",
+                            code="LOOK_MATERIALIZE_FAILED",
+                        )
 
     # Swimwear / lingerie / product dresses: prefer Try-On Max quality first (skip
     # OpenAI moderation landmines). Look plates handled above.
@@ -2322,11 +2575,18 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     look_chatgpt_clone = bool(
         data.get("look_chatgpt_clone")
+        or data.get("look_direct_edit_v2")
         or (
             isinstance(meta, dict)
             and (
                 meta.get("chatgpt_clone")
-                or meta.get("fitting_room_look_path") == "chatgpt_clone_direct"
+                or meta.get("direct_edit_v2")
+                or meta.get("fitting_room_look_path")
+                in {
+                    "chatgpt_clone_direct",
+                    "chatgpt_clone_product",
+                    "chatgpt_direct_edit_v2",
+                }
             )
         )
     )
@@ -2436,6 +2696,19 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if isinstance(meta, dict):
         if meta.get("fitting_room_look_path"):
             result["fitting_room_look_path"] = meta.get("fitting_room_look_path")
+        # Non-sensitive A/B provenance (model + image roles). Never secrets.
+        for k in (
+            "model",
+            "quality",
+            "size",
+            "direct_edit_v2",
+            "image_order",
+            "identity_image_count",
+            "design_image_count",
+            "look_color_lock_skipped",
+        ):
+            if meta.get(k) is not None:
+                result[k] = meta.get(k)
         if meta.get("look_materialize"):
             materialize = meta.get("look_materialize") or {}
             result["look_materialize"] = {
