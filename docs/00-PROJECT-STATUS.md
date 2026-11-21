@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Ready for review — Fitting Room Model B sunburst path (owner-only) (2026-11-21 Asia/Jerusalem)
+## Deployed — Fitting Room Model B sunburst path (flags OFF) · PR #474 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Decision | **Select Model B — `gpt-image-2.6-sunburst`** as the preferred Fitting Room look-illustration candidate (from Stage 2 op `d6d6c075-2ae1-4ab9-8a8a-3dab67524cd5`) |
-| Rationale | Arm B best recreated the illustrated outfit (colors, silhouette, details) in one raw `images.edit`. Main miss: original **gray boots** stayed instead of design **pink heels**. |
-| Identity vs original person | Compared `person-original.jpg` (not the AI output alone) to Arm B: face, curly hair, smile, pose, body proportions, wing background sufficiently preserved for owner testing. Footwear band still matches gray boots — **not** pink heels. Do **not** treat Arm B as proof of perfect identity lock; public rollout still needs a dedicated heel verification. |
-| Implementation | Shared helper `openai_person_garment_edit.run_openai_person_garment_images_edit` (person→design, no mask). Fitting Room path `openai_model_b_sunburst_raw` with compare Arm B prompt **+ footwear clause**. Existing FR job lifecycle / Stars / idempotency / consent unchanged. Compare ledger **not** used for customer jobs. |
-| Footwear fix | Prompt-only clause (same single generation). No shoe composite, mask, recolor, second AI call, or footwear-detection stage. |
-| Flags (default **off**) | `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=false` · `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST=` empty. Opt-in via `prefer_model_b_sunburst=true` on try-on when flag+allowlist. Identity lock remains **false** — do not re-enable. |
-| Safety | Fail closed on Model B miss (no materialize / direct-edit-v2 / Max paid fallback). No automatic paid retry. Unrelated FR categories/providers unchanged. |
-| Tests | `backend/tests/test_fitting_room_model_b_sunburst.py` — model selection, image order, footwear clause + preserve-when-absent wording, one generation, no materialize/mask/face-patch/palette-lock/paid fallback, Stars+idempotency, flag default false. Prompt tests do **not** prove the model will emit pink heels. |
-| Deploy | **Not deployed.** Do **not** run another paid comparison. Do **not** enable for customers. |
-| Exact next action | **Separate authorize:** one owner-only real-image Fitting Room test with Model B prefer on — verify complete dress **and** pink heels without damaging the person’s appearance. |
+| Merge SHA | **`a0a13d623363f8319f0688ba84ab3e5532bda1da`** (#474) · docs order: #473 (Stage 2) then #474 |
+| Deployed SHA | **`a0a13d623363f8319f0688ba84ab3e5532bda1da`** on `/opt/fashionrise/src` |
+| Backup | `/root/fashionrise-backups/pr474-model-b-20261121T194227Z/` — prior BE `31af6ca6` + `.env` |
+| Migration | Still **`038` (head)** — no new Alembic in #474 |
+| Decision | **Model B — `gpt-image-2.6-sunburst`** preferred candidate; code path live but **disabled** for customers |
+| Implementation | Shared helper + path `openai_model_b_sunburst_raw` + footwear prompt clause; FR job lifecycle / Stars / consent / idempotency unchanged |
+| Effective flags | `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=false` · allowlist **empty** · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` · Direct Edit V2 **true** · look model still **`chatgpt-image-latest`** |
+| Verification | Local: Model B **8** + FR/compare regression **78** passed; ruff clean on new files; GitHub Actions **no workflows/checks** on this repo. Prod: API/workers **active**, `/health`+`/ready` ok, preflight **401** unauth, `look_model_b` defaults false, compare ledger still **1** op (`d6d6c075…`), **0** FR jobs / star payouts / IAP adj in deploy window, **no** paid OpenAI/FASHN log hits, FE has **no** `prefer_model_b_sunburst` |
+| Not done (STOP) | Model B **not** enabled · allowlist empty · **no** owner real-image heel test · **no** customer rollout |
+| Exact next action | **Separate authorize:** enable Model B for owner allowlist only, then **one** Fitting Room generation with original person + floral design — verify pink heels, dress, shoulders, face, pose, background before any public rollout. |
 
 ## Completed — Stage 2 one bounded live A/B/C compare · PR #470 / docs [#473](https://github.com/perielad2-netizen/FashionRise/pull/473) (2026-11-21 Asia/Jerusalem)
 
