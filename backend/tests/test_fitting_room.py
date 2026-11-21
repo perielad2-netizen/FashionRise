@@ -667,10 +667,11 @@ def test_look_plate_max_prompt_asks_real_fabric_not_overlay():
     assert len(prompt) <= 1000
 
 
-def test_look_tryon_prompts_keep_photo_footwear_by_default():
-    """Social look try-on keeps photo boots; illustration heels must not win."""
+def test_look_tryon_prompts_replace_photo_footwear_with_design_shoes():
+    """When the design shows shoes, photo boots must be replaced."""
     from app.services.fitting_room import (
         FITTING_ROOM_CHATGPT_CLONE_PROMPT,
+        FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT,
         FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
         FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT,
         _fitting_room_max_prompt,
@@ -693,14 +694,17 @@ def test_look_tryon_prompts_keep_photo_footwear_by_default():
             {"garment_source": "fashionrise_look", "look_normalized": True}, []
         ),
         FITTING_ROOM_CHATGPT_CLONE_PROMPT,
+        FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT,
         FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE,
     )
     for prompt in (*max_prompts, *openai_prompts):
         assert prompt is not None
         low = prompt.lower()
         assert "shoe" in low or "footwear" in low or "boot" in low
-        assert "keep" in low and ("footwear" in low or "boot" in low or "shoe" in low)
-        assert "do not swap photo boots" in low or "unless the dress hem" in low
+        assert "replace" in low
+        assert "do not keep" in low or "do not keep the original photo boots" in low or (
+            "replace" in low and "photo" in low
+        )
     for prompt in max_prompts:
         assert len(prompt) <= 1000
     assert "shoes" in LOOK_MATERIALIZE_PROMPT.lower()
@@ -710,19 +714,26 @@ def test_look_tryon_prompts_keep_photo_footwear_by_default():
 def test_chatgpt_clone_prompt_locks_person_identity_and_scene():
     from app.services.fitting_room import (
         FITTING_ROOM_CHATGPT_CLONE_PROMPT,
+        FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT,
         _chatgpt_style_look_prompt,
     )
 
     low = FITTING_ROOM_CHATGPT_CLONE_PROMPT.lower()
     assert "images 1 and 2 are the same real person photo" in low
-    assert "image 3 is clothing design reference only" in low
+    assert "clothing reference only" in low
     assert "do not invent a new model" in low
-    assert "ignore the drawn model" in low
+    assert "face-swap" in low or "beautify" in low
     assert "wings" in low
     assert "short mini stays short" in low
+    assert "replace the person's photo footwear" in low
     assert "never crush" in low or "black" in low
     built = _chatgpt_style_look_prompt({"garment_source": "fashionrise_look"}, [])
     assert "do not invent a new model" in built.lower()
+    product = _chatgpt_style_look_prompt(
+        {"garment_source": "fashionrise_look", "look_productized": True}, []
+    )
+    assert "mannequin" in product.lower()
+    assert product.startswith(FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT[:40])
 
 
 def test_look_productized_max_prompt_is_product_fit_not_illustration():
@@ -1301,8 +1312,10 @@ def test_look_final_illustrated_quality_keeps_best_after_max(client, db_session,
     assert after == before - 20
 
 
-def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session, monkeypatch):
-    """ChatGPT clone: one images.edit (person+design) — no materialize, no color lock."""
+def test_look_chatgpt_clone_materialize_then_product_no_result_color_lock(
+    client, db_session, monkeypatch
+):
+    """Identity-safe path: materialize (face-free) then ChatGPT-clone; skip result color lock."""
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
@@ -1311,25 +1324,26 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
     monkeypatch.setenv("FITTING_ROOM_LOOK_CHATGPT_CLONE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "true")
     monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "chatgpt-image-latest")
     get_settings.cache_clear()
     calls: list[str] = []
+    product_bytes = look_plate_png()  # stand-in product plate
 
-    def _no_materialize(**_k):
+    def _materialize(**_k):
         calls.append("materialize")
-        raise AssertionError("materialize must not run when ChatGPT clone is accepted")
+        return product_bytes, {"openai_calls": 1, "color_lock": {"applied": True}}
 
     def _clone_edit(*, person_png, look_png, prompt):
         calls.append("chatgpt_clone")
         assert person_png and look_png
+        assert look_png == product_bytes
         lowered = prompt.lower()
         assert "images 1 and 2 are the same real person photo" in lowered
-        assert "image 3 is clothing design reference only" in lowered
-        assert "do not change her face" in lowered
-        assert "do not invent a new model" in lowered
+        assert "mannequin" in lowered
+        assert "do not invent a new model" in lowered or "beautify" in lowered
+        assert "replace the person's photo footwear" in lowered
         assert "never crush" in lowered or "black" in lowered
-        assert "wings" in lowered
-        assert "mannequin" not in lowered
         return tryon_result_png(), {
             "provider": "openai_images_edit",
             "model": "chatgpt-image-latest",
@@ -1341,7 +1355,7 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
     def _no_lock(*_a, **_k):
         raise AssertionError("color lock must not run on ChatGPT-clone path")
 
-    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _no_materialize)
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _materialize)
     monkeypatch.setattr(fr, "_run_chatgpt_clone_images_edit", _clone_edit)
     monkeypatch.setattr(fr, "lock_result_to_palette", _no_lock)
     set_try_on_provider_override(None)
@@ -1360,10 +1374,9 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
     job = db_session.get(AIJob, job.id)
     assert job.status == "completed", job.error_message
     result = job.result_data or {}
-    assert result.get("fitting_room_look_path") == "chatgpt_clone_direct"
+    assert result.get("fitting_room_look_path") == "chatgpt_clone_product"
     assert result.get("look_color_lock_final", {}).get("reason") == "skipped_chatgpt_clone"
-    assert "materialize" not in calls
-    assert calls == ["chatgpt_clone"]
+    assert calls == ["materialize", "chatgpt_clone"]
     after = db_session.query(User).filter(User.username == "fr_look_direct").one().ai_stars
     assert after == before - 20
 

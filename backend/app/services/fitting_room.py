@@ -452,7 +452,7 @@ def enqueue_fitting_room_try_on(
                 "Render real fabric photo matching image-1 lighting; no sketch overlay.",
                 "1:1 look design; photoreal cloth not illustration paste.",
                 "Keep exact multi-tone colors (bodice vs skirt); do not unify panels.",
-                "Keep photo footwear unless the dress hem covers it; do not swap photo boots for illustration heels.",
+                "If the look shows shoes/heels/boots, replace photo footwear with those design shoes.",
                 "Never replace the real person with the drawn look-plate model.",
             ]
         )
@@ -623,13 +623,13 @@ FITTING_ROOM_OPENAI_OUTFIT_PROMPT = (
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
 # Keep short: FASHN Max truncates prompts at 1000 chars (color lock appends below).
 FITTING_ROOM_LOOK_PLATE_PROMPT = (
-    "FashionRise look illustration — ignore drawn body/face/hair/shoes; never replace "
-    "the real person with the drawn figure. Transfer garments as REAL photographed "
-    "clothing (not a sketch overlay). 1:1 design + exact panel hues (bodice vs skirt); "
-    "keep short hem short. Keep sheer tulle/chiffon translucent — legs must stay visible "
-    "where the look shows them through the skirt; never make the skirt opaque. Keep the "
-    "person's photo footwear unless the dress hem covers it. Match person-photo lighting. "
-    "Keep identity, face, hair, pose, background, props, skin unchanged."
+    "FashionRise look illustration — ignore drawn body/face/hair; never replace the "
+    "real person with the drawn figure. Transfer garments as REAL photographed clothing "
+    "(not a sketch overlay). 1:1 design + exact panel hues (bodice vs skirt); keep short "
+    "hem short. Keep sheer tulle/chiffon translucent — legs must stay visible where the "
+    "look shows them through the skirt; never make the skirt opaque. If the look shows "
+    "shoes/heels/boots, replace photo footwear with that look footwear. Match "
+    "person-photo lighting. Keep identity, face, hair, pose, background, props, skin."
 )
 
 # ChatGPT-style Social look fit: person photo + FashionRise design illustration.
@@ -637,17 +637,19 @@ FITTING_ROOM_LOOK_PLATE_PROMPT = (
 FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "Edit image 1 only — the real person photo is the edit target. Dress that exact "
     "person in the FashionRise garment design from image 2 as real sewn clothing. "
-    "Image 2 includes a drawn model — ignore that illustrated body, face, hair, skin, "
-    "pose, and shoes entirely; never replace the real person with the drawn figure. "
-    "Use only the garment design. Keep cut, silhouette, neckline, straps, hem length "
-    "(short stays short), asymmetry, coverage, layered petals/leaves, and every panel "
-    "color exact (including bright two-tone upper vs lower — never unify hues, never "
-    "crush a bright panel into black/grey). "
+    "Image 2 includes a drawn model — ignore that illustrated body, face, hair, and "
+    "skin; never replace the real person with the drawn figure. Use the garment design "
+    "and any shoes shown as part of the outfit. Keep cut, silhouette, neckline, straps, "
+    "hem length (short stays short), asymmetry, coverage, layered petals/leaves, and "
+    "every panel color exact (including bright two-tone upper vs lower — never unify "
+    "hues, never crush a bright panel into black/grey). "
     "SHEER LAYERS: if image 2 shows legs through a sheer/tulle/chiffon skirt, the person's "
     "legs MUST remain visible through those sheer layers — never fill an opaque skirt over "
     "the legs or invent opaque underlayers. "
-    "FOOTWEAR: keep image 1 boots/shoes unless the dress hem fully covers them — do not "
-    "swap photo footwear for illustration heels. "
+    "FOOTWEAR: if image 2 shows shoes, heels, flats, sneakers, or boots, replace image 1 "
+    "footwear with those design shoes (same style, color, pattern) — do not keep photo "
+    "boots when the design shows different shoes. Only keep image 1 footwear when image 2 "
+    "shows no shoes. "
     "CRITICAL REALISM: render real fabric — weave, folds, photographic sheerness matching "
     "image 1 lighting with soft contact shadows. Do NOT paste sketch strokes, flat "
     "illustrated fills, airbrushed concept-art shading, floating petal stickers, or a "
@@ -661,9 +663,9 @@ FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
     "Preserve multi-tone panel hues, cut, straps, hem length, and asymmetry exactly. Keep "
     "sheer tulle/chiffon and high-low openings — legs must stay visible where the product "
     "shows openings; never opaque-fill the skirt. Do not unify colors or paste sketch "
-    "shading. Keep the person's photo footwear unless the dress hem covers it. Match "
-    "person-photo lighting. Keep identity, face, hair, pose, background, props, and "
-    "natural skin tone unchanged."
+    "shading. If the product shows shoes/heels/boots, replace photo footwear with those "
+    "shoes. Match person-photo lighting. Keep identity, face, hair, pose, background, "
+    "props, and natural skin tone unchanged."
 )
 
 # Max prompt for a materialized look: the reference is a studio photo of the real
@@ -672,22 +674,22 @@ FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
 FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT = (
     "Fit clothing from the product photo as real sewn fabric that drapes — never a flat "
     "illustration paste. Product is on a white mannequin; ignore mannequin body/head/"
-    "hands/stand/shoes; transfer garment only. Preserve texture, cut, neckline, straps, "
-    "layers, hem length. Petals/leaves/shoulder accents must attach on the body — never "
-    "floating shapes. Keep sheer layers sheer with legs visible; opaque panels must cover "
-    "original clothes. No invented leggings. Keep the person's photo footwear unless the "
-    "dress hem covers it. Match person-photo lighting. Keep identity, face, hair, pose, "
-    "background, props, skin."
+    "hands/stand; transfer garment + any shoes shown. Preserve texture, cut, neckline, "
+    "straps, layers, hem length. Petals/leaves/shoulder accents must attach on the body "
+    "— never floating shapes. Keep sheer layers sheer with legs visible; opaque panels "
+    "must cover original clothes. No invented leggings. If product shows shoes/boots, "
+    "replace photo footwear. Match person-photo lighting. Keep identity, face, hair, "
+    "pose, background, props, skin."
 )
 
 # Shared footwear + coverage contract for Social look try-ons.
-# Prefer keeping the real photo's boots/shoes; illustration footwear often belongs to
-# the drawn model, not the garment the user wants transferred.
+# Design/product shoes win when present — photo boots must not stick around.
 FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE = (
-    " FOOTWEAR: keep the person's photo boots/shoes unless the dress hem fully covers "
-    "them. Do not replace photo footwear with heels or shoes from a fashion illustration "
-    "or drawn model. Do not invent leggings, opaque underlayers, long skirts that hide "
-    "legs, or extra garments."
+    " FOOTWEAR: if the look/product shows shoes, sneakers, boots, flats, or heels, "
+    "replace the person's photo footwear with that footwear (same style, color, and "
+    "pattern) — do not keep the original photo boots. Only keep the person's shoes when "
+    "the look shows no footwear. Do not invent leggings, opaque underlayers, or extra "
+    "garments."
 )
 
 
@@ -1096,40 +1098,69 @@ def _look_result_needs_recovery(quality: dict[str, Any] | None) -> bool:
     )
 
 
-# OpenAI cookbook try-on pattern: edit the real photo; clothing refs only change clothes.
-# FashionRise look plates include a drawn model — that figure must NEVER replace
-# the real person (identity swap was the #1 failure mode after color fidelity).
-# API call sends the person photo twice (images 1–2) then the design (image 3).
+# OpenAI cookbook try-on: edit the real photo; clothing refs only change clothes.
+# Prefer a face-free product plate (materialize) as image 3 — look illustrations
+# include a drawn model that otherwise competes for identity.
+# API: person photo ×2 (images 1–2) + garment/product (image 3).
 FITTING_ROOM_CHATGPT_CLONE_PROMPT = (
     "Edit the real photograph. Images 1 and 2 are the SAME real person photo — that "
-    "woman is the ONLY identity to keep. Image 3 is clothing design reference only. "
-    "Dress that exact woman in the garment design from image 3. "
-    "Do not change her face, facial features, skin tone, body shape, pose, stance, "
-    "hair, hairstyle, expression, or identity in any way. Preserve her exact likeness "
-    "and proportions — do not invent a new model, beautify, slim, or re-age her. "
-    "Image 3 is a fashion illustration used ONLY as a clothing reference. Ignore the "
-    "drawn model body, face, hair, skin, pose, and shoes in image 3 completely — never "
-    "copy that illustrated person into the output. Use only the garment design: cut, "
-    "silhouette, neckline, straps, layers, petals, leaves, panel layout, and colors. "
+    "exact woman is the ONLY identity to keep. Image 3 is clothing reference only. "
+    "Output must be recognizably the same individual as images 1–2 — same face geometry, "
+    "eyes, nose, mouth, smile, freckles/marks, skin tone, hair color and curl pattern, "
+    "body proportions, pose, and hand placement. Do not invent a new model, beautify, "
+    "smooth, slim, re-age, or face-swap. "
+    "Image 3 may be a fashion illustration or a studio product photo. Ignore any drawn "
+    "or mannequin body/face/hair/skin in image 3 — never copy that figure into the "
+    "output. Use only the garment: cut, silhouette, neckline, straps, layers, petals, "
+    "leaves, panel layout, and colors. "
     "Keep every panel color exact from image 3 — especially bright blues, pinks, "
     "purples, and greens; never crush them into black, charcoal, or muddy grey. "
-    "Keep the exact hem length from image 3 (short mini stays short — do not lengthen "
-    "into a long skirt) and keep layered petal structure. Where the design is sheer or "
-    "short, legs must stay visible; do not hide legs with an opaque long skirt. "
-    "Replace only her clothing (top/jeans/dress layers), fitting the design naturally "
-    "to her existing pose and body geometry with realistic fabric drape, folds, and "
-    "contact shadows. Keep her footwear from the person photo (boots/shoes) unless the "
-    "dress hem fully covers them — do not swap photo boots for illustration heels. "
-    "Match the person photo's lighting, shadows, and color temperature so it looks "
-    "photoreal, not pasted or sketched. Preserve the full scene from the person photo: "
-    "background, props, sculptures, wings, railings, sky, ground, camera angle, and "
-    "framing. Do not add accessories, text, logos, or watermarks."
+    "Keep the exact hem length from image 3 (short mini stays short) and layered petal "
+    "structure. Where the design is sheer or short, legs must stay visible. "
+    "Replace her clothing with that design, fitted to her existing pose with realistic "
+    "fabric drape, folds, and contact shadows. "
+    "FOOTWEAR: if image 3 shows shoes, heels, flats, sneakers, or boots as part of the "
+    "outfit, replace the person's photo footwear with those design shoes (same style, "
+    "color, and pattern) — do not keep the original photo boots when the design shows "
+    "different shoes. Only keep photo footwear when image 3 shows no shoes. "
+    "Match the person photo's lighting, shadows, and color temperature. Preserve the "
+    "full scene: background, props, sculptures, wings, railings, sky, ground, camera "
+    "angle, and framing. Photoreal only — no sketch look. Do not add text, logos, or "
+    "watermarks."
+)
+
+# When image 3 is already a materialized studio product (no competing face).
+FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT = (
+    "Edit the real photograph. Images 1 and 2 are the SAME real person photo — that "
+    "exact woman is the ONLY identity to keep. Image 3 is a studio product photograph "
+    "of the garment on a white mannequin. Ignore the mannequin body/head/hands/stand. "
+    "Dress that exact woman in the clothing from image 3. "
+    "Output must be recognizably the same individual as images 1–2 — same face, "
+    "expression, hair, skin tone, body proportions, pose, and hands. Do not invent a "
+    "new model or beautify her. "
+    "Transfer garment cut, layers, petals, leaves, colors, and hem length exactly. "
+    "Keep bright blues/pinks/purples/greens — never crush into black. Short hems stay "
+    "short; sheer layers stay sheer with legs visible. "
+    "FOOTWEAR: if image 3 shows shoes/heels/boots, replace the person's photo footwear "
+    "with those product shoes — do not keep photo boots when the product shows "
+    "different shoes. Only keep photo footwear when image 3 shows no shoes. "
+    "Match person-photo lighting. Preserve background, wings, railings, sky, framing. "
+    "Photoreal fabric only — no sketch overlay."
 )
 
 
 def _chatgpt_style_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
-    """ChatGPT-clone prompt + optional measured COLOR LOCK hexes."""
-    prompt = FITTING_ROOM_CHATGPT_CLONE_PROMPT
+    """ChatGPT-clone prompt + optional measured COLOR LOCK hexes.
+
+    Uses the product-plate prompt when the look was already materialized (no drawn
+    face competing with the real person).
+    """
+    productized = bool(data.get("look_productized") or data.get("look_materialized"))
+    prompt = (
+        FITTING_ROOM_CHATGPT_CLONE_PRODUCT_PROMPT
+        if productized
+        else FITTING_ROOM_CHATGPT_CLONE_PROMPT
+    )
     clause = ""
     raw = data.get("look_palette_clause")
     if isinstance(raw, str) and raw.strip():
@@ -1240,11 +1271,13 @@ def _try_chatgpt_style_look_fit(
     look_analysis: dict[str, Any] | None,
     look_palette: dict[str, Any] | None,
     look_color_lock_on: bool,
+    path_label: str = "chatgpt_clone_direct",
 ) -> tuple[bytes, dict[str, Any], str, dict[str, Any]] | None:
-    """ChatGPT clone: one images.edit of person + look plate. Accept the photo.
+    """ChatGPT clone: one images.edit of person + garment/product plate.
 
-    Soft-checks are telemetry only — we do **not** fall through to materialize/color-lock
-    when the clone returns an image (those stages caused the black-bodice failure).
+    Soft-checks are telemetry only — we do **not** run result color-lock (that path
+    crushed bright blues to black). Prefer a materialized product plate as
+    ``look_png`` so the look illustration's drawn face cannot steal identity.
     """
     settings = get_settings()
     if not bool(settings.fitting_room_look_chatgpt_clone_enabled):
@@ -1258,8 +1291,9 @@ def _try_chatgpt_style_look_fit(
         )
     except Exception:  # noqa: BLE001
         logger.info(
-            "Fitting Room job %s ChatGPT-clone images.edit failed",
+            "Fitting Room job %s ChatGPT-clone images.edit failed path=%s",
             job_id,
+            path_label,
             exc_info=True,
         )
         return None
@@ -1271,7 +1305,7 @@ def _try_chatgpt_style_look_fit(
     if not isinstance(meta, dict):
         meta = {}
     meta = dict(meta)
-    meta["fitting_room_look_path"] = "chatgpt_clone_direct"
+    meta["fitting_room_look_path"] = path_label
     meta["look_analysis"] = look_analysis
     meta["look_quality"] = quality
     meta["look_color_lock_skipped"] = True
@@ -1279,14 +1313,16 @@ def _try_chatgpt_style_look_fit(
         # Keep the clone result anyway — ChatGPT does not reject soft heuristics.
         meta["look_quality_kept_despite_soft_check"] = True
         logger.info(
-            "Fitting Room job %s ChatGPT-clone soft warnings=%s — keeping clone result",
+            "Fitting Room job %s ChatGPT-clone soft warnings=%s path=%s — keeping result",
             job_id,
             quality.get("warnings"),
+            path_label,
         )
     logger.info(
-        "Fitting Room job %s ChatGPT-clone accepted model=%s",
+        "Fitting Room job %s ChatGPT-clone accepted model=%s path=%s",
         job_id,
         meta.get("model"),
+        path_label,
     )
     return png, meta, "openai", quality
 
@@ -1691,8 +1727,8 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
                 "openness; do not invent opaque underlayers."
             )
         look_hints.append(
-            "Keep the person's photo footwear unless the dress hem fully covers it — "
-            "do not swap photo boots for product/illustration heels."
+            "If the product shows shoes/heels/boots, replace the person's photo "
+            "footwear with those shoes — do not keep photo boots."
         )
         look_hints.append(
             "Preserve the person's exact face, hair, pose, proportions, background, "
@@ -1926,9 +1962,10 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
 
     look_plate = _is_fashionrise_look_plate(data)
-    # Social look plates are illustrations. Pipeline:
-    # 1) ChatGPT clone — one images.edit (person + look plate) on gpt-image-2
-    # 2) Only if that HTTP call fails → materialize → OpenAI V2.8 → Max recovery
+    # Social look plates are illustrations with a drawn model. Pipeline:
+    # 1) Materialize → face-free product plate (identity-safe)
+    # 2) ChatGPT clone: person×2 + product (dress + design shoes)
+    # 3) If materialize fails → clone on raw look; then V2.8 / Max recovery
     look_analysis = data.get("look_analysis") if isinstance(data.get("look_analysis"), dict) else None
     if look_plate and look_analysis is None:
         look_analysis = analyze_fashionrise_look_plate(garment_png)
@@ -1952,33 +1989,93 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     look_materialize_meta: dict[str, Any] | None = None
     look_direct_quality: dict[str, Any] | None = None
     if look_plate and _try_on_provider_override is None:
-        # 1) ChatGPT-style: fit design on person directly (best color fidelity).
+        settings = get_settings()
+        product_png: bytes | None = None
+        # 1) Materialize first when enabled — removes the drawn model's face so
+        # ChatGPT-clone cannot identity-swap toward the illustration.
+        if bool(settings.fitting_room_look_materialize_enabled):
+            try:
+                import app.services.look_garment_normalize as look_materialize
+
+                product_png, look_materialize_meta = look_materialize.materialize_fashionrise_look(
+                    look_png=look_plate_original_png,
+                    palette=look_palette,
+                    color_lock=look_color_lock_on,
+                )
+                data["look_materialized"] = True
+                data["look_normalized"] = True
+                data["look_productized"] = True
+                garment_png = product_png
+                logger.info(
+                    "Fitting Room job %s Social look materialized before ChatGPT-clone "
+                    "(calls=%s lock=%s detected_by=%s)",
+                    job.id,
+                    (look_materialize_meta or {}).get("openai_calls"),
+                    ((look_materialize_meta or {}).get("color_lock") or {}).get("applied"),
+                    data.get("look_detected_by"),
+                )
+            except Exception:  # noqa: BLE001
+                product_png = None
+                look_materialize_meta = None
+                data["look_materialized"] = False
+                data["look_normalized"] = False
+                data.pop("look_productized", None)
+                logger.info(
+                    "Fitting Room job %s look materialize failed — ChatGPT-clone on raw look",
+                    job.id,
+                    exc_info=True,
+                )
+
+        clone_ref = product_png or look_plate_original_png
+        path_label = (
+            "chatgpt_clone_product" if product_png is not None else "chatgpt_clone_direct"
+        )
         direct = _try_chatgpt_style_look_fit(
             job_id=job.id,
             person_png=person_png,
-            look_png=look_plate_original_png,
+            look_png=clone_ref,
             data=data,
             hints=hints,
             look_analysis=look_analysis,
             look_palette=look_palette,
             look_color_lock_on=look_color_lock_on,
+            path_label=path_label,
         )
         if direct is not None:
             png, meta, used_provider, look_direct_quality = direct
-            data["look_materialized"] = False
-            data["look_normalized"] = False
-            data.pop("look_productized", None)
+            if look_materialize_meta is not None and isinstance(meta, dict):
+                meta = dict(meta)
+                meta["look_materialize"] = look_materialize_meta
             data["look_direct_openai"] = True
             data["look_chatgpt_clone"] = True
+            if product_png is None:
+                data["look_materialized"] = False
+                data["look_normalized"] = False
+                data.pop("look_productized", None)
             logger.info(
                 "Fitting Room job %s Social look via ChatGPT-clone images.edit "
-                "model=%s detected_by=%s",
+                "model=%s path=%s detected_by=%s",
                 job.id,
                 (meta or {}).get("model") if isinstance(meta, dict) else None,
+                path_label,
                 data.get("look_detected_by"),
             )
+        elif product_png is not None:
+            # Clone failed after materialize — fall through to V2.8 on product plate.
+            meta = {
+                "fitting_room_look_path": "materialize_then_openai",
+                "look_analysis": look_analysis,
+                "look_sheer_legs": look_sheer,
+                "look_materialize": look_materialize_meta,
+                "look_chatgpt_clone_attempted": True,
+            }
+            png = None
+            logger.info(
+                "Fitting Room job %s ChatGPT-clone failed after materialize — OpenAI V2.8 next",
+                job.id,
+            )
         else:
-            # 2) Materialize illustration → studio product, then OpenAI V2.8.
+            # No product + clone failed — try materialize for V2.8 path (legacy).
             try:
                 import app.services.look_garment_normalize as look_materialize
 
@@ -1999,7 +2096,7 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                 }
                 png = None
                 logger.info(
-                    "Fitting Room job %s Social look materialized after direct soft-fail — "
+                    "Fitting Room job %s Social look materialized after clone fail — "
                     "OpenAI V2.8 next (calls=%s lock=%s detected_by=%s)",
                     job.id,
                     look_materialize_meta.get("openai_calls"),
@@ -2007,8 +2104,6 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                     data.get("look_detected_by"),
                 )
             except Exception:  # noqa: BLE001
-                # Last resort: still try the raw illustration (ChatGPT path) rather than
-                # canceling a paid Fitting Room — better a soft result than empty.
                 logger.info(
                     "Fitting Room job %s look materialize failed — retrying raw-look direct fit",
                     job.id,
