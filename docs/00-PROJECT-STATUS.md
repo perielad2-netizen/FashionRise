@@ -8,7 +8,7 @@
 | Field | Value |
 | --- | --- |
 | Merge SHA | **`a0a13d623363f8319f0688ba84ab3e5532bda1da`** (#474) · docs order: #473 (Stage 2) then #474 |
-| Deployed SHA | **`a0a13d623363f8319f0688ba84ab3e5532bda1da`** on `/opt/fashionrise/src` |
+| Deployed SHA | **`1be3d2a0aad28f7412b5428498cf9f144a095196`** tip (`a0a13d62` #474 + docs #475) on `/opt/fashionrise/src` |
 | Backup | `/root/fashionrise-backups/pr474-model-b-20261121T194227Z/` — prior BE `31af6ca6` + `.env` |
 | Migration | Still **`038` (head)** — no new Alembic in #474 |
 | Decision | **Model B — `gpt-image-2.6-sunburst`** preferred candidate; code path live but **disabled** for customers |
