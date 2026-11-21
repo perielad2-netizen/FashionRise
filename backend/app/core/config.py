@@ -257,6 +257,12 @@ class Settings(BaseSettings):
     fitting_room_look_materialize_quality: str = "high"
     # Deterministic design-palette lock on the product photo and the final result.
     fitting_room_look_color_lock_enabled: bool = True
+    # Social look ChatGPT-clone: one images.edit (person + look plate), no materialize.
+    # Model should be a high-fidelity edit model (gpt-image-2 matches OpenAI try-on docs).
+    fitting_room_look_chatgpt_clone_enabled: bool = True
+    # Prefer ChatGPT's own image lane when the API key exposes it.
+    fitting_room_look_openai_model: str = "chatgpt-image-latest"
+    fitting_room_look_openai_quality: str = "high"
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
