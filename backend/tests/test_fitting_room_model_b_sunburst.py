@@ -115,8 +115,13 @@ def test_model_b_shared_helper_person_then_design_one_call(monkeypatch):
     """Contract: model B, image order person→design, exactly one edit, no extras."""
     import openai as openai_mod
 
-    from app.services.openai_person_garment_edit import run_openai_person_garment_images_edit
-    from tests.look_test_images import floral_blue_look_plate_png, wings_outdoor_person_png
+    from app.services.openai_person_garment_edit import (
+        run_openai_person_garment_images_edit,
+    )
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        wings_outdoor_person_png,
+    )
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     get_settings.cache_clear()
@@ -135,7 +140,8 @@ def test_model_b_shared_helper_person_then_design_one_call(monkeypatch):
                 url = None
 
             class _Resp:
-                data = [_Data()]
+                def __init__(self) -> None:
+                    self.data = [_Data()]
 
             return _Resp()
 
@@ -380,7 +386,10 @@ def test_model_b_ignored_without_prefer_even_when_allowlisted(
 def test_model_b_fail_closed_no_paid_fallback(client, db_session, monkeypatch):
     import app.services.look_garment_normalize as lgn
     from app.services import fitting_room as fr
-    from tests.look_test_images import floral_blue_look_plate_png, wings_outdoor_person_png
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        wings_outdoor_person_png,
+    )
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setenv("FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED", "true")
