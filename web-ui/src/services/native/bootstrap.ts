@@ -1,4 +1,5 @@
 import { App } from '@capacitor/app'
+import { Keyboard } from '@capacitor/keyboard'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { installNativeDeepLinkRouter } from './deepLinks'
@@ -27,6 +28,19 @@ export async function bootstrapNativeShell(): Promise<void> {
     const platform = nativePlatform()
     if (platform === 'android' || platform === 'ios') {
       document.documentElement.classList.add(`fr-native-${platform}`)
+    }
+    // iOS WKWebView form accessory (↑↓✓ black bar above keyboard) — hide for
+    // every text field (chat, friends, profile, techpack, auth, etc.).
+    // Android/web never show this chrome. Re-assert on keyboard show in case
+    // WKWebView restores the accessory after focus changes.
+    if (platform === 'ios') {
+      const hideAccessory = () => {
+        void Keyboard.setAccessoryBarVisible({ isVisible: false }).catch(() => {
+          /* unsupported */
+        })
+      }
+      hideAccessory()
+      void Keyboard.addListener('keyboardWillShow', hideAccessory)
     }
   } catch {
     /* web / unsupported */

@@ -547,7 +547,11 @@ export function GlobalHeader({
       ) : null}
 
       {panel === 'contact' ? (
-        <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
+        <div
+          className={`fr-keyboard-overlay ${styles.aboutScrim}`}
+          role="presentation"
+          onClick={closePanel}
+        >
           <div
             className={`${styles.aboutCard} ${styles.contactCard}`}
             role="dialog"
@@ -636,7 +640,11 @@ export function GlobalHeader({
       ) : null}
 
       {panel === 'delete' ? (
-        <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
+        <div
+          className={`fr-keyboard-overlay ${styles.aboutScrim}`}
+          role="presentation"
+          onClick={closePanel}
+        >
           <div
             className={`${styles.aboutCard} ${styles.contactCard}`}
             role="dialog"

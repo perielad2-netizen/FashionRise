@@ -2642,7 +2642,20 @@ function RunwayCard({
                     placeholder="Add a comment…"
                     disabled={busy === 'comment'}
                     autoFocus
+                    autoComplete="off"
+                    autoCorrect="off"
+                    enterKeyHint="send"
+                    inputMode="text"
                     onChange={(event) => setDraft(event.target.value)}
+                    onFocus={(event) => {
+                      // iOS: avoid WKWebView scroll-jump that leaves a black void.
+                      try {
+                        event.currentTarget.focus({ preventScroll: true })
+                      } catch {
+                        /* older WebViews */
+                      }
+                      onAndroidEditableFocus(event.currentTarget)
+                    }}
                   />
                   <button
                     type="submit"
