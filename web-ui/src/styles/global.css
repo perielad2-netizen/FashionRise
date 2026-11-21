@@ -105,9 +105,12 @@ img {
 
 /*
  * Fixed overlays that host text inputs (Look Details rename, Friends add,
- * profile edit, Save Design, report details, etc.).
+ * profile edit, Save Design, report details, chat, contact, etc.).
  * While an editable is focused, clip the overlay to the true visual viewport
- * so Android soft-keyboard + scrollIntoView cannot leave a black void band.
+ * so soft-keyboard + scrollIntoView cannot leave a black void band.
+ *
+ * Hosts are either marked in JSX (fr-keyboard-overlay) or auto-tagged on focus
+ * by installGlobalEditableFocusGuards for any fixed sheet/dialog with a field.
  *
  * Keep the overlay's own alignment (usually bottom sheets). Changing
  * place-items/align-items here reflows the dialog under the finger and turns
@@ -120,15 +123,15 @@ html[data-fr-keyboard='1'] .fr-keyboard-overlay {
 }
 
 /*
- * iOS Capacitor: pin fixed keyboard overlays to the visual viewport so WKWebView
- * focus-scroll cannot leave a solid black band between the field and keyboard.
- * Also kills rubber-band scroll under the chat sheet while typing.
+ * Native Capacitor (iOS + Android): pin fixed keyboard overlays to the visual
+ * viewport so focus-scroll cannot leave a solid black band above the keyboard.
+ * Also kills rubber-band scroll under sheets while typing.
  */
-html.fr-native-ios[data-fr-keyboard='1'] {
+html.fr-native-shell[data-fr-keyboard='1'] {
   overflow: hidden;
 }
 
-html.fr-native-ios[data-fr-keyboard='1'] .fr-keyboard-overlay {
+html.fr-native-shell[data-fr-keyboard='1'] .fr-keyboard-overlay {
   top: var(--fr-vv-offset-top, 0px);
   bottom: auto;
   height: var(--fr-visible-height, 100dvh);

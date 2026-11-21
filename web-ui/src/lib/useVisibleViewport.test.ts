@@ -52,9 +52,9 @@ describe('useVisibleViewport', () => {
     expect(document.documentElement.style.getPropertyValue('--fr-browser-chrome-bottom')).toBe('')
   })
 
-  it('resets iOS scroll jump when visualViewport.offsetTop moves under the keyboard', () => {
+  it('resets native scroll jump when visualViewport.offsetTop moves under the keyboard', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
-    document.documentElement.classList.add('fr-native-ios')
+    document.documentElement.classList.add('fr-native-android')
     const input = document.createElement('input')
     document.body.appendChild(input)
     input.focus()

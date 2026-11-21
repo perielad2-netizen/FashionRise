@@ -29,10 +29,18 @@ export async function bootstrapNativeShell(): Promise<void> {
     if (platform === 'android' || platform === 'ios') {
       document.documentElement.classList.add(`fr-native-${platform}`)
     }
-    // iOS WKWebView form accessory (↑↓✓ black bar above keyboard) — hide it.
-    // Android/web never show this chrome; Chat/Friends inputs looked broken on iOS.
+    // iOS WKWebView form accessory (↑↓✓ black bar above keyboard) — hide for
+    // every text field (chat, friends, profile, techpack, auth, etc.).
+    // Android/web never show this chrome. Re-assert on keyboard show in case
+    // WKWebView restores the accessory after focus changes.
     if (platform === 'ios') {
-      await Keyboard.setAccessoryBarVisible({ isVisible: false })
+      const hideAccessory = () => {
+        void Keyboard.setAccessoryBarVisible({ isVisible: false }).catch(() => {
+          /* unsupported */
+        })
+      }
+      hideAccessory()
+      void Keyboard.addListener('keyboardWillShow', hideAccessory)
     }
   } catch {
     /* web / unsupported */

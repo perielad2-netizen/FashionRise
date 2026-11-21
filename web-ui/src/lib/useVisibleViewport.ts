@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 
-import { isEditableElement } from '@/lib/androidKeyboardInput'
+import {
+  installGlobalEditableFocusGuards,
+  isEditableElement,
+} from '@/lib/androidKeyboardInput'
 
 /**
  * Sync CSS vars that keep the app shell inside the *visible* viewport.
@@ -58,14 +61,20 @@ export function useVisibleViewport(enabled = true): void {
       if (editing) root.setAttribute('data-fr-keyboard', '1')
       else root.removeAttribute('data-fr-keyboard')
 
-      // iOS WKWebView scrolls the layout viewport when focusing inputs in fixed
-      // overlays, leaving a solid black void under the field. Undo that jump.
-      if (editing && offsetTopPx > 0 && root.classList.contains('fr-native-ios')) {
+      // Native WKWebView / Chrome scrolls the layout viewport when focusing
+      // inputs in fixed overlays, leaving a solid black void under the field.
+      if (
+        editing &&
+        offsetTopPx > 0 &&
+        (root.classList.contains('fr-native-ios') ||
+          root.classList.contains('fr-native-android'))
+      ) {
         window.scrollTo(0, 0)
       }
     }
 
     sync()
+    const disposeFocusGuards = installGlobalEditableFocusGuards()
     vv?.addEventListener('resize', sync)
     vv?.addEventListener('scroll', sync)
     window.addEventListener('resize', sync)
@@ -75,6 +84,7 @@ export function useVisibleViewport(enabled = true): void {
     document.addEventListener('focusout', sync)
 
     return () => {
+      disposeFocusGuards()
       vv?.removeEventListener('resize', sync)
       vv?.removeEventListener('scroll', sync)
       window.removeEventListener('resize', sync)
