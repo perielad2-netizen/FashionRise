@@ -3,7 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Completed — Stage 2 one bounded live A/B/C compare · PR #470 (2026-11-21 Asia/Jerusalem)
+## Ready for review — Fitting Room Model B sunburst path (owner-only) (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Decision | **Select Model B — `gpt-image-2.6-sunburst`** as the preferred Fitting Room look-illustration candidate (from Stage 2 op `d6d6c075-2ae1-4ab9-8a8a-3dab67524cd5`) |
+| Rationale | Arm B best recreated the illustrated outfit (colors, silhouette, details) in one raw `images.edit`. Main miss: original **gray boots** stayed instead of design **pink heels**. |
+| Identity vs original person | Compared `person-original.jpg` (not the AI output alone) to Arm B: face, curly hair, smile, pose, body proportions, wing background sufficiently preserved for owner testing. Footwear band still matches gray boots — **not** pink heels. Do **not** treat Arm B as proof of perfect identity lock; public rollout still needs a dedicated heel verification. |
+| Implementation | Shared helper `openai_person_garment_edit.run_openai_person_garment_images_edit` (person→design, no mask). Fitting Room path `openai_model_b_sunburst_raw` with compare Arm B prompt **+ footwear clause**. Existing FR job lifecycle / Stars / idempotency / consent unchanged. Compare ledger **not** used for customer jobs. |
+| Footwear fix | Prompt-only clause (same single generation). No shoe composite, mask, recolor, second AI call, or footwear-detection stage. |
+| Flags (default **off**) | `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=false` · `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_OWNER_ALLOWLIST=` empty. Opt-in via `prefer_model_b_sunburst=true` on try-on when flag+allowlist. Identity lock remains **false** — do not re-enable. |
+| Safety | Fail closed on Model B miss (no materialize / direct-edit-v2 / Max paid fallback). No automatic paid retry. Unrelated FR categories/providers unchanged. |
+| Tests | `backend/tests/test_fitting_room_model_b_sunburst.py` — model selection, image order, footwear clause + preserve-when-absent wording, one generation, no materialize/mask/face-patch/palette-lock/paid fallback, Stars+idempotency, flag default false. Prompt tests do **not** prove the model will emit pink heels. |
+| Deploy | **Not deployed.** Do **not** run another paid comparison. Do **not** enable for customers. |
+| Exact next action | **Separate authorize:** one owner-only real-image Fitting Room test with Model B prefer on — verify complete dress **and** pink heels without damaging the person’s appearance. |
+
+## Completed — Stage 2 one bounded live A/B/C compare · PR #470 / docs [#473](https://github.com/perielad2-netizen/FashionRise/pull/473) (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
@@ -18,8 +33,7 @@
 | Stars | **unchanged** (`stars_touched=false`; owner wallet still unlimited) |
 | Storage | `private_fitting_compare/<owner>/<op>/arm_{A,B,C}.png` — not public StaticFiles; owner-auth GET only |
 | Safety after | `LIVE_HTTP=false` again · `ENABLED=true` · allowlist NoaPeri · identity lock **false** · Direct Edit V2 **true** · paid path **armed=false** |
-| Human review | **No automatic winner.** Score Face·Hair · Dress fidelity · Shoulder decorations · Body/pose · Background. Review copies under agent artifacts `model-compare-stage2/`. |
-| Exact next action | Human visual pick of preferred arm for product path. **No second paid compare** without new authorize. Do **not** re-enable identity lock unless chosen after review. |
+| Human review | **Model B preferred** for outfit fidelity (see Model B section above). Gray boots remained vs pink heels — prompt-only footwear clause in #474. **No second paid compare.** Identity lock remains **false**. |
 
 ## Validated — Owner-only model-compare preflight (LIVE_HTTP off) · PR #470 (2026-11-21 Asia/Jerusalem)
 

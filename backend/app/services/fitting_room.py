@@ -78,6 +78,28 @@ MAX_OUTFIT_PIECES = 1
 # Designer reward when another user successfully tries on their published Social look.
 FITTING_ROOM_DESIGNER_TRYON_STARS = 2
 
+# Model B — gpt-image-2.6-sunburst raw person+design path (owner A/B/C Arm B).
+MODEL_B_SUNBURST_MODEL = "gpt-image-2.6-sunburst"
+MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v1"
+MODEL_B_SUNBURST_PATH = "openai_model_b_sunburst_raw"
+# Compare Arm B prompt + one footwear clause (prompt-only; no second generation).
+MODEL_B_SUNBURST_PROMPT = (
+    "Fit the exact garment design from image 2 onto the real person in image 1. "
+    "Preserve the person's original face, hair, body, pose, and background. "
+    "Keep the garment's exact colors, silhouette, decorative details, and length. "
+    "Make the clothing naturally photorealistic. Do not change anything else. "
+    "If the fashion design shows shoes, heels, boots, or other footwear, replace "
+    "the person's existing footwear with the matching design footwear, preserving "
+    "its style, color, and proportions. If no footwear is shown in the design, "
+    "preserve the original shoes."
+)
+MODEL_B_SUNBURST_FOOTWEAR_CLAUSE = (
+    "If the fashion design shows shoes, heels, boots, or other footwear, replace "
+    "the person's existing footwear with the matching design footwear, preserving "
+    "its style, color, and proportions. If no footwear is shown in the design, "
+    "preserve the original shoes."
+)
+
 
 def maybe_credit_designer_tryon_stars(db: Session, job: AIJob) -> bool:
     """Credit the Social look owner +2 Stars once per successful other-user Fitting Room try-on.
@@ -141,6 +163,33 @@ def fitting_room_live_armed() -> bool:
     return bool(settings.fitting_room_enabled and settings.fitting_room_live_http)
 
 
+def _normalize_model_b_sunburst_allowlist() -> set[str]:
+    raw = (get_settings().fitting_room_look_model_b_sunburst_owner_allowlist or "").strip()
+    if not raw:
+        return set()
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def user_on_model_b_sunburst_allowlist(user: User | Any) -> bool:
+    """Server-enforced owner gate. Empty allowlist = nobody."""
+    allow = _normalize_model_b_sunburst_allowlist()
+    if not allow:
+        return False
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    username = str(getattr(user, "username", "") or "").strip().lower()
+    uid = str(getattr(user, "id", "") or "").strip().lower()
+    return bool({email, username, uid} & allow)
+
+
+def look_model_b_sunburst_flag_enabled() -> bool:
+    return bool(get_settings().fitting_room_look_model_b_sunburst_enabled)
+
+
+def look_model_b_sunburst_available_for_user(user: User | Any) -> bool:
+    """True when the owner may opt into Model B for a look try-on."""
+    return look_model_b_sunburst_flag_enabled() and user_on_model_b_sunburst_allowlist(user)
+
+
 def combo_warning_for_categories(categories: list[str]) -> str | None:
     cats = {c for c in categories if c and c != "auto"}
     for conflict in CONFLICTING_CATEGORY_SETS:
@@ -156,10 +205,10 @@ def combo_warning_for_categories(categories: list[str]) -> str | None:
 
 def preflight_public(*, user: User) -> dict[str, Any]:
     """No billable work — UI gate + consent copy + categories + flat Stars cost."""
-    _ = user
     settings = get_settings()
     enabled = fitting_room_enabled()
     cost = fitting_room_cost()
+    model_b_available = look_model_b_sunburst_available_for_user(user)
     return {
         "enabled": enabled,
         "live_http": fitting_room_live_armed(),
@@ -178,6 +227,8 @@ def preflight_public(*, user: User) -> dict[str, Any]:
         ),
         "max_outfit_pieces": MAX_OUTFIT_PIECES,
         "conflicting_category_sets": [sorted(s) for s in CONFLICTING_CATEGORY_SETS],
+        "look_model_b_sunburst_available": model_b_available,
+        "look_model_b_sunburst_model": MODEL_B_SUNBURST_MODEL,
     }
 
 
@@ -335,6 +386,7 @@ def enqueue_fitting_room_try_on(
     consent_version: str,
     garment_category: str | None = None,
     source_gallery_item_id: uuid.UUID | None = None,
+    prefer_model_b_sunburst: bool = False,
 ) -> AIJob:
     if not fitting_room_enabled():
         raise HTTPException(
@@ -526,6 +578,8 @@ def enqueue_fitting_room_try_on(
             "source_gallery_item_id": (
                 str(source_gallery_item_id) if source_gallery_item_id is not None else None
             ),
+            # Owner-only Model B opt-in. Worker ignores unless flag + allowlist.
+            "prefer_model_b_sunburst": bool(prefer_model_b_sunburst),
         },
     )
     db.add(job)
@@ -1416,6 +1470,66 @@ def _run_direct_edit_v2_images_edit(
     return png, meta
 
 
+def _model_b_sunburst_look_prompt() -> str:
+    """Proven compare Arm B prompt + footwear clause (single generation)."""
+    return MODEL_B_SUNBURST_PROMPT
+
+
+def _try_model_b_sunburst_look_fit(
+    *,
+    job_id: uuid.UUID,
+    person_png: bytes,
+    look_png: bytes,
+    data: dict[str, Any],
+) -> tuple[bytes, dict[str, Any], str, dict[str, Any] | None] | None:
+    """One OpenAI images.edit: person + design via gpt-image-2.6-sunburst.
+
+    No materialize, mask, face patch, color-lock, or paid fallback. Fail closed
+    on provider error (caller must not chain another paid path).
+    """
+    from app.services.openai_person_garment_edit import run_openai_person_garment_images_edit
+    from app.services.sketch_openai import assert_image_model_editable
+
+    assert_image_model_editable(MODEL_B_SUNBURST_MODEL)
+    prompt = _model_b_sunburst_look_prompt()
+    try:
+        png, meta = run_openai_person_garment_images_edit(
+            person_png=person_png,
+            design_png=look_png,
+            model=MODEL_B_SUNBURST_MODEL,
+            prompt=prompt,
+            prompt_version=MODEL_B_SUNBURST_PROMPT_VERSION,
+            path=MODEL_B_SUNBURST_PATH,
+            quality="high",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Fitting Room job %s Model B sunburst images.edit failed",
+            job_id,
+        )
+        return None
+    if not png:
+        return None
+    meta = dict(meta) if isinstance(meta, dict) else {}
+    meta["fitting_room_look_path"] = MODEL_B_SUNBURST_PATH
+    meta["model_b_sunburst"] = True
+    meta["direct_edit_v2"] = False
+    meta["chatgpt_clone"] = False
+    # Soft quality: skip illustrated recovery / color-lock for this raw path.
+    quality = {
+        "ok": True,
+        "warnings": [],
+        "path": MODEL_B_SUNBURST_PATH,
+        "skipped_soft_recovery": True,
+    }
+    data["look_model_b_sunburst"] = True
+    data["look_chatgpt_clone"] = True  # skips result color-lock / recovery
+    data["look_materialized"] = False
+    data["look_normalized"] = False
+    data.pop("look_productized", None)
+    return png, meta, "openai", quality
+
+
 def _try_direct_edit_v2_look_fit(
     *,
     job_id: Any,
@@ -2280,7 +2394,9 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     look_plate = _is_fashionrise_look_plate(data)
     # Social look plates are illustrations with a drawn model. Pipeline:
-    # 0) Optional flagged direct-edit v2: person + original design (2 images) —
+    # 0a) Owner-only Model B sunburst (gpt-image-2.6-sunburst): person + design,
+    #     one images.edit, footwear prompt clause. OFF by default; prefer flag.
+    # 0b) Optional flagged direct-edit v2: person + original design (2 images) —
     #    OFF by default; A/B vs materialize→clone. No extra paid chain on success.
     # 1) Materialize → face-free product plate (identity-safe)
     # 2) ChatGPT clone: person×2 + product (dress + design shoes)
@@ -2311,10 +2427,54 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         settings = get_settings()
         product_png: bytes | None = None
 
-        # 0) Flagged ChatGPT-documented direct edit (person + original artwork).
+        # 0a) Owner-only Model B sunburst — prefer_model_b_sunburst + flag + allowlist.
+        # Single fashion-look illustration only. Fail closed on miss (no paid chain).
+        prefer_model_b = bool(data.get("prefer_model_b_sunburst"))
+        job_user = db.get(User, job.user_id) if job.user_id is not None else None
+        model_b_eligible = (
+            prefer_model_b
+            and job_user is not None
+            and look_model_b_sunburst_available_for_user(job_user)
+            and not _is_multi_piece_outfit(data)
+            and not bool(settings.fitting_room_look_identity_lock_enabled)
+        )
+        if model_b_eligible:
+            model_b = _try_model_b_sunburst_look_fit(
+                job_id=job.id,
+                person_png=person_png,
+                look_png=look_plate_original_png,
+                data=data,
+            )
+            if model_b is not None:
+                png, meta, used_provider, look_direct_quality = model_b
+                logger.info(
+                    "Fitting Room job %s Social look via Model B sunburst "
+                    "model=%s path=%s",
+                    job.id,
+                    (meta or {}).get("model") if isinstance(meta, dict) else None,
+                    MODEL_B_SUNBURST_PATH,
+                )
+            else:
+                slim = dict(data)
+                slim.pop("person_image_base64", None)
+                slim.pop("garment_image_base64", None)
+                slim["images_stripped"] = True
+                job.input_data = slim
+                result = _fail(
+                    "Fitting Room Model B preview could not finish. "
+                    "No automatic retry — try again later.",
+                    code="MODEL_B_SUNBURST_FAILED",
+                )
+                result["fitting_room_look_path"] = MODEL_B_SUNBURST_PATH
+                result["model"] = MODEL_B_SUNBURST_MODEL
+                result["openai_calls"] = 1
+                job.result_data = result
+                return result
+
+        # 0b) Flagged ChatGPT-documented direct edit (person + original artwork).
         # On success: one images.edit only. Identity reject → fail closed (no more paid).
         # Technical miss → fall through unchanged.
-        if bool(settings.fitting_room_look_direct_edit_v2_enabled):
+        if png is None and bool(settings.fitting_room_look_direct_edit_v2_enabled):
             try:
                 direct_v2 = _try_direct_edit_v2_look_fit(
                     job_id=job.id,
@@ -2703,17 +2863,20 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     look_chatgpt_clone = bool(
         data.get("look_chatgpt_clone")
         or data.get("look_direct_edit_v2")
+        or data.get("look_model_b_sunburst")
         or (
             isinstance(meta, dict)
             and (
                 meta.get("chatgpt_clone")
                 or meta.get("direct_edit_v2")
+                or meta.get("model_b_sunburst")
                 or meta.get("fitting_room_look_path")
                 in {
                     "chatgpt_clone_direct",
                     "chatgpt_clone_product",
                     "chatgpt_direct_edit_v2",
                     "chatgpt_direct_edit_v2_identity",
+                    MODEL_B_SUNBURST_PATH,
                 }
             )
         )
@@ -2733,7 +2896,11 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         look_final_lock = {
             "stage": "result",
             "applied": False,
-            "reason": "skipped_chatgpt_clone",
+            "reason": (
+                "skipped_model_b_sunburst"
+                if data.get("look_model_b_sunburst")
+                else "skipped_chatgpt_clone"
+            ),
         }
 
     look_quality: dict[str, Any] | None = look_direct_quality
@@ -2830,6 +2997,7 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             "quality",
             "size",
             "direct_edit_v2",
+            "model_b_sunburst",
             "identity_lock",
             "prompt_version",
             "image_order",
@@ -2839,6 +3007,13 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             "openai_calls",
             "look_identity_lock",
             "look_identity_gate",
+            "preprocessing",
+            "postprocessing",
+            "materialize",
+            "color_lock",
+            "mask",
+            "face_patch",
+            "paid_retries",
         ):
             if meta.get(k) is not None:
                 result[k] = meta.get(k)
