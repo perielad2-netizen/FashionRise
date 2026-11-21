@@ -452,13 +452,14 @@ def enqueue_fitting_room_try_on(
                 "Render real fabric photo matching image-1 lighting; no sketch overlay.",
                 "1:1 look design; photoreal cloth not illustration paste.",
                 "Keep exact multi-tone colors (bodice vs skirt); do not unify panels.",
-                "If the look shows shoes/sneakers/boots, replace the person's photo footwear with that look footwear.",
+                "Keep photo footwear unless the dress hem covers it; do not swap photo boots for illustration heels.",
+                "Never replace the real person with the drawn look-plate model.",
             ]
         )
         hints.extend(
             [
-                "Preserve sheer/tulle layering and high-low hems from the look — do not opaque-fill skirts.",
-                "Do not cover legs the look leaves exposed; no invented opaque underlayers.",
+                "Preserve sheer/tulle layering and high-low/short hems from the look — do not opaque-fill skirts.",
+                "Do not cover legs the look leaves exposed; no invented opaque underlayers or long skirts.",
             ]
         )
         if look_analysis.get("sheer_legs"):
@@ -622,47 +623,47 @@ FITTING_ROOM_OPENAI_OUTFIT_PROMPT = (
 # Social Try on me plants a full look illustration (model + outfit), not a flat product plate.
 # Keep short: FASHN Max truncates prompts at 1000 chars (color lock appends below).
 FITTING_ROOM_LOOK_PLATE_PROMPT = (
-    "FashionRise look illustration — ignore drawn body/face/hair; transfer garments as "
-    "REAL photographed clothing (not a sketch overlay). 1:1 design + exact panel hues "
-    "(bodice vs skirt). Keep sheer tulle/chiffon translucent — legs must stay visible "
-    "where the look shows them through the skirt; never make the skirt opaque. If the "
-    "look shows shoes/sneakers/boots, replace the person's photo footwear with that "
-    "look footwear (style, color, pattern) — do not keep photo boots. Match person-photo "
-    "lighting. Keep identity, face, hair, pose, background, skin unchanged."
+    "FashionRise look illustration — ignore drawn body/face/hair/shoes; never replace "
+    "the real person with the drawn figure. Transfer garments as REAL photographed "
+    "clothing (not a sketch overlay). 1:1 design + exact panel hues (bodice vs skirt); "
+    "keep short hem short. Keep sheer tulle/chiffon translucent — legs must stay visible "
+    "where the look shows them through the skirt; never make the skirt opaque. Keep the "
+    "person's photo footwear unless the dress hem covers it. Match person-photo lighting. "
+    "Keep identity, face, hair, pose, background, props, skin unchanged."
 )
 
 # ChatGPT-style Social look fit: person photo + FashionRise design illustration.
 # Prefer this before materialize — simpler and keeps bright multi-tone colors.
 FITTING_ROOM_LOOK_OPENAI_PROMPT = (
-    "Fit the colourful FashionRise design from image 2 onto the real person in image 1. "
-    "Output one photorealistic photograph of that person wearing the design as real sewn "
-    "clothing. Image 2 includes a drawn model — ignore that illustrated body, face, hair, "
-    "skin, and pose; use only the garment design. Keep cut, silhouette, neckline, straps, "
-    "hem, asymmetry, coverage, and every panel color exact (including bright two-tone upper "
-    "vs lower — never unify hues, never crush a bright panel into black/grey). "
+    "Edit image 1 only — the real person photo is the edit target. Dress that exact "
+    "person in the FashionRise garment design from image 2 as real sewn clothing. "
+    "Image 2 includes a drawn model — ignore that illustrated body, face, hair, skin, "
+    "pose, and shoes entirely; never replace the real person with the drawn figure. "
+    "Use only the garment design. Keep cut, silhouette, neckline, straps, hem length "
+    "(short stays short), asymmetry, coverage, layered petals/leaves, and every panel "
+    "color exact (including bright two-tone upper vs lower — never unify hues, never "
+    "crush a bright panel into black/grey). "
     "SHEER LAYERS: if image 2 shows legs through a sheer/tulle/chiffon skirt, the person's "
     "legs MUST remain visible through those sheer layers — never fill an opaque skirt over "
     "the legs or invent opaque underlayers. "
-    "FOOTWEAR: if image 2 shows shoes, sneakers, boots, flats, or heels, replace the shoes "
-    "in image 1 with that look footwear (same style, color, and pattern) — do not keep the "
-    "original photo boots when the look shows different shoes. Only keep image 1 footwear "
-    "when image 2 shows no shoes. "
+    "FOOTWEAR: keep image 1 boots/shoes unless the dress hem fully covers them — do not "
+    "swap photo footwear for illustration heels. "
     "CRITICAL REALISM: render real fabric — weave, folds, photographic sheerness matching "
     "image 1 lighting with soft contact shadows. Do NOT paste sketch strokes, flat "
     "illustrated fills, airbrushed concept-art shading, floating petal stickers, or a "
-    "sketched overlay. Preserve identity, face, hair, pose, proportions, background, and "
-    "natural skin tone."
+    "sketched overlay. Preserve identity, face, hair, pose, proportions, background, "
+    "props (including wings/sculptures), and natural skin tone."
 )
 
 # Max prompt for the moderation-fallback path when the reference is already a product photo.
 FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
     "Fit only the clothing from the product photograph onto the person as real fabric. "
-    "Preserve multi-tone panel hues, cut, straps, hem, and asymmetry exactly. Keep sheer "
-    "tulle/chiffon and high-low openings — legs must stay visible where the product shows "
-    "openings; never opaque-fill the skirt. Do not unify colors or paste sketch shading. "
-    "If the product includes shoes/sneakers/boots, replace the person's photo footwear "
-    "with those shoes — do not keep photo boots. Match person-photo lighting. Keep "
-    "identity, face, hair, pose, background, and natural skin tone unchanged."
+    "Preserve multi-tone panel hues, cut, straps, hem length, and asymmetry exactly. Keep "
+    "sheer tulle/chiffon and high-low openings — legs must stay visible where the product "
+    "shows openings; never opaque-fill the skirt. Do not unify colors or paste sketch "
+    "shading. Keep the person's photo footwear unless the dress hem covers it. Match "
+    "person-photo lighting. Keep identity, face, hair, pose, background, props, and "
+    "natural skin tone unchanged."
 )
 
 # Max prompt for a materialized look: the reference is a studio photo of the real
@@ -671,19 +672,22 @@ FITTING_ROOM_LOOK_PRODUCT_MAX_PROMPT = (
 FITTING_ROOM_LOOK_MATERIALIZED_MAX_PROMPT = (
     "Fit clothing from the product photo as real sewn fabric that drapes — never a flat "
     "illustration paste. Product is on a white mannequin; ignore mannequin body/head/"
-    "hands/stand; transfer garment + any shoes. Preserve texture, cut, neckline, straps, "
-    "layers, hem. Petals/leaves/shoulder accents must attach on the body — never floating "
-    "shapes. Keep sheer layers sheer with legs visible; opaque panels must cover original "
-    "clothes. No invented leggings. If product shows shoes/boots, replace photo footwear. "
-    "Match person-photo lighting. Keep identity, face, hair, pose, background, skin."
+    "hands/stand/shoes; transfer garment only. Preserve texture, cut, neckline, straps, "
+    "layers, hem length. Petals/leaves/shoulder accents must attach on the body — never "
+    "floating shapes. Keep sheer layers sheer with legs visible; opaque panels must cover "
+    "original clothes. No invented leggings. Keep the person's photo footwear unless the "
+    "dress hem covers it. Match person-photo lighting. Keep identity, face, hair, pose, "
+    "background, props, skin."
 )
 
 # Shared footwear + coverage contract for Social look try-ons.
+# Prefer keeping the real photo's boots/shoes; illustration footwear often belongs to
+# the drawn model, not the garment the user wants transferred.
 FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE = (
-    " FOOTWEAR: if the look/product shows shoes, sneakers, boots, flats, or heels, replace "
-    "the person's photo footwear with that footwear (same style, color, and pattern) — do "
-    "not keep the original photo boots. Only keep the person's shoes when the look shows "
-    "no footwear. Do not invent leggings, opaque underlayers, or extra garments."
+    " FOOTWEAR: keep the person's photo boots/shoes unless the dress hem fully covers "
+    "them. Do not replace photo footwear with heels or shoes from a fashion illustration "
+    "or drawn model. Do not invent leggings, opaque underlayers, long skirts that hide "
+    "legs, or extra garments."
 )
 
 
@@ -1092,21 +1096,34 @@ def _look_result_needs_recovery(quality: dict[str, Any] | None) -> bool:
     )
 
 
-# Exact ChatGPT / OpenAI cookbook virtual try-on prompt — short, preserve identity,
-# change only clothes, keep design colors from image 2.
+# OpenAI cookbook try-on pattern: edit the real photo; clothing refs only change clothes.
+# FashionRise look plates include a drawn model — that figure must NEVER replace
+# the real person (identity swap was the #1 failure mode after color fidelity).
+# API call sends the person photo twice (images 1–2) then the design (image 3).
 FITTING_ROOM_CHATGPT_CLONE_PROMPT = (
-    "Fit the colourful design from image 2 onto the real person in image 1. "
-    "Edit the photo so she is wearing that design as real clothing. "
-    "Do not change her face, facial features, skin tone, body shape, pose, hair, "
-    "expression, or identity. Preserve her exact likeness and proportions. "
-    "Image 2 is a fashion illustration — ignore the drawn model body/face; use only "
-    "the garment design (cut, layers, petals, leaves, colors). "
-    "Keep every panel color exact from image 2 — especially bright blues, pinks, "
+    "Edit the real photograph. Images 1 and 2 are the SAME real person photo — that "
+    "woman is the ONLY identity to keep. Image 3 is clothing design reference only. "
+    "Dress that exact woman in the garment design from image 3. "
+    "Do not change her face, facial features, skin tone, body shape, pose, stance, "
+    "hair, hairstyle, expression, or identity in any way. Preserve her exact likeness "
+    "and proportions — do not invent a new model, beautify, slim, or re-age her. "
+    "Image 3 is a fashion illustration used ONLY as a clothing reference. Ignore the "
+    "drawn model body, face, hair, skin, pose, and shoes in image 3 completely — never "
+    "copy that illustrated person into the output. Use only the garment design: cut, "
+    "silhouette, neckline, straps, layers, petals, leaves, panel layout, and colors. "
+    "Keep every panel color exact from image 3 — especially bright blues, pinks, "
     "purples, and greens; never crush them into black, charcoal, or muddy grey. "
-    "Replace only her clothing, fitting the design naturally to her pose with "
-    "realistic fabric drape, folds, and contact shadows. Match the photo's lighting "
-    "and color temperature so it looks photoreal, not pasted on. "
-    "Do not change the background, camera angle, or framing."
+    "Keep the exact hem length from image 3 (short mini stays short — do not lengthen "
+    "into a long skirt) and keep layered petal structure. Where the design is sheer or "
+    "short, legs must stay visible; do not hide legs with an opaque long skirt. "
+    "Replace only her clothing (top/jeans/dress layers), fitting the design naturally "
+    "to her existing pose and body geometry with realistic fabric drape, folds, and "
+    "contact shadows. Keep her footwear from the person photo (boots/shoes) unless the "
+    "dress hem fully covers them — do not swap photo boots for illustration heels. "
+    "Match the person photo's lighting, shadows, and color temperature so it looks "
+    "photoreal, not pasted or sketched. Preserve the full scene from the person photo: "
+    "background, props, sculptures, wings, railings, sky, ground, camera angle, and "
+    "framing. Do not add accessories, text, logos, or watermarks."
 )
 
 
@@ -1145,11 +1162,15 @@ def _run_chatgpt_clone_images_edit(
     look_png: bytes,
     prompt: str,
 ) -> tuple[bytes, dict[str, Any]]:
-    """One OpenAI images.edit — same shape as ChatGPT: person + design, short prompt.
+    """One OpenAI images.edit — person photo (×2 identity lock) + design plate.
 
     Uses ``fitting_room_look_openai_model`` (default ``chatgpt-image-latest``).
+    Sends the person PNG twice so the look plate's drawn model cannot win the
+    identity contest (OpenAI allows up to 16 edit images).
     Does **not** charcoal-matte the design, materialize, or color-lock.
     """
+    from io import BytesIO
+
     from openai import OpenAI
 
     from app.services.personal_croquis_provider import extract_edit_png_bytes
@@ -1168,7 +1189,8 @@ def _run_chatgpt_clone_images_edit(
     quality = (settings.fitting_room_look_openai_quality or "high").strip()
     size = (settings.openai_image_size or "1024x1536").strip()
 
-    # Raw look plate bytes — no matte / reinforce (those shift ChatGPT-unlike colors).
+    # Build base kwargs (quality/size/fidelity), then replace image list with
+    # person × 2 + design so identity outvotes the illustrated figure in the look.
     kwargs = build_image_edit_kwargs(
         model=model,
         prompt=prompt,
@@ -1177,6 +1199,10 @@ def _run_chatgpt_clone_images_edit(
         quality=quality,
         fabric_swatch=(look_png, "image/png"),
     )
+    person_file = ("person.png", BytesIO(person_png), "image/png")
+    identity_file = ("person_identity.png", BytesIO(person_png), "image/png")
+    design_file = ("design.png", BytesIO(look_png), "image/png")
+    kwargs["image"] = [person_file, identity_file, design_file]
     kwargs["n"] = 1
     kwargs["output_format"] = "png"
     kwargs.pop("background", None)
@@ -1198,6 +1224,8 @@ def _run_chatgpt_clone_images_edit(
         "size": kwargs.get("size"),
         "chatgpt_clone": True,
         "input_fidelity": kwargs.get("input_fidelity"),
+        "identity_image_count": 2,
+        "design_image_count": 1,
     }
     return png, meta
 
@@ -1663,8 +1691,12 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
                 "openness; do not invent opaque underlayers."
             )
         look_hints.append(
-            "If the product shows shoes/sneakers/boots, replace the person's photo "
-            "footwear with those shoes — do not keep photo boots."
+            "Keep the person's photo footwear unless the dress hem fully covers it — "
+            "do not swap photo boots for product/illustration heels."
+        )
+        look_hints.append(
+            "Preserve the person's exact face, hair, pose, proportions, background, "
+            "and props (including wings/sculptures) — do not invent a new model."
         )
         return build_try_on_prompt(look_hints)
     prompt = FITTING_ROOM_LOOK_OPENAI_PROMPT + clause + sheer_boost + FITTING_ROOM_LOOK_FOOTWEAR_CLAUSE
