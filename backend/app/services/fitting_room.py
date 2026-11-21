@@ -915,8 +915,8 @@ def analyze_fashionrise_look_plate(garment_png: bytes) -> dict[str, Any]:
         "look_color_lock": lock,
         "sheer_legs": bool(sheer.get("sheer_legs")),
         "sheer": sheer,
-        # ChatGPT-style direct fit first; materialize only when color/texture soft-check fails.
-        "preferred_path": "direct_openai_then_materialize",
+        # ChatGPT clone (one images.edit) first; materialize only if that HTTP call fails.
+        "preferred_path": "chatgpt_clone_direct",
     }
 
 
@@ -1092,22 +1092,109 @@ def _look_result_needs_recovery(quality: dict[str, Any] | None) -> bool:
     )
 
 
+# Exact ChatGPT / OpenAI cookbook virtual try-on prompt — short, preserve identity,
+# change only clothes, keep design colors from image 2.
+FITTING_ROOM_CHATGPT_CLONE_PROMPT = (
+    "Fit the colourful design from image 2 onto the real person in image 1. "
+    "Edit the photo so she is wearing that design as real clothing. "
+    "Do not change her face, facial features, skin tone, body shape, pose, hair, "
+    "expression, or identity. Preserve her exact likeness and proportions. "
+    "Image 2 is a fashion illustration — ignore the drawn model body/face; use only "
+    "the garment design (cut, layers, petals, leaves, colors). "
+    "Keep every panel color exact from image 2 — especially bright blues, pinks, "
+    "purples, and greens; never crush them into black, charcoal, or muddy grey. "
+    "Replace only her clothing, fitting the design naturally to her pose with "
+    "realistic fabric drape, folds, and contact shadows. Match the photo's lighting "
+    "and color temperature so it looks photoreal, not pasted on. "
+    "Do not change the background, camera angle, or framing."
+)
+
+
 def _chatgpt_style_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
-    """Direct person+design prompt (ChatGPT-simple) with measured color locks."""
-    # Force the illustration→person contract even if a prior path set look_normalized.
-    slim = dict(data)
-    slim.pop("look_normalized", None)
-    slim.pop("look_materialized", None)
-    slim.pop("look_productized", None)
-    prompt = _fitting_room_openai_prompt(slim, hints) or FITTING_ROOM_LOOK_OPENAI_PROMPT
-    # Explicit anti-black-crush for bright Fashion Magic panels.
-    anti_crush = (
-        " COLOR FIDELITY: keep every bright panel bright — never darken a vivid blue/"
-        "pink/purple/green panel into black, charcoal, or muddy grey."
-    )
-    if "COLOR FIDELITY" not in prompt:
-        prompt = f"{prompt}{anti_crush}"
+    """ChatGPT-clone prompt + optional measured COLOR LOCK hexes."""
+    prompt = FITTING_ROOM_CHATGPT_CLONE_PROMPT
+    clause = ""
+    raw = data.get("look_palette_clause")
+    if isinstance(raw, str) and raw.strip():
+        clause = raw.strip()
+    else:
+        clause = (_look_palette_clause(data) or "").strip()
+    if clause and "COLOR LOCK" not in prompt:
+        prompt = f"{prompt} {clause}"
+    lock = data.get("look_color_lock")
+    if isinstance(lock, dict):
+        lock_clause = _look_color_lock_prompt_clause(lock)
+        if lock_clause and lock_clause.strip() not in prompt:
+            prompt = f"{prompt}{lock_clause}"
+    # Keep hint budget tiny — ChatGPT wins with short prompts.
+    evidence: list[str] = []
+    for raw_h in hints:
+        tip = " ".join(str(raw_h).split())
+        if tip and tip not in evidence:
+            evidence.append(tip[:100])
+        if len(evidence) >= 3:
+            break
+    if evidence:
+        prompt = f"{prompt} Design notes: " + "; ".join(evidence) + "."
     return prompt
+
+
+def _run_chatgpt_clone_images_edit(
+    *,
+    person_png: bytes,
+    look_png: bytes,
+    prompt: str,
+) -> tuple[bytes, dict[str, Any]]:
+    """One OpenAI images.edit — same shape as ChatGPT: person + design, short prompt.
+
+    Uses ``fitting_room_look_openai_model`` (default ``gpt-image-2``, high fidelity).
+    Does **not** charcoal-matte the design, materialize, or color-lock.
+    """
+    from openai import OpenAI
+
+    from app.services.personal_croquis_provider import extract_edit_png_bytes
+    from app.services.sketch_openai import assert_image_model_editable, build_image_edit_kwargs
+
+    settings = get_settings()
+    if not (settings.openai_api_key or "").strip():
+        raise ProviderNotAvailableError("OPENAI_API_KEY missing")
+    model = (settings.fitting_room_look_openai_model or "gpt-image-2").strip()
+    assert_image_model_editable(model)
+    quality = (settings.fitting_room_look_openai_quality or "high").strip()
+    size = (settings.openai_image_size or "1024x1536").strip()
+
+    # Raw look plate bytes — no matte / reinforce (those shift ChatGPT-unlike colors).
+    kwargs = build_image_edit_kwargs(
+        model=model,
+        prompt=prompt,
+        sketch=(person_png, "image/png"),
+        size=size,
+        quality=quality,
+        fabric_swatch=(look_png, "image/png"),
+    )
+    kwargs["n"] = 1
+    kwargs["output_format"] = "png"
+    kwargs.pop("background", None)
+    extra = dict(kwargs.get("extra_body") or {})
+    extra["moderation"] = "low"
+    kwargs["extra_body"] = extra
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or None,
+        timeout=float(settings.openai_timeout_seconds or 180),
+    )
+    result = client.with_options(max_retries=0).images.edit(**kwargs)
+    png = extract_edit_png_bytes(result)
+    meta: dict[str, Any] = {
+        "provider": "openai_images_edit",
+        "model": kwargs.get("model"),
+        "quality": kwargs.get("quality"),
+        "size": kwargs.get("size"),
+        "chatgpt_clone": True,
+        "input_fidelity": kwargs.get("input_fidelity"),
+    }
+    return png, meta
 
 
 def _try_chatgpt_style_look_fit(
@@ -1121,61 +1208,53 @@ def _try_chatgpt_style_look_fit(
     look_palette: dict[str, Any] | None,
     look_color_lock_on: bool,
 ) -> tuple[bytes, dict[str, Any], str, dict[str, Any]] | None:
-    """Person + FashionRise look illustration → photoreal try-on (ChatGPT-style).
+    """ChatGPT clone: one images.edit of person + look plate. Accept the photo.
 
-    Returns ``None`` when the provider fails or soft-checks say texture/color are bad,
-    so callers can fall through to materialize → V2.8 → Max.
+    Soft-checks are telemetry only — we do **not** fall through to materialize/color-lock
+    when the clone returns an image (those stages caused the black-bodice failure).
     """
+    settings = get_settings()
+    if not bool(settings.fitting_room_look_chatgpt_clone_enabled):
+        return None
+    prompt = _chatgpt_style_look_prompt(data, hints)
     try:
-        provider = get_try_on_provider("openai")
-        prompt = _chatgpt_style_look_prompt(data, hints)
-        garment_for_edit = _garment_png_for_look_plate(look_png, {
-            **data,
-            "look_materialized": False,
-            "look_productized": False,
-            "look_normalized": False,
-        })
-        png, meta = provider.generate(
-            photo_png=person_png,
-            garment_png=garment_for_edit,
-            design_hints=hints,
-            prompt_override=prompt,
+        png, meta = _run_chatgpt_clone_images_edit(
+            person_png=person_png,
+            look_png=look_png,
+            prompt=prompt,
         )
     except Exception:  # noqa: BLE001
         logger.info(
-            "Fitting Room job %s ChatGPT-style direct look fit failed",
+            "Fitting Room job %s ChatGPT-clone images.edit failed",
             job_id,
             exc_info=True,
         )
         return None
     if not png:
         return None
-    if look_palette and look_color_lock_on:
-        try:
-            png, lock_meta = lock_result_to_palette(png, person_png, look_palette)
-            if isinstance(meta, dict):
-                meta = dict(meta)
-                meta["look_color_lock_direct"] = lock_meta
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "Fitting Room job %s direct-fit color lock failed", job_id, exc_info=True
-            )
+    # Do NOT run lock_result_to_palette here — that path crushed bright blues to black.
+    _ = look_palette, look_color_lock_on  # retained for call-site compatibility
     quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
-    if _look_result_needs_recovery(quality):
-        logger.info(
-            "Fitting Room job %s ChatGPT-style direct fit soft-failed warnings=%s — "
-            "falling through to materialize",
-            job_id,
-            quality.get("warnings"),
-        )
-        return None
     if not isinstance(meta, dict):
         meta = {}
     meta = dict(meta)
-    meta["fitting_room_look_path"] = "direct_openai"
+    meta["fitting_room_look_path"] = "chatgpt_clone_direct"
     meta["look_analysis"] = look_analysis
     meta["look_quality"] = quality
-    logger.info("Fitting Room job %s ChatGPT-style direct look fit accepted", job_id)
+    meta["look_color_lock_skipped"] = True
+    if _look_result_needs_recovery(quality):
+        # Keep the clone result anyway — ChatGPT does not reject soft heuristics.
+        meta["look_quality_kept_despite_soft_check"] = True
+        logger.info(
+            "Fitting Room job %s ChatGPT-clone soft warnings=%s — keeping clone result",
+            job_id,
+            quality.get("warnings"),
+        )
+    logger.info(
+        "Fitting Room job %s ChatGPT-clone accepted model=%s",
+        job_id,
+        meta.get("model"),
+    )
     return png, meta, "openai", quality
 
 
@@ -1810,10 +1889,9 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
 
     look_plate = _is_fashionrise_look_plate(data)
-    # Social look plates are illustrations. Pipeline (ChatGPT-simple first):
-    # 1) Direct OpenAI fit of person + design illustration (preserves bright colors)
-    # 2) If soft texture/color checks fail → materialize to product photo → OpenAI V2.8
-    # 3) Recovery: OpenAI retry → FASHN Max → keep best (never cancel on soft-check alone)
+    # Social look plates are illustrations. Pipeline:
+    # 1) ChatGPT clone — one images.edit (person + look plate) on gpt-image-2
+    # 2) Only if that HTTP call fails → materialize → OpenAI V2.8 → Max recovery
     look_analysis = data.get("look_analysis") if isinstance(data.get("look_analysis"), dict) else None
     if look_plate and look_analysis is None:
         look_analysis = analyze_fashionrise_look_plate(garment_png)
@@ -1854,10 +1932,12 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             data["look_normalized"] = False
             data.pop("look_productized", None)
             data["look_direct_openai"] = True
+            data["look_chatgpt_clone"] = True
             logger.info(
-                "Fitting Room job %s Social look via ChatGPT-style direct OpenAI "
-                "(detected_by=%s)",
+                "Fitting Room job %s Social look via ChatGPT-clone images.edit "
+                "model=%s detected_by=%s",
                 job.id,
+                (meta or {}).get("model") if isinstance(meta, dict) else None,
                 data.get("look_detected_by"),
             )
         else:
@@ -2108,18 +2188,36 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     if not png:
         return _fail("Fitting Room returned an empty image.", code="EMPTY_RESULT")
 
+    look_chatgpt_clone = bool(
+        data.get("look_chatgpt_clone")
+        or (
+            isinstance(meta, dict)
+            and (
+                meta.get("chatgpt_clone")
+                or meta.get("fitting_room_look_path") == "chatgpt_clone_direct"
+            )
+        )
+    )
+
     look_final_lock: dict[str, Any] | None = None
-    if look_plate and look_palette and look_color_lock_on:
+    if look_plate and look_palette and look_color_lock_on and not look_chatgpt_clone:
         # Providers drift hue/depth even from a correct product photo; pull the garment
         # (only the pixels the try-on changed) back to the measured design palette.
+        # Skip on ChatGPT-clone — post color-lock was crushing bright blues to black.
         try:
             png, look_final_lock = lock_result_to_palette(png, person_png, look_palette)
         except Exception:  # noqa: BLE001
             logger.warning("Fitting Room job %s final color lock failed", job.id, exc_info=True)
             look_final_lock = {"stage": "result", "applied": False, "reason": "error"}
+    elif look_chatgpt_clone:
+        look_final_lock = {
+            "stage": "result",
+            "applied": False,
+            "reason": "skipped_chatgpt_clone",
+        }
 
     look_quality: dict[str, Any] | None = look_direct_quality
-    if look_plate and png:
+    if look_plate and png and not look_chatgpt_clone:
         look_quality = soft_check_look_tryon_result(
             png, look_analysis=look_analysis
         )
@@ -2156,6 +2254,8 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "Fitting Room could not finish this look preview. No Stars were charged.",
                     code="LOOK_RECOVERY_EMPTY",
                 )
+    elif look_chatgpt_clone and look_quality is None and png:
+        look_quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
 
     key = f"ai/{job.id.hex}_fitting_{uuid.uuid4().hex[:10]}.png"
     url = LocalStorageBackend().save_file(key=key, data=io.BytesIO(png), content_type="image/png")

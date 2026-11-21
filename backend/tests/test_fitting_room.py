@@ -771,9 +771,9 @@ def test_analyze_look_plate_detects_sheer_legs():
 
     solid = analyze_fashionrise_look_plate(_two_tone_look_png())
     sheer = analyze_fashionrise_look_plate(_sheer_look_png())
-    assert solid["preferred_path"] == "direct_openai_then_materialize"
+    assert solid["preferred_path"] == "chatgpt_clone_direct"
     assert sheer["sheer_legs"] is True
-    assert sheer["preferred_path"] == "direct_openai_then_materialize"
+    assert sheer["preferred_path"] == "chatgpt_clone_direct"
 
 
 def test_sketch_texture_score_runs_on_synthetic():
@@ -1277,8 +1277,8 @@ def test_look_final_illustrated_quality_keeps_best_after_max(client, db_session,
     assert after == before - 20
 
 
-def test_look_direct_chatgpt_style_skips_materialize(client, db_session, monkeypatch):
-    """ChatGPT-simple path: person + design illustration succeeds without materialize."""
+def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session, monkeypatch):
+    """ChatGPT clone: one images.edit (person+design) — no materialize, no color lock."""
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
@@ -1286,36 +1286,36 @@ def test_look_direct_chatgpt_style_skips_materialize(client, db_session, monkeyp
 
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_CHATGPT_CLONE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "gpt-image-2")
+    get_settings.cache_clear()
     calls: list[str] = []
 
     def _no_materialize(**_k):
         calls.append("materialize")
-        raise AssertionError("materialize must not run when direct fit is accepted")
+        raise AssertionError("materialize must not run when ChatGPT clone is accepted")
 
-    class _DirectProvider(MockTryOnProvider):
-        def generate(self, *, photo_png, garment_png, design_hints=None, prompt_override=None, **kwargs):
-            calls.append("openai")
-            self.calls += 1
-            self.last_prompt_override = prompt_override
-            prompt = (prompt_override or "").lower()
-            assert "fit the colourful" in prompt or "colourful fashionrise" in prompt
-            assert "color fidelity" in prompt
-            assert "mannequin" not in prompt
-            return tryon_result_png(), {"actual_cost_cents": 4, "provider": "openai"}
+    def _clone_edit(*, person_png, look_png, prompt):
+        calls.append("chatgpt_clone")
+        assert person_png and look_png
+        lowered = prompt.lower()
+        assert "fit the colourful design" in lowered
+        assert "do not change her face" in lowered
+        assert "never crush" in lowered or "black" in lowered
+        assert "mannequin" not in lowered
+        return tryon_result_png(), {
+            "provider": "openai_images_edit",
+            "model": "gpt-image-2",
+            "quality": "high",
+            "chatgpt_clone": True,
+        }
+
+    def _no_lock(*_a, **_k):
+        raise AssertionError("color lock must not run on ChatGPT-clone path")
 
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _no_materialize)
-    monkeypatch.setattr(fr, "get_try_on_provider", lambda _name=None: _DirectProvider())
-    monkeypatch.setattr(
-        fr,
-        "soft_check_look_tryon_result",
-        lambda *_a, **_k: {
-            "ok": True,
-            "warnings": [],
-            "result_skin_ratio_lower": 0.2,
-            "sheer_expected": False,
-            "texture": {"illustrated_texture_suspected": False},
-        },
-    )
+    monkeypatch.setattr(fr, "_run_chatgpt_clone_images_edit", _clone_edit)
+    monkeypatch.setattr(fr, "lock_result_to_palette", _no_lock)
     set_try_on_provider_override(None)
 
     job = _enqueue_look_job(
@@ -1332,9 +1332,10 @@ def test_look_direct_chatgpt_style_skips_materialize(client, db_session, monkeyp
     job = db_session.get(AIJob, job.id)
     assert job.status == "completed", job.error_message
     result = job.result_data or {}
-    assert result.get("fitting_room_look_path") == "direct_openai"
+    assert result.get("fitting_room_look_path") == "chatgpt_clone_direct"
+    assert result.get("look_color_lock_final", {}).get("reason") == "skipped_chatgpt_clone"
     assert "materialize" not in calls
-    assert calls == ["openai"]
+    assert calls == ["chatgpt_clone"]
     after = db_session.query(User).filter(User.username == "fr_look_direct").one().ai_stars
     assert after == before - 20
 
