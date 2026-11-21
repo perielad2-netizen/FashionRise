@@ -631,15 +631,15 @@ FITTING_ROOM_LOOK_PLATE_PROMPT = (
     "lighting. Keep identity, face, hair, pose, background, skin unchanged."
 )
 
-# Legacy illustration→person OpenAI prompt. Kept for unit tests / override paths only —
-# live Social Fitting Room must materialize first and never paste the raw look plate.
+# ChatGPT-style Social look fit: person photo + FashionRise design illustration.
+# Prefer this before materialize — simpler and keeps bright multi-tone colors.
 FITTING_ROOM_LOOK_OPENAI_PROMPT = (
-    "Create a single photorealistic photograph of the person from image 1 wearing real "
-    "clothing that matches the FashionRise look illustration in image 2 one-to-one. "
-    "Image 2 includes a drawn model — ignore that illustrated body, face, hair, skin, and "
-    "pose; use only the garment design. Keep cut, silhouette, neckline, straps, hem, "
-    "asymmetry, coverage, and every panel color exact (including two-tone upper vs lower "
-    "— do not unify hues). "
+    "Fit the colourful FashionRise design from image 2 onto the real person in image 1. "
+    "Output one photorealistic photograph of that person wearing the design as real sewn "
+    "clothing. Image 2 includes a drawn model — ignore that illustrated body, face, hair, "
+    "skin, and pose; use only the garment design. Keep cut, silhouette, neckline, straps, "
+    "hem, asymmetry, coverage, and every panel color exact (including bright two-tone upper "
+    "vs lower — never unify hues, never crush a bright panel into black/grey). "
     "SHEER LAYERS: if image 2 shows legs through a sheer/tulle/chiffon skirt, the person's "
     "legs MUST remain visible through those sheer layers — never fill an opaque skirt over "
     "the legs or invent opaque underlayers. "
@@ -651,7 +651,7 @@ FITTING_ROOM_LOOK_OPENAI_PROMPT = (
     "image 1 lighting with soft contact shadows. Do NOT paste sketch strokes, flat "
     "illustrated fills, airbrushed concept-art shading, floating petal stickers, or a "
     "sketched overlay. Preserve identity, face, hair, pose, proportions, background, and "
-    "natural skin tone. Output one realistic photograph."
+    "natural skin tone."
 )
 
 # Max prompt for the moderation-fallback path when the reference is already a product photo.
@@ -915,10 +915,116 @@ def analyze_fashionrise_look_plate(garment_png: bytes) -> dict[str, Any]:
         "look_color_lock": lock,
         "sheer_legs": bool(sheer.get("sheer_legs")),
         "sheer": sheer,
-        # Materialize illustration → studio product photo, then OpenAI V2.8 (model
-        # Try On Person path). Max only as moderation fallback.
-        "preferred_path": "materialize_then_openai",
+        # ChatGPT-style direct fit first; materialize only when color/texture soft-check fails.
+        "preferred_path": "direct_openai_then_materialize",
     }
+
+
+def _rgb_luma(rgb: list[int] | tuple[int, int, int]) -> float:
+    return 0.299 * float(rgb[0]) + 0.587 * float(rgb[1]) + 0.114 * float(rgb[2])
+
+
+def _rgb_saturation(rgb: list[int] | tuple[int, int, int]) -> float:
+    r, g, b = float(rgb[0]) / 255.0, float(rgb[1]) / 255.0, float(rgb[2]) / 255.0
+    mx, mn = max(r, g, b), min(r, g, b)
+    if mx < 1e-6:
+        return 0.0
+    return (mx - mn) / mx
+
+
+def _sample_result_panel_rgb(
+    result_png: bytes, *, y0: float, y1: float
+) -> tuple[int, int, int] | None:
+    """Mean RGB of likely garment pixels in a band (includes near-black fabric).
+
+    Outdoor try-ons have large sky/ground in the frame; we drop skin, paper whites,
+    and bright low-saturation backdrop so a crushed black bodice is not averaged away.
+    """
+    if not result_png:
+        return None
+    try:
+        with Image.open(io.BytesIO(result_png)) as im:
+            im.load()
+            rgb = im.convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+    w, h = rgb.size
+    if w < 8 or h < 16:
+        return None
+    px = rgb.load()
+    yy0, yy1 = int(h * y0), max(int(h * y0) + 1, int(h * y1))
+    xx0, xx1 = int(w * 0.30), max(int(w * 0.30) + 1, int(w * 0.70))
+    rs: list[float] = []
+    gs: list[float] = []
+    bs: list[float] = []
+    for y in range(yy0, yy1):
+        for x in range(xx0, xx1):
+            r, g, b = px[x, y]
+            if _is_skin_like_rgb(r, g, b):
+                continue
+            if min(r, g, b) >= 230:
+                continue
+            luma = _rgb_luma((r, g, b))
+            sat = _rgb_saturation((r, g, b))
+            # Bright, weakly saturated backdrop (sky / pavement / paper).
+            if luma >= 110 and sat < 0.22:
+                continue
+            rs.append(float(r))
+            gs.append(float(g))
+            bs.append(float(b))
+    if len(rs) < 25:
+        return None
+    return (
+        int(round(sum(rs) / len(rs))),
+        int(round(sum(gs) / len(gs))),
+        int(round(sum(bs) / len(bs))),
+    )
+
+
+def soft_check_look_color_fidelity(
+    result_png: bytes,
+    *,
+    look_analysis: dict[str, Any] | None,
+) -> list[str]:
+    """Detect bright design panels crushed to near-black (the paid Social failure mode)."""
+    warnings: list[str] = []
+    analysis = look_analysis if isinstance(look_analysis, dict) else {}
+    lock = analysis.get("look_color_lock")
+    if not isinstance(lock, dict):
+        return warnings
+    # Multiple band layouts: look-plate proportions vs typical outdoor try-on crop.
+    band_layouts = (
+        {"bodice": (0.28, 0.46), "skirt": (0.52, 0.74)},
+        {"bodice": (0.15, 0.32), "skirt": (0.38, 0.62)},
+        {"bodice": (0.18, 0.36), "skirt": (0.42, 0.68)},
+    )
+    for bands in band_layouts:
+        crushed = False
+        for key, (y0, y1) in bands.items():
+            design = lock.get(f"{key}_rgb")
+            if not (isinstance(design, list) and len(design) == 3):
+                continue
+            result = _sample_result_panel_rgb(result_png, y0=y0, y1=y1)
+            if result is None:
+                continue
+            design_l = _rgb_luma(design)
+            result_l = _rgb_luma(result)
+            design_s = _rgb_saturation(design)
+            # Bright, saturated design panel must not collapse into charcoal/black.
+            # Thresholds allow partial sky bleed in outdoor crops while still
+            # catching the paid failure (vivid blue/pink → near-black bodice).
+            if (
+                design_l >= 90
+                and design_s >= 0.25
+                and result_l <= 78
+                and (design_l - result_l) >= 28
+            ):
+                crushed = True
+                break
+        if crushed:
+            warnings.append("color_crush_to_dark")
+            break
+    return warnings
 
 
 def soft_check_look_tryon_result(
@@ -928,7 +1034,7 @@ def soft_check_look_tryon_result(
 ) -> dict[str, Any]:
     """Local quality signals after try-on — no extra provider calls.
 
-    Checks sheer coverage, color lock, and illustrated/sketch texture heuristics.
+    Checks sheer coverage, color lock, color fidelity, and illustrated/sketch texture.
     Passing color+legs alone is not enough to mark a result high quality.
     """
     from app.services.look_garment_normalize import estimate_sketch_texture_score
@@ -950,6 +1056,9 @@ def soft_check_look_tryon_result(
             and float(result_lock.get("luma_delta") or 0) < -8
         ):
             warnings.append("color_lock_inverted")
+    warnings.extend(
+        soft_check_look_color_fidelity(result_png, look_analysis=look_analysis)
+    )
     texture = estimate_sketch_texture_score(result_png)
     if texture.get("illustrated_texture_suspected"):
         warnings.append("illustrated_texture_suspected")
@@ -966,6 +1075,108 @@ def _look_result_looks_illustrated(quality: dict[str, Any] | None) -> bool:
     if not isinstance(quality, dict):
         return False
     return "illustrated_texture_suspected" in (quality.get("warnings") or [])
+
+
+def _look_result_needs_recovery(quality: dict[str, Any] | None) -> bool:
+    """Soft texture OR color-crush → escalate; never cancel the paid try-on."""
+    if not isinstance(quality, dict):
+        return False
+    warnings = quality.get("warnings") or []
+    return any(
+        w in warnings
+        for w in (
+            "illustrated_texture_suspected",
+            "color_crush_to_dark",
+            "color_lock_inverted",
+        )
+    )
+
+
+def _chatgpt_style_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
+    """Direct person+design prompt (ChatGPT-simple) with measured color locks."""
+    # Force the illustration→person contract even if a prior path set look_normalized.
+    slim = dict(data)
+    slim.pop("look_normalized", None)
+    slim.pop("look_materialized", None)
+    slim.pop("look_productized", None)
+    prompt = _fitting_room_openai_prompt(slim, hints) or FITTING_ROOM_LOOK_OPENAI_PROMPT
+    # Explicit anti-black-crush for bright Fashion Magic panels.
+    anti_crush = (
+        " COLOR FIDELITY: keep every bright panel bright — never darken a vivid blue/"
+        "pink/purple/green panel into black, charcoal, or muddy grey."
+    )
+    if "COLOR FIDELITY" not in prompt:
+        prompt = f"{prompt}{anti_crush}"
+    return prompt
+
+
+def _try_chatgpt_style_look_fit(
+    *,
+    job_id: Any,
+    person_png: bytes,
+    look_png: bytes,
+    data: dict[str, Any],
+    hints: list[str],
+    look_analysis: dict[str, Any] | None,
+    look_palette: dict[str, Any] | None,
+    look_color_lock_on: bool,
+) -> tuple[bytes, dict[str, Any], str, dict[str, Any]] | None:
+    """Person + FashionRise look illustration → photoreal try-on (ChatGPT-style).
+
+    Returns ``None`` when the provider fails or soft-checks say texture/color are bad,
+    so callers can fall through to materialize → V2.8 → Max.
+    """
+    try:
+        provider = get_try_on_provider("openai")
+        prompt = _chatgpt_style_look_prompt(data, hints)
+        garment_for_edit = _garment_png_for_look_plate(look_png, {
+            **data,
+            "look_materialized": False,
+            "look_productized": False,
+            "look_normalized": False,
+        })
+        png, meta = provider.generate(
+            photo_png=person_png,
+            garment_png=garment_for_edit,
+            design_hints=hints,
+            prompt_override=prompt,
+        )
+    except Exception:  # noqa: BLE001
+        logger.info(
+            "Fitting Room job %s ChatGPT-style direct look fit failed",
+            job_id,
+            exc_info=True,
+        )
+        return None
+    if not png:
+        return None
+    if look_palette and look_color_lock_on:
+        try:
+            png, lock_meta = lock_result_to_palette(png, person_png, look_palette)
+            if isinstance(meta, dict):
+                meta = dict(meta)
+                meta["look_color_lock_direct"] = lock_meta
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Fitting Room job %s direct-fit color lock failed", job_id, exc_info=True
+            )
+    quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+    if _look_result_needs_recovery(quality):
+        logger.info(
+            "Fitting Room job %s ChatGPT-style direct fit soft-failed warnings=%s — "
+            "falling through to materialize",
+            job_id,
+            quality.get("warnings"),
+        )
+        return None
+    if not isinstance(meta, dict):
+        meta = {}
+    meta = dict(meta)
+    meta["fitting_room_look_path"] = "direct_openai"
+    meta["look_analysis"] = look_analysis
+    meta["look_quality"] = quality
+    logger.info("Fitting Room job %s ChatGPT-style direct look fit accepted", job_id)
+    return png, meta, "openai", quality
 
 
 # Stronger OpenAI hints when the first try-on still looked like a Magic paste.
@@ -1008,14 +1219,15 @@ def _recover_illustrated_look_tryon(
 ) -> tuple[bytes, dict[str, Any], str, dict[str, Any]]:
     """Escalate OpenAI recovery → FASHN Max until photoreal, else keep best attempt.
 
-    Never cancels a paid Fitting Room look solely because the soft texture check
-    flagged illustration — keep trying harder providers, then deliver the best image.
+    Never cancels a paid Fitting Room look solely because the soft texture/color check
+    flagged issues — keep trying harder providers, then deliver the best image.
+    Prefer results without ``color_crush_to_dark`` over darker crushed ones.
     """
     attempts: list[dict[str, Any]] = [
         {
             "step": "initial",
             "provider": initial_provider,
-            "illustrated": True,
+            "illustrated": _look_result_looks_illustrated(initial_quality),
             "warnings": list(initial_quality.get("warnings") or []),
         }
     ]
@@ -1023,6 +1235,25 @@ def _recover_illustrated_look_tryon(
     best_meta = dict(initial_meta) if isinstance(initial_meta, dict) else {}
     best_provider = initial_provider
     best_quality = initial_quality
+
+    def _quality_rank(quality: dict[str, Any] | None) -> tuple[int, int, int]:
+        """Higher is better: no crush beats crush; no illustration beats illustration."""
+        warnings = (quality or {}).get("warnings") or []
+        crush = 0 if "color_crush_to_dark" in warnings else 1
+        texture = 0 if "illustrated_texture_suspected" in warnings else 1
+        invert = 0 if "color_lock_inverted" in warnings else 1
+        return (crush, texture, invert)
+
+    def _consider(candidate: bytes, meta: dict[str, Any], provider: str, quality: dict[str, Any]) -> bool:
+        nonlocal best_png, best_meta, best_provider, best_quality
+        if _quality_rank(quality) >= _quality_rank(best_quality):
+            best_png, best_meta, best_provider, best_quality = (
+                candidate,
+                meta if isinstance(meta, dict) else {},
+                provider,
+                quality,
+            )
+        return not _look_result_needs_recovery(quality)
 
     def _maybe_color_lock(candidate: bytes) -> bytes:
         if not (look_palette and look_color_lock_on):
@@ -1036,10 +1267,19 @@ def _recover_illustrated_look_tryon(
             )
             return candidate
 
-    # 1) OpenAI photoreal recovery retry (stronger anti-paste contract).
+    # 1) OpenAI photoreal recovery retry (stronger anti-paste + anti-black-crush).
     try:
         provider = get_try_on_provider("openai")
         recovery_prompt = _fitting_room_openai_recovery_prompt(data, hints)
+        if "COLOR FIDELITY" not in recovery_prompt:
+            recovery_prompt = (
+                f"{recovery_prompt} COLOR FIDELITY: keep every bright panel bright — "
+                "never darken vivid blue/pink/purple/green into black or charcoal."
+            )
+        # When not materialized, recovery_prompt via look_normalized product path is wrong —
+        # use ChatGPT-style direct prompt on the look plate / product bytes we were given.
+        if not data.get("look_materialized"):
+            recovery_prompt = _chatgpt_style_look_prompt(data, hints)
         png, meta = provider.generate(
             photo_png=person_png,
             garment_png=product_png,
@@ -1058,10 +1298,14 @@ def _recover_illustrated_look_tryon(
                     "warnings": list(quality.get("warnings") or []),
                 }
             )
-            best_png, best_meta, best_provider, best_quality = png, meta if isinstance(meta, dict) else {}, "openai", quality
-            if not illustrated:
+            meta_dict = meta if isinstance(meta, dict) else {}
+            if _consider(png, meta_dict, "openai", quality):
                 best_meta = dict(best_meta)
-                best_meta["fitting_room_look_path"] = "materialize_then_openai_recovery"
+                best_meta["fitting_room_look_path"] = (
+                    "materialize_then_openai_recovery"
+                    if data.get("look_materialized")
+                    else "direct_openai_recovery"
+                )
                 best_meta["look_quality_recovery"] = attempts
                 if isinstance(initial_meta, dict) and initial_meta.get("look_materialize"):
                     best_meta.setdefault("look_materialize", initial_meta.get("look_materialize"))
@@ -1085,7 +1329,7 @@ def _recover_illustrated_look_tryon(
             exc_info=True,
         )
 
-    # 2) FASHN Max quality · 2k on the materialized product.
+    # 2) FASHN Max quality · 2k on the product / look reference.
     if _fashn_max_fallback_armed():
         try:
             png, meta = _generate_look_try_on_via_max(
@@ -1106,19 +1350,19 @@ def _recover_illustrated_look_tryon(
                         "warnings": list(quality.get("warnings") or []),
                     }
                 )
-                best_png = png
-                best_meta = meta if isinstance(meta, dict) else {}
-                best_provider = str(best_meta.get("provider") or "fashn_tryon_max")
-                best_quality = quality
+                meta_dict = meta if isinstance(meta, dict) else {}
+                provider_name = str(meta_dict.get("provider") or "fashn_tryon_max")
+                accepted = _consider(png, meta_dict, provider_name, quality)
+                best_meta = dict(best_meta)
                 best_meta["fitting_room_look_path"] = (
                     "materialize_then_max_recovery"
-                    if not illustrated
+                    if accepted
                     else "materialize_then_max_recovery_soft"
                 )
                 if isinstance(initial_meta, dict) and initial_meta.get("look_materialize"):
                     best_meta.setdefault("look_materialize", initial_meta.get("look_materialize"))
                 best_meta.setdefault("look_analysis", look_analysis)
-                if not illustrated:
+                if accepted:
                     best_meta["look_quality_recovery"] = attempts
                     logger.info(
                         "Fitting Room job %s recovery succeeded via FASHN Max",
@@ -1566,10 +1810,10 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
 
     look_plate = _is_fashionrise_look_plate(data)
-    # Social look plates are illustrations. Pipeline: measure the design palette →
-    # materialize the outfit as a studio product photo (color-locked) → FASHN Max →
-    # color-lock the final photo. Handing the illustration to a try-on model directly
-    # transfers its painted rendering onto the person.
+    # Social look plates are illustrations. Pipeline (ChatGPT-simple first):
+    # 1) Direct OpenAI fit of person + design illustration (preserves bright colors)
+    # 2) If soft texture/color checks fail → materialize to product photo → OpenAI V2.8
+    # 3) Recovery: OpenAI retry → FASHN Max → keep best (never cancel on soft-check alone)
     look_analysis = data.get("look_analysis") if isinstance(data.get("look_analysis"), dict) else None
     if look_plate and look_analysis is None:
         look_analysis = analyze_fashionrise_look_plate(garment_png)
@@ -1581,6 +1825,7 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     look_color_lock_on = bool(get_settings().fitting_room_look_color_lock_enabled)
     look_palette: dict[str, Any] | None = None
+    look_plate_original_png = garment_png
     if look_plate:
         try:
             look_palette = extract_design_palette(garment_png)
@@ -1590,57 +1835,99 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         data["look_palette_clause"] = palette_prompt_clause(look_palette)
 
     look_materialize_meta: dict[str, Any] | None = None
+    look_direct_quality: dict[str, Any] | None = None
     if look_plate and _try_on_provider_override is None:
-        try:
-            import app.services.look_garment_normalize as look_materialize
-
-            garment_png, look_materialize_meta = look_materialize.materialize_fashionrise_look(
-                look_png=garment_png,
-                palette=look_palette,
-                color_lock=look_color_lock_on,
-            )
-            data["look_materialized"] = True
-            # Legacy flags: downstream prompts treat the reference as a product photo.
-            data["look_normalized"] = True
-            data["look_productized"] = True
-            meta = {
-                "fitting_room_look_path": "materialize_then_openai",
-                "look_analysis": look_analysis,
-                "look_sheer_legs": look_sheer,
-                "look_materialize": look_materialize_meta,
-            }
-            # Prefer OpenAI V2.8 — same contract as model Try On Person on a real
-            # photo. Max-first on look plates pasted illustration texture onto people.
-            png = None
-            logger.info(
-                "Fitting Room job %s Social look materialized — OpenAI V2.8 next "
-                "(calls=%s lock=%s detected_by=%s)",
-                job.id,
-                look_materialize_meta.get("openai_calls"),
-                (look_materialize_meta.get("color_lock") or {}).get("applied"),
-                data.get("look_detected_by"),
-            )
-        except Exception:  # noqa: BLE001
-            # Fail closed: handing the raw Fashion Magic illustration to try-on pastes
-            # painted texture onto the person's photo (paid quality failure).
-            logger.info(
-                "Fitting Room job %s look materialize failed — refusing raw-look try-on",
-                job.id,
-                exc_info=True,
-            )
+        # 1) ChatGPT-style: fit design on person directly (best color fidelity).
+        direct = _try_chatgpt_style_look_fit(
+            job_id=job.id,
+            person_png=person_png,
+            look_png=look_plate_original_png,
+            data=data,
+            hints=hints,
+            look_analysis=look_analysis,
+            look_palette=look_palette,
+            look_color_lock_on=look_color_lock_on,
+        )
+        if direct is not None:
+            png, meta, used_provider, look_direct_quality = direct
             data["look_materialized"] = False
             data["look_normalized"] = False
             data.pop("look_productized", None)
-            slim = dict(data)
-            slim.pop("person_image_base64", None)
-            slim.pop("garment_image_base64", None)
-            slim["images_stripped"] = True
-            job.input_data = slim
-            return _fail(
-                "Fitting Room could not turn this FashionRise look into a real garment "
-                "photo. Try again in a moment. No Stars were charged.",
-                code="LOOK_MATERIALIZE_FAILED",
+            data["look_direct_openai"] = True
+            logger.info(
+                "Fitting Room job %s Social look via ChatGPT-style direct OpenAI "
+                "(detected_by=%s)",
+                job.id,
+                data.get("look_detected_by"),
             )
+        else:
+            # 2) Materialize illustration → studio product, then OpenAI V2.8.
+            try:
+                import app.services.look_garment_normalize as look_materialize
+
+                garment_png, look_materialize_meta = look_materialize.materialize_fashionrise_look(
+                    look_png=look_plate_original_png,
+                    palette=look_palette,
+                    color_lock=look_color_lock_on,
+                )
+                data["look_materialized"] = True
+                data["look_normalized"] = True
+                data["look_productized"] = True
+                meta = {
+                    "fitting_room_look_path": "materialize_then_openai",
+                    "look_analysis": look_analysis,
+                    "look_sheer_legs": look_sheer,
+                    "look_materialize": look_materialize_meta,
+                    "look_direct_openai_attempted": True,
+                }
+                png = None
+                logger.info(
+                    "Fitting Room job %s Social look materialized after direct soft-fail — "
+                    "OpenAI V2.8 next (calls=%s lock=%s detected_by=%s)",
+                    job.id,
+                    look_materialize_meta.get("openai_calls"),
+                    (look_materialize_meta.get("color_lock") or {}).get("applied"),
+                    data.get("look_detected_by"),
+                )
+            except Exception:  # noqa: BLE001
+                # Last resort: still try the raw illustration (ChatGPT path) rather than
+                # canceling a paid Fitting Room — better a soft result than empty.
+                logger.info(
+                    "Fitting Room job %s look materialize failed — retrying raw-look direct fit",
+                    job.id,
+                    exc_info=True,
+                )
+                data["look_materialized"] = False
+                data["look_normalized"] = False
+                data.pop("look_productized", None)
+                # Force-accept a second direct attempt even if soft-check is noisy.
+                try:
+                    provider = get_try_on_provider("openai")
+                    prompt = _chatgpt_style_look_prompt(data, hints)
+                    png, meta = provider.generate(
+                        photo_png=person_png,
+                        garment_png=look_plate_original_png,
+                        design_hints=hints,
+                        prompt_override=prompt,
+                    )
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    meta["fitting_room_look_path"] = "direct_openai_after_materialize_fail"
+                    meta["look_analysis"] = look_analysis
+                    used_provider = "openai"
+                    if not png:
+                        raise ProviderNotAvailableError("empty direct look result")
+                except Exception:  # noqa: BLE001
+                    slim = dict(data)
+                    slim.pop("person_image_base64", None)
+                    slim.pop("garment_image_base64", None)
+                    slim["images_stripped"] = True
+                    job.input_data = slim
+                    return _fail(
+                        "Fitting Room could not finish this look preview. "
+                        "Try again in a moment. No Stars were charged.",
+                        code="LOOK_MATERIALIZE_FAILED",
+                    )
 
     # Swimwear / lingerie / product dresses: prefer Try-On Max quality first (skip
     # OpenAI moderation landmines). Look plates handled above.
@@ -1831,23 +2118,29 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             logger.warning("Fitting Room job %s final color lock failed", job.id, exc_info=True)
             look_final_lock = {"stage": "result", "applied": False, "reason": "error"}
 
-    look_quality: dict[str, Any] | None = None
+    look_quality: dict[str, Any] | None = look_direct_quality
     if look_plate and png:
         look_quality = soft_check_look_tryon_result(
             png, look_analysis=look_analysis
         )
-        if _look_result_looks_illustrated(look_quality):
-            # Do not cancel a paid look try-on on soft texture alone — escalate
-            # OpenAI photoreal recovery → FASHN Max, then keep the best attempt.
+        if _look_result_needs_recovery(look_quality):
+            # Soft texture or bright→black color crush — escalate, never cancel.
             logger.info(
-                "Fitting Room job %s illustrated soft-check — escalating recovery path=%s",
+                "Fitting Room job %s look soft-check needs recovery warnings=%s path=%s",
                 job.id,
+                look_quality.get("warnings"),
                 (meta or {}).get("fitting_room_look_path") if isinstance(meta, dict) else None,
+            )
+            # Prefer materialized product when available; else the original look plate.
+            recovery_garment = (
+                garment_png
+                if data.get("look_materialized")
+                else look_plate_original_png
             )
             png, meta, used_provider, look_quality = _recover_illustrated_look_tryon(
                 job_id=job.id,
                 person_png=person_png,
-                product_png=garment_png,
+                product_png=recovery_garment,
                 data=data,
                 hints=hints,
                 look_analysis=look_analysis,
