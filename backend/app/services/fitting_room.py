@@ -171,10 +171,14 @@ def _normalize_model_b_sunburst_allowlist() -> set[str]:
 
 
 def user_on_model_b_sunburst_allowlist(user: User | Any) -> bool:
-    """Server-enforced owner gate. Empty allowlist = nobody."""
+    """Optional restriction gate when an allowlist is configured.
+
+    Empty allowlist = everyone (GA). Non-empty = only matching email/username/id
+    (ops can shrink back to owner-only without flipping the feature flag).
+    """
     allow = _normalize_model_b_sunburst_allowlist()
     if not allow:
-        return False
+        return True
     email = str(getattr(user, "email", "") or "").strip().lower()
     username = str(getattr(user, "username", "") or "").strip().lower()
     uid = str(getattr(user, "id", "") or "").strip().lower()
@@ -186,7 +190,7 @@ def look_model_b_sunburst_flag_enabled() -> bool:
 
 
 def look_model_b_sunburst_available_for_user(user: User | Any) -> bool:
-    """True when the owner may opt into Model B for a look try-on."""
+    """True when Model B is the Fitting Room look path for this user."""
     return look_model_b_sunburst_flag_enabled() and user_on_model_b_sunburst_allowlist(user)
 
 
@@ -2427,13 +2431,12 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         settings = get_settings()
         product_png: bytes | None = None
 
-        # 0a) Owner-only Model B sunburst — prefer_model_b_sunburst + flag + allowlist.
+        # 0a) Model B sunburst — default look path when flag (+ optional allowlist).
         # Single fashion-look illustration only. Fail closed on miss (no paid chain).
-        prefer_model_b = bool(data.get("prefer_model_b_sunburst"))
+        # prefer_model_b_sunburst remains accepted for older clients but is not required.
         job_user = db.get(User, job.user_id) if job.user_id is not None else None
         model_b_eligible = (
-            prefer_model_b
-            and job_user is not None
+            job_user is not None
             and look_model_b_sunburst_available_for_user(job_user)
             and not _is_multi_piece_outfit(data)
             and not bool(settings.fitting_room_look_identity_lock_enabled)

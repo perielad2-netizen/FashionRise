@@ -241,6 +241,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             stars_cost_note: '20 Stars per successful Fitting Room preview (flat rate).',
             max_outfit_pieces: 1,
             conflicting_category_sets: [],
+            look_model_b_sunburst_available: false,
+            look_model_b_sunburst_model: 'gpt-image-2.6-sunburst',
           })
         }
       }

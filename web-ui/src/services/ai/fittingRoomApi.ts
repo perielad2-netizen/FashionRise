@@ -14,6 +14,9 @@ export type FittingRoomPreflight = {
   stars_cost_note: string
   max_outfit_pieces: number
   conflicting_category_sets: string[][]
+  /** Owner-only Model B path — server true only when flag + allowlist match. */
+  look_model_b_sunburst_available?: boolean
+  look_model_b_sunburst_model?: string
 }
 
 export type FittingRoomGarmentPieceInput = {
@@ -33,6 +36,8 @@ export type FittingRoomTryOnInput = {
   garmentCategory?: string
   /** Social gallery item when try-on came from FashionRise feed (designer Stars). */
   sourceGalleryItemId?: string
+  /** Owner-only: request Model B sunburst when preflight marks it available. */
+  preferModelBSunburst?: boolean
   signal?: AbortSignal
 }
 
@@ -65,6 +70,7 @@ export async function enqueueFittingRoomTryOn(
       ...(input.sourceGalleryItemId
         ? { source_gallery_item_id: input.sourceGalleryItemId }
         : {}),
+      ...(input.preferModelBSunburst ? { prefer_model_b_sunburst: true } : {}),
     },
     signal: input.signal,
   })

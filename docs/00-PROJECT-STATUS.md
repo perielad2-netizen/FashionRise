@@ -3,6 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## LIVE — Model B Fitting Room for everyone (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Verdict | Owner floral + pink heels test **approved** → Model B rolled out to **all users** |
+| PR | [#477](https://github.com/perielad2-netizen/FashionRise/pull/477) (GA commit on same branch) |
+| Behavior | When `FITTING_ROOM_LOOK_MODEL_B_SUNBURST_ENABLED=true` and allowlist **empty**, Model B is the **default** single-look Fitting Room path (no checkbox; prefer flag not required) |
+| Optional restrict | Non-empty allowlist still limits to listed users (ops kill-switch) |
+| Prod flags | `ENABLED=true` · allowlist **empty** · `IDENTITY_LOCK=false` · `MODEL_COMPARE_LIVE_HTTP=false` |
+| UX | Existing upload / design / consent / Stars / results unchanged; experiment checkbox removed |
+| Exact next action | Owner tests Fitting Room on **iOS + Android**; watch Stars + heels/dress fidelity |
+
+
 ## Deployed — Fitting Room Model B sunburst path (flags OFF) · PR #474 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
