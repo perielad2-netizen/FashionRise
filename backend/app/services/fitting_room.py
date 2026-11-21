@@ -1143,6 +1143,40 @@ FITTING_ROOM_DIRECT_EDIT_V2_PROMPT = (
     "Output one completed photograph, not a collage."
 )
 
+# Identity-first prompt (v1). Used when ``fitting_room_look_identity_lock_enabled``.
+# Prompt alone is insufficient — face pixels are also composited post-edit.
+FITTING_ROOM_IDENTITY_V1_PROMPT = (
+    "Edit the original photograph by replacing only the clothing with the provided "
+    "fashion design.\n"
+    "\n"
+    "Images 1 and 2 are the SAME real person photograph — that exact individual is the "
+    "absolute authority for identity, appearance, pose, and environment.\n"
+    "Image 3 is the fashion design — garment reference ONLY.\n"
+    "\n"
+    "Do not regenerate the person's face, hair, or body. Do not beautify, smooth, slim, "
+    "re-age, or face-swap. Preserve the same facial features, expression, skin tone and "
+    "texture, hair color and curl pattern, body proportions, hands, and visible "
+    "unchanged skin.\n"
+    "\n"
+    "Transfer the garment design faithfully: colors and placement, neckline, silhouette, "
+    "decorative petals/leaves/shoulder pieces, material structure, and hem length "
+    "(short stays short). Black sketch outlines are NOT black fabric — never crush "
+    "bright blue, pink, purple, or green panels into black or gray.\n"
+    "\n"
+    "FOOTWEAR: if image 3 shows shoes/heels/boots, replace photo footwear with those "
+    "design shoes; only keep photo shoes when image 3 shows no footwear.\n"
+    "\n"
+    "Make the garment look naturally worn, with realistic fabric texture, folds, "
+    "gravity, and lighting matched to the person photo. Preserve background, wings, "
+    "railings, sky, and framing.\n"
+    "\n"
+    "Never copy the illustrated model's face, body, or pose. Return one realistic "
+    "edited photograph."
+)
+
+# Sentinel path label when identity gate rejects (no Stars — job fails closed).
+LOOK_IDENTITY_REJECTED = "LOOK_IDENTITY_REJECTED"
+
 # OpenAI cookbook try-on: edit the real photo; clothing refs only change clothes.
 # Prefer a face-free product plate (materialize) as image 3 — look illustrations
 # include a drawn model that otherwise competes for identity.
@@ -1232,9 +1266,13 @@ def _chatgpt_style_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
     return prompt
 
 
-def _direct_edit_v2_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
-    """2-image ChatGPT-style prompt: IMAGE 1 person, IMAGE 2 original design."""
-    prompt = FITTING_ROOM_DIRECT_EDIT_V2_PROMPT
+def _direct_edit_v2_look_prompt(
+    data: dict[str, Any], hints: list[str], *, identity_lock: bool = False
+) -> str:
+    """Direct-edit prompt: v2 (2-image) or identity-v1 (person×2 + garment)."""
+    prompt = (
+        FITTING_ROOM_IDENTITY_V1_PROMPT if identity_lock else FITTING_ROOM_DIRECT_EDIT_V2_PROMPT
+    )
     clause = ""
     raw = data.get("look_palette_clause")
     if isinstance(raw, str) and raw.strip():
@@ -1254,6 +1292,14 @@ def _direct_edit_v2_look_prompt(data: dict[str, Any], hints: list[str]) -> str:
     if evidence:
         prompt = f"{prompt}\n\nDesign notes: " + "; ".join(evidence) + "."
     return prompt
+
+
+class LookIdentityRejected(Exception):
+    """Identity gate failed — do not deliver or fall through to more paid calls."""
+
+    def __init__(self, meta: dict[str, Any]):
+        super().__init__(LOOK_IDENTITY_REJECTED)
+        self.meta = meta
 
 
 def _resolve_look_openai_model(*, allow_legacy_fallback: bool) -> str:
@@ -1280,13 +1326,13 @@ def _run_direct_edit_v2_images_edit(
     person_png: bytes,
     look_png: bytes,
     prompt: str,
+    identity_lock: bool = False,
 ) -> tuple[bytes, dict[str, Any]]:
-    """One OpenAI images.edit — person (image 1) + original design (image 2).
+    """One OpenAI images.edit for Social look direct path.
 
-    Matches the ChatGPT-documented try-on shape: edit the real photo; design is
-    clothing reference only. No materialize, no person duplication, no result
-    color-lock. Model comes from ``fitting_room_look_openai_model`` with no
-    silent substitution.
+    Default: person + original design (2 images).
+    Identity lock: person ×2 + design (3 images) — still no materialize / color-lock.
+    Model from ``fitting_room_look_openai_model`` with no silent substitution.
     """
     from io import BytesIO
 
@@ -1311,11 +1357,21 @@ def _run_direct_edit_v2_images_edit(
         quality=quality,
         fabric_swatch=(look_png, "image/png"),
     )
-    # Explicit ChatGPT ordering: person = edit target, garment = clothing ref.
-    kwargs["image"] = [
-        ("person.png", BytesIO(person_png), "image/png"),
-        ("garment.png", BytesIO(look_png), "image/png"),
-    ]
+    person_file = ("person.png", BytesIO(person_png), "image/png")
+    design_file = ("garment.png", BytesIO(look_png), "image/png")
+    if identity_lock:
+        # Structure B: person + identity duplicate + garment.
+        kwargs["image"] = [
+            person_file,
+            ("person_identity.png", BytesIO(person_png), "image/png"),
+            design_file,
+        ]
+        image_order = ["person", "person_identity", "garment"]
+        identity_count = 2
+    else:
+        kwargs["image"] = [person_file, design_file]
+        image_order = ["person", "garment"]
+        identity_count = 1
     kwargs["n"] = 1
     kwargs["output_format"] = "png"
     kwargs.pop("background", None)
@@ -1325,10 +1381,12 @@ def _run_direct_edit_v2_images_edit(
 
     logger.info(
         "Fitting Room direct-edit-v2 images.edit model=%s size=%s quality=%s "
-        "images=person+garment",
+        "images=%s identity_lock=%s",
         kwargs.get("model"),
         kwargs.get("size"),
         kwargs.get("quality"),
+        "+".join(image_order),
+        identity_lock,
     )
 
     client = OpenAI(
@@ -1338,6 +1396,8 @@ def _run_direct_edit_v2_images_edit(
     )
     result = client.with_options(max_retries=0).images.edit(**kwargs)
     png = extract_edit_png_bytes(result)
+    from app.services.look_identity_lock import IDENTITY_PROMPT_VERSION
+
     meta: dict[str, Any] = {
         "provider": "openai_images_edit",
         "model": kwargs.get("model"),
@@ -1345,10 +1405,13 @@ def _run_direct_edit_v2_images_edit(
         "size": kwargs.get("size"),
         "chatgpt_clone": True,
         "direct_edit_v2": True,
+        "identity_lock": bool(identity_lock),
+        "prompt_version": IDENTITY_PROMPT_VERSION if identity_lock else "direct_edit_v2",
         "input_fidelity": kwargs.get("input_fidelity"),
-        "identity_image_count": 1,
+        "identity_image_count": identity_count,
         "design_image_count": 1,
-        "image_order": ["person", "garment"],
+        "image_order": image_order,
+        "openai_calls": 1,
     }
     return png, meta
 
@@ -1365,16 +1428,20 @@ def _try_direct_edit_v2_look_fit(
     """Flagged ChatGPT-style direct edit: original person + original design only.
 
     Soft-checks are telemetry — never run result color-lock (black-bodice crush).
+    When identity lock is ON: person×2 + garment, face-pixel composite, hard gate.
+    Raises ``LookIdentityRejected`` when the gate fails (caller must not fall through).
     """
     settings = get_settings()
     if not bool(settings.fitting_room_look_direct_edit_v2_enabled):
         return None
-    prompt = _direct_edit_v2_look_prompt(data, hints)
+    identity_lock = bool(settings.fitting_room_look_identity_lock_enabled)
+    prompt = _direct_edit_v2_look_prompt(data, hints, identity_lock=identity_lock)
     try:
         png, meta = _run_direct_edit_v2_images_edit(
             person_png=person_png,
             look_png=look_png,
             prompt=prompt,
+            identity_lock=identity_lock,
         )
     except Exception:  # noqa: BLE001
         logger.info(
@@ -1385,11 +1452,43 @@ def _try_direct_edit_v2_look_fit(
         return None
     if not png:
         return None
-    quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+
     if not isinstance(meta, dict):
         meta = {}
     meta = dict(meta)
-    meta["fitting_room_look_path"] = "chatgpt_direct_edit_v2"
+
+    if identity_lock:
+        from app.services.look_identity_lock import (
+            composite_identity_from_person,
+            validate_identity_lock,
+        )
+
+        try:
+            png, id_meta = composite_identity_from_person(png, person_png)
+        except Exception:  # noqa: BLE001
+            logger.info(
+                "Fitting Room job %s identity composite failed",
+                job_id,
+                exc_info=True,
+            )
+            id_meta = {"applied": False, "reason": "composite_error"}
+        meta["look_identity_lock"] = id_meta
+        gate = validate_identity_lock(png, person_png, composite_meta=id_meta)
+        meta["look_identity_gate"] = gate
+        if not gate.get("ok"):
+            logger.info(
+                "Fitting Room job %s identity gate REJECTED mad=%s reason=%s",
+                job_id,
+                gate.get("face_luma_mad"),
+                gate.get("reason"),
+            )
+            raise LookIdentityRejected(meta)
+        path_label = "chatgpt_direct_edit_v2_identity"
+    else:
+        path_label = "chatgpt_direct_edit_v2"
+
+    quality = soft_check_look_tryon_result(png, look_analysis=look_analysis)
+    meta["fitting_room_look_path"] = path_label
     meta["look_analysis"] = look_analysis
     meta["look_quality"] = quality
     meta["look_color_lock_skipped"] = True
@@ -1401,9 +1500,11 @@ def _try_direct_edit_v2_look_fit(
             quality.get("warnings"),
         )
     logger.info(
-        "Fitting Room job %s direct-edit-v2 accepted model=%s path=chatgpt_direct_edit_v2",
+        "Fitting Room job %s direct-edit-v2 accepted model=%s path=%s identity_lock=%s",
         job_id,
         meta.get("model"),
+        path_label,
+        identity_lock,
     )
     return png, meta, "openai", quality
 
@@ -2211,29 +2312,55 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         product_png: bytes | None = None
 
         # 0) Flagged ChatGPT-documented direct edit (person + original artwork).
-        # On success: one images.edit only. On failure: fall through unchanged.
+        # On success: one images.edit only. Identity reject → fail closed (no more paid).
+        # Technical miss → fall through unchanged.
         if bool(settings.fitting_room_look_direct_edit_v2_enabled):
-            direct_v2 = _try_direct_edit_v2_look_fit(
-                job_id=job.id,
-                person_png=person_png,
-                look_png=look_plate_original_png,
-                data=data,
-                hints=hints,
-                look_analysis=look_analysis,
-            )
+            try:
+                direct_v2 = _try_direct_edit_v2_look_fit(
+                    job_id=job.id,
+                    person_png=person_png,
+                    look_png=look_plate_original_png,
+                    data=data,
+                    hints=hints,
+                    look_analysis=look_analysis,
+                )
+            except LookIdentityRejected as exc:
+                slim = dict(data)
+                slim.pop("person_image_base64", None)
+                slim.pop("garment_image_base64", None)
+                slim["images_stripped"] = True
+                job.input_data = slim
+                reject_meta = exc.meta if isinstance(exc.meta, dict) else {}
+                result = _fail(
+                    "Fitting Room could not keep your face identical in this preview. "
+                    "No Stars were charged. Try again.",
+                    code=LOOK_IDENTITY_REJECTED,
+                )
+                result["fitting_room_look_path"] = "chatgpt_direct_edit_v2_identity_rejected"
+                result["look_identity_gate"] = reject_meta.get("look_identity_gate")
+                result["look_identity_lock"] = reject_meta.get("look_identity_lock")
+                result["model"] = reject_meta.get("model")
+                result["openai_calls"] = reject_meta.get("openai_calls", 1)
+                job.result_data = result
+                return result
             if direct_v2 is not None:
                 png, meta, used_provider, look_direct_quality = direct_v2
                 data["look_direct_openai"] = True
                 data["look_chatgpt_clone"] = True
                 data["look_direct_edit_v2"] = True
+                if isinstance(meta, dict) and meta.get("identity_lock"):
+                    data["look_identity_lock"] = True
                 data["look_materialized"] = False
                 data["look_normalized"] = False
                 data.pop("look_productized", None)
                 logger.info(
                     "Fitting Room job %s Social look via direct-edit-v2 images.edit "
-                    "model=%s path=chatgpt_direct_edit_v2 detected_by=%s",
+                    "model=%s path=%s detected_by=%s",
                     job.id,
                     (meta or {}).get("model") if isinstance(meta, dict) else None,
+                    (meta or {}).get("fitting_room_look_path")
+                    if isinstance(meta, dict)
+                    else "chatgpt_direct_edit_v2",
                     data.get("look_detected_by"),
                 )
             else:
@@ -2586,6 +2713,7 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "chatgpt_clone_direct",
                     "chatgpt_clone_product",
                     "chatgpt_direct_edit_v2",
+                    "chatgpt_direct_edit_v2_identity",
                 }
             )
         )
@@ -2702,10 +2830,15 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             "quality",
             "size",
             "direct_edit_v2",
+            "identity_lock",
+            "prompt_version",
             "image_order",
             "identity_image_count",
             "design_image_count",
             "look_color_lock_skipped",
+            "openai_calls",
+            "look_identity_lock",
+            "look_identity_gate",
         ):
             if meta.get(k) is not None:
                 result[k] = meta.get(k)

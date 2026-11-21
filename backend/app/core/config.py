@@ -271,6 +271,11 @@ class Settings(BaseSettings):
     # for the primary attempt; on failure fall through to the existing pipeline.
     # No Stars / pricing / auto-retry changes. Restart API + AI workers after flip.
     fitting_room_look_direct_edit_v2_enabled: bool = False
+    # Identity lock: after images.edit, composite original face/hair pixels from
+    # the person photo onto the result and hard-fail if protected pixels still
+    # differ. OFF by default. When ON with direct-edit v2, also send person×2 +
+    # garment and use the identity-v1 prompt. No auto paid retries on reject.
+    fitting_room_look_identity_lock_enabled: bool = False
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
