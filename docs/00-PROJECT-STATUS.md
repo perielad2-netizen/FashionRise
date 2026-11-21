@@ -3,24 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Validated — Owner-only model-compare preflight (LIVE_HTTP off) · PR #470 (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Code SHA (unchanged) | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** — no new code deploy; config-only |
+| Docs | [#471](https://github.com/perielad2-netizen/FashionRise/pull/471) merged → `main` @ **`0dcd57c4`** (docs-only; **not** a prod code deploy) |
+| `.env` backup | `/root/fashionrise-backups/pr470-preflight-20261121T181341Z/backend.env` |
+| Migration | Still **`038` (head)** |
+| Restart | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` — all **active** |
+| Health | `/health` ok · `/ready` ok · `https://fashionrise.app/` **200** · Runway **200** |
+| Flags | `ENABLED=true` · `LIVE_HTTP=false` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · identity lock **false** · Direct Edit V2 **true** |
+| Owner allowlist | Verified single account **NoaPeri** (`perielad@gmail.com` + uuid + username facets) — most recent Fitting Room actor today; OpenAI/FASHN provider-wide keys **unchanged** |
+| Preflight `GET /api/v1/ai/fitting-room/model-compare/preflight` | Owner → **200**: `enabled=true`, `live_http=false`, `armed=false`, `owner_allowlisted=true`, `provider_gates.all_ready=true`, `ops_claimed=0`, `provider_calls_dispatched=0`, `authorize_paid=false`, `stars_touched=false`, `paid_calls=0` |
+| Access control | Anonymous → **401**; non-owner → **403** owner-only; ordinary Fitting Room preflight still **401** unauth |
+| Ledger | **0** rows in `fitting_room_model_compare_operations` |
+| Providers | No external OpenAI/FASHN image calls; GET preflight + no-network gates only |
+| Not done (STOP) | `LIVE_HTTP` remains **false** · no `authorize_paid=true` · no paid A/B/C · no photos · identity lock **not** re-enabled |
+| Exact next action | **Separate explicit authorize:** set `FITTING_ROOM_MODEL_COMPARE_LIVE_HTTP=true`, restart, then **one** bounded paid A/B/C (`authorize_paid=true`, max 1 op / 3 provider calls). Human score Face·Dress·Shoulders·Pose·Background. Do **not** re-enable identity lock. |
+
 ## Deployed — Fitting Room model-compare infrastructure (fail-closed) · PR #470 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) merged → `main` @ **`81f015e7`** (approved head `58acb9e8`); docs tip **`31af6ca6`** |
-| Deployed SHA | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** on `/opt/fashionrise/src` (detached) — includes merge + project-status update |
-| Previous SHA | `ea754217` (#469 identity-preserve merge) |
-| Backup | `/root/fashionrise-backups/pr470-20261121T180009Z/` — `backend.env` + `fashionrise_beta-*.sql.gz` (~200 MB, gzip OK) · Asia/Jerusalem ~20:00 |
-| Migration | **`037` → `038` (head)** applied; table `fitting_room_model_compare_operations` present; ledger **0** ops |
-| Restart | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` — all **active** |
-| Health | `/health` → `{"status":"ok"}` · `/ready` → `{"status":"ready","database":"ok"}` · `https://fashionrise.app/` **200** |
-| Safety flags (prod `.env`) | `FITTING_ROOM_MODEL_COMPARE_ENABLED=false` · `LIVE_HTTP=false` · `OWNER_ALLOWLIST=` (empty) · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · `LOOK_IDENTITY_LOCK_ENABLED=false` · `LOOK_DIRECT_EDIT_V2_ENABLED=true` |
-| Compare access | Unauth routes → **401**; `assert_model_compare_allowed` → **403** “disabled”; **no** paid provider journal hits; ledger empty |
-| Private storage | `private_fitting_compare` **not** under StaticFiles (`/static/uploads` only); nginx **403** on `/static/uploads/`; no nginx private mounts; SPA HTML fallback only on public site paths |
-| Maintenance | Competition tick loop (900s) wired with `tick_model_compare_maintenance`; startup tick silent (empty ledger); **no** ERROR/Traceback since restart |
-| Provider readiness (no-network) | **OpenAI ready = true** · **FASHN tryon-max ready = true** (keys present; FASHN live flags already true for other paths — compare still fail-closed) |
-| Not done (STOP) | Compare **not** enabled · live HTTP **not** armed · **no** paid A/B/C · identity lock **not** re-enabled · no real photos submitted |
-| Exact next action | **Authorize separately:** set owner allowlist + `FITTING_ROOM_MODEL_COMPARE_ENABLED=true` while keeping `LIVE_HTTP=false`, restart, confirm preflight `armed=false` / gates ready; **then** a second explicit authorize to set `LIVE_HTTP=true` for **one** bounded paid A/B/C run (max 1 op / 3 provider calls). Human score Face·Dress·Shoulders·Pose·Background. Do **not** re-enable identity lock. |
+| PR | [#470](https://github.com/perielad2-netizen/FashionRise/pull/470) merged → `main` @ **`81f015e7`** (approved head `58acb9e8`); docs tip then **`31af6ca6`** |
+| Deployed SHA | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** on `/opt/fashionrise/src` |
+| Backup | `/root/fashionrise-backups/pr470-20261121T180009Z/` — `.env` + DB dump |
+| Migration | **`037` → `038`** · ledger table created |
+| Initial flags | Compare disabled / empty allowlist → later raised to owner preflight (section above) |
 
 ## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem) — ROLLED BACK composite
 
