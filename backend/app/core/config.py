@@ -261,8 +261,16 @@ class Settings(BaseSettings):
     # Model should be a high-fidelity edit model (gpt-image-2 matches OpenAI try-on docs).
     fitting_room_look_chatgpt_clone_enabled: bool = True
     # Prefer ChatGPT's own image lane when the API key exposes it.
+    # A/B candidates for Social look direct edit: chatgpt-image-latest | gpt-image-2.6-sunburst.
+    # Do not silently substitute — unsupported ids fail closed before paid HTTP.
     fitting_room_look_openai_model: str = "chatgpt-image-latest"
     fitting_room_look_openai_quality: str = "high"
+    # Narrow A/B path: ChatGPT-documented 2-image images.edit (person photo +
+    # original design artwork). OFF by default — production keeps
+    # materialize→clone until this path is validated. When ON: skip materialize
+    # for the primary attempt; on failure fall through to the existing pipeline.
+    # No Stars / pricing / auto-retry changes. Restart API + AI workers after flip.
+    fitting_room_look_direct_edit_v2_enabled: bool = False
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.

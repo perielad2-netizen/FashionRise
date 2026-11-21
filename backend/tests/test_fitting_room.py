@@ -1647,3 +1647,298 @@ def test_enqueue_shoes_only_emits_footwear_hint(client, db_session, monkeypatch)
     joined = " | ".join(mock.last_hints)
     assert "outfit_piece_count:1" in joined
     assert "FOOTWEAR" in joined or "shoes" in joined.lower()
+
+
+# --- Direct-edit v2 (ChatGPT-documented person + design, feature-flagged) ----------
+
+
+def test_direct_edit_v2_prompt_locks_identity_colors_and_footwear():
+    from app.services.fitting_room import (
+        FITTING_ROOM_DIRECT_EDIT_V2_PROMPT,
+        _direct_edit_v2_look_prompt,
+    )
+
+    low = FITTING_ROOM_DIRECT_EDIT_V2_PROMPT.lower()
+    assert "image 1 is the authoritative person" in low
+    assert "image 2 is the authoritative garment" in low
+    assert "black sketch outlines are not black fabric" in low
+    assert "bright blue" in low
+    assert "drawn face" in low
+    assert "replace image 1 footwear" in low or "replace" in low and "footwear" in low
+    assert "do not keep photo boots" in low
+    built = _direct_edit_v2_look_prompt({"garment_source": "fashionrise_look"}, [])
+    assert "authoritative person" in built.lower()
+    assert "black fabric" in built.lower()
+
+
+def test_direct_edit_v2_resolves_supported_models_without_silent_swap(monkeypatch):
+    from app.services.fitting_room import _resolve_look_openai_model
+    from app.services.sketch_openai import SketchCompletionError, image_edit_capabilities
+
+    for model in ("chatgpt-image-latest", "gpt-image-2.6-sunburst"):
+        caps = image_edit_capabilities(model)
+        assert caps is not None and caps.status == "supported"
+        monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", model)
+        get_settings.cache_clear()
+        assert _resolve_look_openai_model(allow_legacy_fallback=False) == model
+
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "not-a-real-image-model")
+    get_settings.cache_clear()
+    with pytest.raises(SketchCompletionError):
+        _resolve_look_openai_model(allow_legacy_fallback=False)
+    get_settings.cache_clear()
+
+
+def test_direct_edit_v2_images_edit_contract_person_then_garment(monkeypatch):
+    """API contract: images.edit, model as configured, image=[person, garment]."""
+    import base64
+
+    import openai as openai_mod
+
+    import app.services.fitting_room as fr
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        floral_blue_tryon_good_png,
+        wings_outdoor_person_png,
+    )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "gpt-image-2.6-sunburst")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_QUALITY", "high")
+    get_settings.cache_clear()
+
+    captured: dict = {}
+
+    class _FakeImages:
+        def edit(self, **kwargs):
+            captured.update(kwargs)
+            b64 = base64.b64encode(floral_blue_tryon_good_png()).decode("ascii")
+
+            class _Data:
+                b64_json = b64
+                url = None
+
+            class _Resp:
+                data = [_Data()]
+
+            return _Resp()
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.images = _FakeImages()
+
+        def with_options(self, **_k):
+            return self
+
+    monkeypatch.setattr(openai_mod, "OpenAI", _FakeClient)
+
+    person = wings_outdoor_person_png()
+    garment = floral_blue_look_plate_png()
+    png, meta = fr._run_direct_edit_v2_images_edit(
+        person_png=person,
+        look_png=garment,
+        prompt=fr.FITTING_ROOM_DIRECT_EDIT_V2_PROMPT,
+    )
+    assert png
+    assert captured["model"] == "gpt-image-2.6-sunburst"
+    assert captured["quality"] == "high"
+    assert captured["size"] == "1024x1536"
+    assert captured["n"] == 1
+    assert captured["output_format"] == "png"
+    images = captured["image"]
+    assert len(images) == 2
+    assert images[0][0] == "person.png"
+    assert images[1][0] == "garment.png"
+    # File payloads are (name, BytesIO, mime) — ensure bytes match originals.
+    assert images[0][1].getvalue() == person
+    assert images[1][1].getvalue() == garment
+    assert meta["direct_edit_v2"] is True
+    assert meta["image_order"] == ["person", "garment"]
+    assert meta["identity_image_count"] == 1
+    get_settings.cache_clear()
+
+
+def test_look_direct_edit_v2_skips_materialize_and_result_color_lock(
+    client, db_session, monkeypatch
+):
+    """When the v2 flag is ON: one person+design edit; no materialize; no color lock."""
+    import app.services.look_garment_normalize as lgn
+    from app.models.user import User
+    from app.services import fitting_room as fr
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        floral_blue_tryon_good_png,
+        wings_outdoor_person_png,
+    )
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_CHATGPT_CLONE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "chatgpt-image-latest")
+    get_settings.cache_clear()
+    calls: list[str] = []
+
+    def _materialize(**_k):
+        calls.append("materialize")
+        raise AssertionError("materialize must not run when direct-edit-v2 succeeds")
+
+    def _direct_v2(*, person_png, look_png, prompt):
+        calls.append("direct_edit_v2")
+        assert person_png and look_png
+        low = prompt.lower()
+        assert "image 1 is the authoritative person" in low
+        assert "black sketch outlines are not black fabric" in low
+        assert "bright blue" in low
+        assert "do not keep photo boots" in low
+        return floral_blue_tryon_good_png(), {
+            "provider": "openai_images_edit",
+            "model": "chatgpt-image-latest",
+            "quality": "high",
+            "size": "1024x1536",
+            "chatgpt_clone": True,
+            "direct_edit_v2": True,
+            "identity_image_count": 1,
+            "design_image_count": 1,
+            "image_order": ["person", "garment"],
+        }
+
+    def _no_clone(*_a, **_k):
+        raise AssertionError("legacy chatgpt-clone must not run after v2 success")
+
+    def _no_lock(*_a, **_k):
+        raise AssertionError("color lock must not run on direct-edit-v2 path")
+
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _materialize)
+    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _direct_v2)
+    monkeypatch.setattr(fr, "_run_chatgpt_clone_images_edit", _no_clone)
+    monkeypatch.setattr(fr, "lock_result_to_palette", _no_lock)
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_direct_v2",
+        body=_look_try_on_body(
+            look_png=floral_blue_look_plate_png(),
+            person_png=wings_outdoor_person_png(),
+            tagged=True,
+        ),
+    )
+    before = (
+        db_session.query(User).filter(User.username == "fr_look_direct_v2").one().ai_stars
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    result = job.result_data or {}
+    assert result.get("fitting_room_look_path") == "chatgpt_direct_edit_v2"
+    assert result.get("direct_edit_v2") is True
+    assert result.get("model") == "chatgpt-image-latest"
+    assert result.get("image_order") == ["person", "garment"]
+    assert result.get("look_color_lock_final", {}).get("reason") == "skipped_chatgpt_clone"
+    assert calls == ["direct_edit_v2"]
+    after = (
+        db_session.query(User).filter(User.username == "fr_look_direct_v2").one().ai_stars
+    )
+    assert after == before - 20
+    get_settings.cache_clear()
+
+
+def test_floral_blue_failure_case_soft_check_and_good_result_pass():
+    """Deterministic checks for the wings / blue-bodice / pink-skirt failure case."""
+    from app.services.fitting_room import (
+        soft_check_look_color_fidelity,
+        soft_check_look_tryon_result,
+    )
+    from tests.look_test_images import (
+        FLORAL_BLUE,
+        FLORAL_PINK,
+        floral_blue_tryon_black_crush_png,
+        floral_blue_tryon_good_png,
+        pixel,
+    )
+
+    look_analysis = {
+        "look_color_lock": {
+            "bodice_rgb": list(FLORAL_BLUE),
+            "skirt_rgb": list(FLORAL_PINK),
+            "bodice_hex": "#2878DC",
+            "skirt_hex": "#DC50A0",
+            "relation": "lighter_bodice",
+            "luma_delta": 20.0,
+        },
+        "sheer_legs": False,
+    }
+    crushed = floral_blue_tryon_black_crush_png()
+    warnings = soft_check_look_color_fidelity(crushed, look_analysis=look_analysis)
+    assert "color_crush_to_dark" in warnings
+    quality_bad = soft_check_look_tryon_result(crushed, look_analysis=look_analysis)
+    assert "color_crush_to_dark" in (quality_bad.get("warnings") or [])
+
+    good = floral_blue_tryon_good_png()
+    bodice_px = pixel(good, 0.50, 0.28)
+    assert bodice_px[2] > bodice_px[0]  # blue channel dominates (not black)
+    assert bodice_px[0] + bodice_px[1] + bodice_px[2] > 120
+    skirt_px = pixel(good, 0.50, 0.55)
+    assert skirt_px[0] > 150  # pink stays pink
+    quality_good = soft_check_look_tryon_result(good, look_analysis=look_analysis)
+    assert "color_crush_to_dark" not in (quality_good.get("warnings") or [])
+
+
+def test_direct_edit_v2_flag_off_keeps_materialize_then_clone(
+    client, db_session, monkeypatch
+):
+    """Default OFF: production materialize→clone path is unchanged."""
+    import app.services.look_garment_normalize as lgn
+    from app.services import fitting_room as fr
+    from tests.look_test_images import look_plate_png, person_photo_png, tryon_result_png
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "false")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_CHATGPT_CLONE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "true")
+    get_settings.cache_clear()
+    calls: list[str] = []
+    product_bytes = look_plate_png()
+
+    def _materialize(**_k):
+        calls.append("materialize")
+        return product_bytes, {"openai_calls": 1, "color_lock": {"applied": False}}
+
+    def _clone_edit(*, person_png, look_png, prompt):
+        calls.append("chatgpt_clone")
+        assert look_png == product_bytes
+        return tryon_result_png(), {
+            "provider": "openai_images_edit",
+            "model": "chatgpt-image-latest",
+            "chatgpt_clone": True,
+            "identity_image_count": 2,
+        }
+
+    def _no_v2(*_a, **_k):
+        raise AssertionError("direct-edit-v2 must not run when flag is off")
+
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _materialize)
+    monkeypatch.setattr(fr, "_run_chatgpt_clone_images_edit", _clone_edit)
+    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _no_v2)
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_v2_off",
+        body=_look_try_on_body(
+            look_png=look_plate_png(), person_png=person_photo_png(), tagged=True
+        ),
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    assert (job.result_data or {}).get("fitting_room_look_path") == "chatgpt_clone_product"
+    assert calls == ["materialize", "chatgpt_clone"]
+    get_settings.cache_clear()
