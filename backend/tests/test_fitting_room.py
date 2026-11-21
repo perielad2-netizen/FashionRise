@@ -1784,9 +1784,10 @@ def test_look_direct_edit_v2_skips_materialize_and_result_color_lock(
         calls.append("materialize")
         raise AssertionError("materialize must not run when direct-edit-v2 succeeds")
 
-    def _direct_v2(*, person_png, look_png, prompt):
+    def _direct_v2(*, person_png, look_png, prompt, identity_lock=False):
         calls.append("direct_edit_v2")
         assert person_png and look_png
+        assert identity_lock is False
         low = prompt.lower()
         assert "image 1 is the authoritative person" in low
         assert "black sketch outlines are not black fabric" in low
@@ -1941,4 +1942,196 @@ def test_direct_edit_v2_flag_off_keeps_materialize_then_clone(
     assert job.status == "completed", job.error_message
     assert (job.result_data or {}).get("fitting_room_look_path") == "chatgpt_clone_product"
     assert calls == ["materialize", "chatgpt_clone"]
+    get_settings.cache_clear()
+
+
+def test_identity_v1_prompt_is_clothing_only_and_no_face_regen():
+    from app.services.fitting_room import (
+        FITTING_ROOM_IDENTITY_V1_PROMPT,
+        _direct_edit_v2_look_prompt,
+    )
+    from app.services.look_identity_lock import IDENTITY_PROMPT_VERSION
+
+    low = FITTING_ROOM_IDENTITY_V1_PROMPT.lower()
+    assert "replacing only the clothing" in low
+    assert "do not regenerate the person's face" in low
+    assert "images 1 and 2 are the same" in low
+    assert "black sketch outlines are not black fabric" in low
+    assert IDENTITY_PROMPT_VERSION == "fitting-room-identity-v1"
+    built = _direct_edit_v2_look_prompt(
+        {"garment_source": "fashionrise_look"}, [], identity_lock=True
+    )
+    assert "do not regenerate the person's face" in built.lower()
+
+
+def test_look_identity_lock_composites_face_and_skips_materialize(
+    client, db_session, monkeypatch
+):
+    """Identity lock ON: person×2+garment edit, face composite, no materialize."""
+    import app.services.look_garment_normalize as lgn
+    from app.models.user import User
+    from app.services import fitting_room as fr
+    from tests.look_test_images import (
+        floral_blue_look_plate_png,
+        floral_blue_tryon_good_png,
+        wings_outdoor_person_png,
+    )
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_MATERIALIZE_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "chatgpt-image-latest")
+    get_settings.cache_clear()
+    calls: list[str] = []
+    person_bytes = wings_outdoor_person_png()
+
+    def _materialize(**_k):
+        calls.append("materialize")
+        raise AssertionError("materialize must not run when identity lock succeeds")
+
+    def _direct_v2(*, person_png, look_png, prompt, identity_lock=False):
+        calls.append("direct_edit_v2")
+        assert identity_lock is True
+        assert person_png and look_png
+        low = prompt.lower()
+        assert "do not regenerate the person's face" in low
+        return floral_blue_tryon_good_png(), {
+            "provider": "openai_images_edit",
+            "model": "chatgpt-image-latest",
+            "quality": "high",
+            "size": "1024x1536",
+            "chatgpt_clone": True,
+            "direct_edit_v2": True,
+            "identity_lock": True,
+            "prompt_version": "fitting-room-identity-v1",
+            "identity_image_count": 2,
+            "design_image_count": 1,
+            "image_order": ["person", "person_identity", "garment"],
+            "openai_calls": 1,
+        }
+
+    def _no_clone(*_a, **_k):
+        raise AssertionError("legacy chatgpt-clone must not run on identity-lock success")
+
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _materialize)
+    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _direct_v2)
+    monkeypatch.setattr(fr, "_run_chatgpt_clone_images_edit", _no_clone)
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_id_lock",
+        body=_look_try_on_body(
+            look_png=floral_blue_look_plate_png(),
+            person_png=person_bytes,
+            tagged=True,
+        ),
+    )
+    before = (
+        db_session.query(User).filter(User.username == "fr_look_id_lock").one().ai_stars
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "completed", job.error_message
+    result = job.result_data or {}
+    assert result.get("fitting_room_look_path") == "chatgpt_direct_edit_v2_identity"
+    assert result.get("identity_lock") is True
+    assert result.get("look_identity_gate", {}).get("ok") is True
+    assert result.get("look_identity_lock", {}).get("applied") is True
+    assert result.get("image_order") == ["person", "person_identity", "garment"]
+    assert calls == ["direct_edit_v2"]
+    after = (
+        db_session.query(User).filter(User.username == "fr_look_id_lock").one().ai_stars
+    )
+    assert after == before - 20
+    get_settings.cache_clear()
+
+
+def test_look_identity_gate_reject_does_not_charge_or_fall_through(
+    client, db_session, monkeypatch
+):
+    """Failed identity gate → LOOK_IDENTITY_REJECTED, no Stars, no materialize."""
+    import app.services.look_garment_normalize as lgn
+    from app.models.user import User
+    from app.services import fitting_room as fr
+    from tests.look_test_images import floral_blue_look_plate_png, wings_outdoor_person_png
+
+    _enable_fitting_room(monkeypatch, live=True)
+    monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
+    monkeypatch.setenv("FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED", "true")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED", "true")
+    get_settings.cache_clear()
+    calls: list[str] = []
+
+    def _materialize(**_k):
+        calls.append("materialize")
+        raise AssertionError("must not fall through after identity reject")
+
+    def _direct_v2(*, person_png, look_png, prompt, identity_lock=False):
+        calls.append("direct_edit_v2")
+        # Return a black face blob so even composite validation struggles if we
+        # skip composite — force gate fail via monkeypatched validate.
+        from tests.look_test_images import floral_blue_tryon_black_crush_png
+
+        return floral_blue_tryon_black_crush_png(), {
+            "provider": "openai_images_edit",
+            "model": "chatgpt-image-latest",
+            "direct_edit_v2": True,
+            "identity_lock": True,
+            "openai_calls": 1,
+            "image_order": ["person", "person_identity", "garment"],
+        }
+
+    def _gate_fail(*_a, **_k):
+        return {
+            "ok": False,
+            "reason": "face_pixels_differ",
+            "face_luma_mad": 40.0,
+            "threshold": 6.0,
+        }
+
+    monkeypatch.setattr(lgn, "materialize_fashionrise_look", _materialize)
+    monkeypatch.setattr(fr, "_run_direct_edit_v2_images_edit", _direct_v2)
+    monkeypatch.setattr(
+        "app.services.look_identity_lock.validate_identity_lock", _gate_fail
+    )
+    # Keep composite as identity so we're testing the gate, not composite crash.
+    monkeypatch.setattr(
+        "app.services.look_identity_lock.composite_identity_from_person",
+        lambda result_png, person_png: (
+            result_png,
+            {"applied": True, "face_luma_mad_before": 40.0, "face_luma_mad_after": 40.0},
+        ),
+    )
+    set_try_on_provider_override(None)
+
+    job = _enqueue_look_job(
+        client,
+        db_session,
+        username="fr_look_id_reject",
+        body=_look_try_on_body(
+            look_png=floral_blue_look_plate_png(),
+            person_png=wings_outdoor_person_png(),
+            tagged=True,
+        ),
+    )
+    before = (
+        db_session.query(User).filter(User.username == "fr_look_id_reject").one().ai_stars
+    )
+    assert run_magic_worker_tick(db_session) >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, job.id)
+    assert job.status == "failed"
+    result = job.result_data or {}
+    assert result.get("error_code") == "LOOK_IDENTITY_REJECTED"
+    assert result.get("fitting_room_look_path") == "chatgpt_direct_edit_v2_identity_rejected"
+    assert "materialize" not in calls
+    after = (
+        db_session.query(User).filter(User.username == "fr_look_id_reject").one().ai_stars
+    )
+    assert after == before  # no Stars charged on identity reject
     get_settings.cache_clear()
