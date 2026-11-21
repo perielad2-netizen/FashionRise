@@ -17,6 +17,7 @@ import { isEditableElement } from '@/lib/androidKeyboardInput'
  * Sets on `document.documentElement`:
  * - `--fr-vv-height` — shell / `#root` height in px (layout height while keyboard open)
  * - `--fr-visible-height` — always the true visualViewport height (fixed dialogs/sheets)
+ * - `--fr-vv-offset-top` — visualViewport.offsetTop (iOS keyboard scroll jump)
  * - `--fr-browser-chrome-bottom` — layout vs visible bottom overlap in px
  * - `data-fr-keyboard` — `"1"` while an editable field is focused
  */
@@ -38,6 +39,7 @@ export function useVisibleViewport(enabled = true): void {
       const offsetTop = vv?.offsetTop ?? 0
       const rawChrome = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
       const visiblePx = Math.max(1, Math.round(visibleH || layoutH))
+      const offsetTopPx = Math.max(0, Math.round(offsetTop))
       const editing = isEditableFocused()
 
       // Soft keyboard: keep layout height so `#root` does not collapse into a
@@ -51,9 +53,16 @@ export function useVisibleViewport(enabled = true): void {
 
       root.style.setProperty('--fr-vv-height', `${heightPx}px`)
       root.style.setProperty('--fr-visible-height', `${visiblePx}px`)
+      root.style.setProperty('--fr-vv-offset-top', `${offsetTopPx}px`)
       root.style.setProperty('--fr-browser-chrome-bottom', `${chromeBottom}px`)
       if (editing) root.setAttribute('data-fr-keyboard', '1')
       else root.removeAttribute('data-fr-keyboard')
+
+      // iOS WKWebView scrolls the layout viewport when focusing inputs in fixed
+      // overlays, leaving a solid black void under the field. Undo that jump.
+      if (editing && offsetTopPx > 0 && root.classList.contains('fr-native-ios')) {
+        window.scrollTo(0, 0)
+      }
     }
 
     sync()
@@ -74,6 +83,7 @@ export function useVisibleViewport(enabled = true): void {
       document.removeEventListener('focusout', sync)
       root.style.removeProperty('--fr-vv-height')
       root.style.removeProperty('--fr-visible-height')
+      root.style.removeProperty('--fr-vv-offset-top')
       root.style.removeProperty('--fr-browser-chrome-bottom')
       root.removeAttribute('data-fr-keyboard')
     }

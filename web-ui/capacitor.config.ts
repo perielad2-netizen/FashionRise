@@ -32,6 +32,12 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    // iOS: do not show the native ↑↓✓ form accessory above the keyboard.
+    // 'none' avoids double-resize voids with our CSS visualViewport handling.
+    Keyboard: {
+      resize: 'none',
+      style: 'DARK',
+    },
   },
   android: {
     allowMixedContent: false,

@@ -1,4 +1,5 @@
 import { App } from '@capacitor/app'
+import { Keyboard } from '@capacitor/keyboard'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { installNativeDeepLinkRouter } from './deepLinks'
@@ -27,6 +28,11 @@ export async function bootstrapNativeShell(): Promise<void> {
     const platform = nativePlatform()
     if (platform === 'android' || platform === 'ios') {
       document.documentElement.classList.add(`fr-native-${platform}`)
+    }
+    // iOS WKWebView form accessory (↑↓✓ black bar above keyboard) — hide it.
+    // Android/web never show this chrome; Chat/Friends inputs looked broken on iOS.
+    if (platform === 'ios') {
+      await Keyboard.setAccessoryBarVisible({ isVisible: false })
     }
   } catch {
     /* web / unsupported */

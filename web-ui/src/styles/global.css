@@ -118,3 +118,19 @@ html[data-fr-keyboard='1'] .fr-keyboard-overlay {
   overflow-y: auto;
   box-sizing: border-box;
 }
+
+/*
+ * iOS Capacitor: pin fixed keyboard overlays to the visual viewport so WKWebView
+ * focus-scroll cannot leave a solid black band between the field and keyboard.
+ * Also kills rubber-band scroll under the chat sheet while typing.
+ */
+html.fr-native-ios[data-fr-keyboard='1'] {
+  overflow: hidden;
+}
+
+html.fr-native-ios[data-fr-keyboard='1'] .fr-keyboard-overlay {
+  top: var(--fr-vv-offset-top, 0px);
+  bottom: auto;
+  height: var(--fr-visible-height, 100dvh);
+  max-height: var(--fr-visible-height, 100dvh);
+}

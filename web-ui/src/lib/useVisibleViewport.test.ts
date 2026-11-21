@@ -27,13 +27,18 @@ describe('useVisibleViewport', () => {
 
   afterEach(() => {
     document.documentElement.style.removeProperty('--fr-vv-height')
+    document.documentElement.style.removeProperty('--fr-visible-height')
+    document.documentElement.style.removeProperty('--fr-vv-offset-top')
     document.documentElement.style.removeProperty('--fr-browser-chrome-bottom')
+    document.documentElement.classList.remove('fr-native-ios')
+    document.documentElement.removeAttribute('data-fr-keyboard')
     vi.restoreAllMocks()
   })
 
   it('writes visible height and bottom chrome overlap onto :root', () => {
     renderHook(() => useVisibleViewport())
     expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('740px')
+    expect(document.documentElement.style.getPropertyValue('--fr-vv-offset-top')).toBe('0px')
     expect(document.documentElement.style.getPropertyValue('--fr-browser-chrome-bottom')).toBe(
       '60px',
     )
@@ -43,7 +48,23 @@ describe('useVisibleViewport', () => {
     const { unmount } = renderHook(() => useVisibleViewport())
     unmount()
     expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('')
+    expect(document.documentElement.style.getPropertyValue('--fr-vv-offset-top')).toBe('')
     expect(document.documentElement.style.getPropertyValue('--fr-browser-chrome-bottom')).toBe('')
+  })
+
+  it('resets iOS scroll jump when visualViewport.offsetTop moves under the keyboard', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    document.documentElement.classList.add('fr-native-ios')
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 420 })
+    Object.defineProperty(window.visualViewport!, 'offsetTop', { configurable: true, value: 180 })
+
+    renderHook(() => useVisibleViewport())
+    expect(document.documentElement.style.getPropertyValue('--fr-vv-offset-top')).toBe('180px')
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    input.remove()
   })
 
   it('no-ops when disabled', () => {
