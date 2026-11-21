@@ -589,64 +589,18 @@ def _run_openai_images_edit(
     model: str,
 ) -> tuple[bytes, dict[str, Any]]:
     """Single images.edit: image1=person, image2=design. No mask / fidelity hacks."""
-    from openai import OpenAI
+    from app.services.openai_person_garment_edit import run_openai_person_garment_images_edit
 
-    from app.services.personal_croquis_provider import extract_edit_png_bytes
-    from app.services.sketch_openai import assert_image_model_editable, build_image_edit_kwargs
-
-    settings = get_settings()
-    if not (settings.openai_api_key or "").strip():
-        raise RuntimeError("OPENAI_API_KEY missing")
-    assert_image_model_editable(model)
-    size = (settings.openai_image_size or "1024x1536").strip()
-    kwargs = build_image_edit_kwargs(
+    return run_openai_person_garment_images_edit(
+        person_png=person_png,
+        design_png=design_png,
         model=model,
         prompt=COMPARE_PROMPT,
-        sketch=(person_png, "image/png"),
-        size=size,
+        prompt_version=COMPARE_PROMPT_VERSION,
+        path="openai_images_edit_person_garment",
         quality="high",
-        fabric_swatch=(design_png, "image/png"),
+        estimate_cents=_OPENAI_HIGH_PORTRAIT_ESTIMATE_CENTS,
     )
-    kwargs["image"] = [
-        ("person.png", io.BytesIO(person_png), "image/png"),
-        ("garment.png", io.BytesIO(design_png), "image/png"),
-    ]
-    kwargs["n"] = 1
-    kwargs["output_format"] = "png"
-    kwargs.pop("background", None)
-    extra = dict(kwargs.get("extra_body") or {})
-    extra["moderation"] = "low"
-    kwargs["extra_body"] = extra
-
-    t0 = time.perf_counter()
-    client = OpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url or None,
-        timeout=float(settings.openai_timeout_seconds or 180),
-    )
-    # max_retries=0 — no automatic paid retries.
-    result = client.with_options(max_retries=0).images.edit(**kwargs)
-    png = extract_edit_png_bytes(result)
-    ms = int((time.perf_counter() - t0) * 1000)
-    meta = {
-        "provider": "openai",
-        "model": kwargs.get("model"),
-        "path": "openai_images_edit_person_garment",
-        "prompt_version": COMPARE_PROMPT_VERSION,
-        "prompt": COMPARE_PROMPT,
-        "image_order": ["person", "garment"],
-        "size": kwargs.get("size"),
-        "quality": kwargs.get("quality"),
-        "duration_ms": ms,
-        "estimate_cents": _OPENAI_HIGH_PORTRAIT_ESTIMATE_CENTS,
-        "openai_calls": 1,
-        "preprocessing": "none",
-        "postprocessing": "none",
-        "identity_lock": False,
-        "materialize": False,
-        "color_lock": False,
-    }
-    return png, meta
 
 
 def _run_fashn_tryon_max_raw(
