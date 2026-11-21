@@ -139,6 +139,24 @@ async def _competition_tick_loop(stop: asyncio.Event, interval_seconds: float) -
         finally:
             cleanup_db.close()
 
+        # Owner-only model-compare private retention (72h default) — no API request needed.
+        compare_db = SessionLocal()
+        try:
+            from app.services.fitting_room_model_compare import tick_model_compare_maintenance
+
+            swept = tick_model_compare_maintenance(compare_db)
+            if swept.get("files_removed"):
+                _log.info(
+                    "model_compare_retention_tick examined=%s removed=%s",
+                    swept.get("examined"),
+                    swept.get("files_removed"),
+                )
+        except Exception:
+            _log.exception("model-compare retention tick failed")
+            compare_db.rollback()
+        finally:
+            compare_db.close()
+
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:

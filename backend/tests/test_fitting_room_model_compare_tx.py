@@ -240,7 +240,21 @@ def test_dispatch_commit_before_provider_and_crash_retains_budget(
         ledger = (observed.report or {}).get("arm_ledger") or {}
         assert ledger["A"]["status"] == "dispatched"
 
-        # Replay must NOT re-dispatch; marks reconciliation/unknown.
+        # Immediate replay while still "fresh" must NOT reconcile a healthy age window —
+        # age the ledger heartbeat to simulate an interrupted/stale attempt.
+        from sqlalchemy import text as sa_text
+
+        s2.execute(
+            sa_text(
+                "UPDATE fitting_room_model_compare_operations "
+                "SET updated_at = NOW() - INTERVAL '2 hours' WHERE id = :id"
+            ),
+            {"id": str(op.id)},
+        )
+        s2.commit()
+        observed = s2.get(FittingRoomModelCompareOperation, op.id)
+        assert cmp._operation_is_stale(observed)
+
         user2 = s2.get(User, owner_user["id"])
         report = cmp._finalize_replay_without_dispatch(s2, observed)
         assert report["replay"] is True
@@ -450,4 +464,152 @@ def test_rollback_before_commit_does_not_consume_budget(
     finally:
         s1.close()
         s2.close()
+        get_settings.cache_clear()
+
+
+def test_in_flight_same_key_replay_does_not_reconcile(
+    SessionFactory, owner_user, monkeypatch, tmp_path
+):
+    """Slow provider + concurrent same-key replay: one dispatch, healthy completion."""
+    _arm_compare(monkeypatch, tmp_path, owner_user["username"])
+    started = threading.Event()
+    release = threading.Event()
+    calls = {"n": 0}
+    results: dict[str, object] = {}
+
+    def _slow(**_k):
+        calls["n"] += 1
+        started.set()
+        assert release.wait(timeout=10), "release not signaled"
+        return _png((11, 22, 33)), {
+            "provider": "openai",
+            "model": "chatgpt-image-latest",
+            "openai_calls": 1,
+            "duration_ms": 50,
+            "estimate_cents": 6,
+            "preprocessing": "none",
+            "postprocessing": "none",
+        }
+
+    cmp.set_model_compare_runners_for_tests(openai_runner=_slow, fashn_runner=_slow)
+
+    def primary():
+        s = SessionFactory()
+        try:
+            user = s.get(User, owner_user["id"])
+            results["primary"] = cmp.run_model_compare(
+                db=s,
+                user=user,
+                person_image_base64=_b64(wings_outdoor_person_png()),
+                design_image_base64=_b64(floral_blue_look_plate_png()),
+                authorize_paid=True,
+                arms=["A"],
+                consent_acknowledged=True,
+                consent_version=CONSENT,
+                idempotency_key="tx-inflight-same-key",
+            )
+        finally:
+            s.close()
+
+    def replay():
+        assert started.wait(timeout=10)
+        s = SessionFactory()
+        try:
+            user = s.get(User, owner_user["id"])
+            results["replay"] = cmp.run_model_compare(
+                db=s,
+                user=user,
+                person_image_base64=_b64(wings_outdoor_person_png()),
+                design_image_base64=_b64(floral_blue_look_plate_png()),
+                authorize_paid=True,
+                arms=["A"],
+                consent_acknowledged=True,
+                consent_version=CONSENT,
+                idempotency_key="tx-inflight-same-key",
+            )
+        finally:
+            s.close()
+            release.set()
+
+    t1 = threading.Thread(target=primary)
+    t2 = threading.Thread(target=replay)
+    t1.start()
+    t2.start()
+    t1.join(timeout=20)
+    t2.join(timeout=20)
+
+    primary_report = results["primary"]
+    replay_report = results["replay"]
+    assert isinstance(primary_report, dict) and isinstance(replay_report, dict)
+    assert primary_report["status"] == OP_STATUS_COMPLETED
+    assert primary_report["dispatched_requests"] == 1
+    assert primary_report["successful_outputs"] == 1
+    assert calls["n"] == 1
+    assert replay_report.get("replay") is True
+    assert replay_report.get("status") == OP_STATUS_RUNNING
+    assert replay_report.get("in_flight") is True
+    assert replay_report.get("status") != OP_STATUS_RECONCILIATION
+
+    s = SessionFactory()
+    try:
+        row = (
+            s.query(FittingRoomModelCompareOperation)
+            .filter(FittingRoomModelCompareOperation.idempotency_key == "tx-inflight-same-key")
+            .one()
+        )
+        assert row.status == OP_STATUS_COMPLETED
+        assert row.dispatched_requests == 1
+        assert row.successful_outputs == 1
+    finally:
+        cmp.set_model_compare_runners_for_tests(openai_runner=None, fashn_runner=None)
+        s.close()
+        get_settings.cache_clear()
+
+
+def test_maintenance_tick_deletes_expired_without_retrieval(
+    SessionFactory, owner_user, monkeypatch, tmp_path
+):
+    """Scheduled maintenance path deletes files without result GET."""
+    _arm_compare(monkeypatch, tmp_path, owner_user["username"])
+    s = SessionFactory()
+    try:
+        user = s.get(User, owner_user["id"])
+        op_id = uuid.uuid4()
+        storage = LocalStorageBackend()
+        key = storage.fitting_compare_storage_key(
+            owner_id=user.id, operation_id=op_id, arm="B"
+        )
+        storage.save_private_fitting_compare_file(
+            key=key, data=io.BytesIO(_png()), content_type="image/png"
+        )
+        assert storage.resolve_private_fitting_compare_file(key=key) is not None
+
+        s.add(
+            FittingRoomModelCompareOperation(
+                id=op_id,
+                owner_id=user.id,
+                idempotency_key="tx-maint-tick-01",
+                status=OP_STATUS_COMPLETED,
+                consent_version=CONSENT,
+                arms_requested=["B"],
+                dispatched_requests=1,
+                successful_outputs=1,
+                max_provider_calls=3,
+                person_fingerprint="aaa",
+                design_fingerprint="bbb",
+                expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                report={
+                    "arms": [{"arm": "B", "status": "ok", "storage_key": key}],
+                    "arm_ledger": {"B": {"status": "ok", "storage_key": key}},
+                },
+            )
+        )
+        s.commit()
+
+        # No result retrieval — only the maintenance tick.
+        swept = cmp.tick_model_compare_maintenance(s)
+        assert swept["files_removed"] >= 1
+        assert storage.resolve_private_fitting_compare_file(key=key) is None
+    finally:
+        s.close()
         get_settings.cache_clear()

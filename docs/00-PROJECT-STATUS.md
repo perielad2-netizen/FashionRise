@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C + PR #470 TX safety (2026-11-21 Asia/Jerusalem)
+## Ready (not deployed / no paid calls) — Fitting Room clean model A/B/C + PR #470 lifecycle (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
@@ -11,14 +11,15 @@
 | Why | Identity-lock face composite made results worse. Stop polishing bad raw outputs; compare raw models instead. |
 | Goal | One native call each: **A** `chatgpt-image-latest` · **B** `gpt-image-2.6-sunburst` · **C** FASHN `tryon-max` — same person+design, **no** materialize/mask/composite/color-lock/retry |
 | Production rollback (already done) | Live Fitting Room: **`FITTING_ROOM_LOOK_IDENTITY_LOCK_ENABLED=false`** (composite OFF) · **`FITTING_ROOM_LOOK_DIRECT_EDIT_V2_ENABLED=true`** (direct edit remains). Compare flags stay OFF. |
-| Private storage | `private_fitting_compare/` + owner-auth retrieval; **retention sweeper** `run_model_compare_retention_sweep` (default 72h) deletes files — not retrieval-only |
-| Paid budget TX | **COMMIT claim before any provider call** · advisory lock + budget check + insert + commit atomic · **COMMIT each arm dispatch before paid call** · crash after dispatch → `reconciliation_required` / unknown, budget retained, **no retry** · idempotency rejects different fingerprints/arms |
-| Flags | `ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · `RETENTION_HOURS=72` (fail-closed) |
+| Private storage | `private_fitting_compare/` + owner-auth retrieval; **scheduled retention** via competition maintenance tick → `tick_model_compare_maintenance` (72h default; no API request required) |
+| Paid budget TX | COMMIT claim before provider · COMMIT each arm dispatch before paid call · stale/interrupted → `reconciliation_required` (no retry) · **in-flight same-key replay returns running without killing remaining arms** |
+| Preflight gates | No-network `provider_gates` for OpenAI key + FASHN Try-On Max (`FASHN_API_KEY` + `FASHN_TRY_ON_LIVE_HTTP` + `FASHN_TRY_ON_MAX_LIVE_HTTP`) |
+| Flags | `ENABLED` · `LIVE_HTTP` · `OWNER_ALLOWLIST` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · `RETENTION_HOURS=72` · `STALE_SECONDS=900` |
 | Live Fitting Room / Stars | **Unchanged by this PR** — no deploy of compare; no Stars changes; no auto winner |
-| Tests | `pytest tests/test_fitting_room_model_compare.py` + `tests/test_fitting_room_model_compare_tx.py` (independent Postgres sessions: concurrent claims, crash-after-dispatch, rollback, retention sweep) |
+| Tests | `pytest tests/test_fitting_room_model_compare.py` + `tests/test_fitting_room_model_compare_tx.py` (incl. in-flight replay concurrency + maintenance tick without retrieval) |
 | Deploy state | **Not deployed. No paid provider calls.** |
-| Remaining blockers | Final PM review of TX durability on #470 → merge when approved → then explicit one-shot paid authorize |
-| Next action | Approve #470 → merge → migrate `038` → arm compare flags for owner only → one bounded paid run with consent + idempotency_key. Human compare Face·Dress·Shoulders·Pose·Background. |
+| Remaining blockers | Final PM lifecycle review on #470 → merge when approved → then explicit one-shot paid authorize |
+| Next action | Approve #470 → merge → migrate `038` → arm compare flags for owner only → confirm preflight `provider_gates.all_ready` → one bounded paid run. Human compare Face·Dress·Shoulders·Pose·Background. |
 
 ## Deployed — Fitting Room identity lock (face pixel composite) (2026-11-21 Asia/Jerusalem) — ROLLED BACK composite
 

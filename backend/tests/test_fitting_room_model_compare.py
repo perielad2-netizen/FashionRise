@@ -545,6 +545,11 @@ def test_preflight_lists_arms_and_budget(client, db_session, monkeypatch):
     assert "OpenAI" in body["notice_text"] or "third-party" in body["notice_text"].lower()
     assert body["budget"]["max_paid_ops"] == 1
     assert body["budget"]["max_provider_calls"] == 3
+    assert "provider_gates" in body
+    assert "openai" in body["provider_gates"]
+    assert "fashn_tryon_max" in body["provider_gates"]
+    assert "api_key_present" in body["provider_gates"]["fashn_tryon_max"]
+    assert "fashn_try_on_max_live_http" in body["provider_gates"]["fashn_tryon_max"]
     assert "Face" in body["human_review"]["instruction"] or "face" in body["human_review"]["instruction"].lower()
     get_settings.cache_clear()
 

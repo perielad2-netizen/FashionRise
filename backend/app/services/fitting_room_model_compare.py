@@ -146,6 +146,10 @@ def _retention_hours() -> int:
     return max(1, int(get_settings().fitting_room_model_compare_retention_hours or 72))
 
 
+def _stale_seconds() -> int:
+    return max(60, int(get_settings().fitting_room_model_compare_stale_seconds or 900))
+
+
 def _max_b64_chars() -> int:
     max_bytes = get_settings().max_upload_bytes
     return (max_bytes * 4 // 3) + _B64_HEADER_SLACK
@@ -322,15 +326,68 @@ def _assert_idempotency_identity(
         )
 
 
+def _operation_is_stale(op: FittingRoomModelCompareOperation) -> bool:
+    """True when a running op has had no durable ledger activity for too long."""
+    ref = op.updated_at or op.created_at
+    if ref is None:
+        return True
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - ref
+    return age.total_seconds() >= float(_stale_seconds())
+
+
+def provider_gates_no_network() -> dict[str, Any]:
+    """Credential / live-flag readiness without outbound provider HTTP."""
+    s = get_settings()
+    openai_key = bool((s.openai_api_key or "").strip())
+    fashn_key = bool((s.fashn_api_key or "").strip())
+    fashn_live = bool(s.fashn_try_on_live_http)
+    fashn_max_live = bool(s.fashn_try_on_max_live_http)
+    fashn_ready = fashn_key and fashn_live and fashn_max_live
+    return {
+        "openai": {
+            "api_key_present": openai_key,
+            "models": ["chatgpt-image-latest", "gpt-image-2.6-sunburst"],
+            "ready": openai_key,
+        },
+        "fashn_tryon_max": {
+            "api_key_present": fashn_key,
+            "fashn_try_on_live_http": fashn_live,
+            "fashn_try_on_max_live_http": fashn_max_live,
+            "ready": fashn_ready,
+        },
+        "all_ready": openai_key and fashn_ready,
+    }
+
+
+def tick_model_compare_maintenance(db: Session, *, limit: int = 50) -> dict[str, int]:
+    """Bounded maintenance tick — retention sweep without requiring an API request.
+
+    Intended for the existing competition/public-cleanup maintenance loop.
+    """
+    _ = limit
+    try:
+        return run_model_compare_retention_sweep(db, dry_run=False, commit=True)
+    except Exception:  # noqa: BLE001
+        logger.info("model-compare maintenance tick failed", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"examined": 0, "files_removed": 0, "dry_run": 0, "error": 1}
+
+
 def preflight_model_compare(user: User, db: Session) -> dict[str, Any]:
     s = get_settings()
     allowlisted = user_on_model_compare_allowlist(user)
-    # Retention sweeper on preflight (best-effort; does not require paid path).
+    # Best-effort sweep on preflight; scheduled maintenance is the durable path.
     try:
         run_model_compare_retention_sweep(db, dry_run=False, commit=True)
     except Exception:  # noqa: BLE001
         logger.info("model-compare retention sweep skipped on preflight", exc_info=True)
     budget = _budget_snapshot(db)
+    gates = provider_gates_no_network()
     return {
         "status": "preflight",
         "enabled": bool(s.fitting_room_model_compare_enabled),
@@ -345,6 +402,9 @@ def preflight_model_compare(user: User, db: Session) -> dict[str, Any]:
         "stars_touched": False,
         "paid_calls": 0,
         "budget": budget,
+        "provider_gates": gates,
+        "stale_seconds": _stale_seconds(),
+        "retention_hours": _retention_hours(),
         "arms": [
             {
                 **spec,
@@ -828,55 +888,75 @@ def _claim_paid_operation(
 def _finalize_replay_without_dispatch(
     db: Session, op: FittingRoomModelCompareOperation
 ) -> dict[str, Any]:
-    """HTTP/worker replay of an existing op — never dispatch again.
+    """HTTP replay of an existing op — never dispatch again.
 
-    Pending ``dispatched`` arms (crash after commit, before outcome) become
-    ``unknown`` and the operation moves to ``reconciliation_required``.
+    Healthy in-flight (recent ``updated_at``): return current running status so a
+    concurrent same-key replay cannot kill remaining arms.
+
+    Only when the attempt is safely identified as interrupted/stale do pending
+    ``dispatched`` arms become ``unknown`` → ``reconciliation_required``.
+    Unknown paid outcomes are never retried.
     """
-    if op.status not in TERMINAL_OP_STATUSES:
-        ledger = _arm_ledger(op)
-        changed = False
-        for arm_key, entry in list(ledger.items()):
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("status") == "dispatched":
-                entry["status"] = "unknown"
-                entry["error_type"] = "ReconciliationRequired"
-                entry["error"] = (
-                    "Provider outcome unknown after crash/timeout; budget retained; no retry."
+    if op.status in TERMINAL_OP_STATUSES:
+        return _report_from_operation(op)
+
+    if op.status == OP_STATUS_RUNNING and not _operation_is_stale(op):
+        # Active request still progressing — do not reconcile.
+        out = _report_from_operation(op)
+        out["status"] = OP_STATUS_RUNNING
+        out["replay"] = True
+        out["in_flight"] = True
+        out["note"] = (
+            "Operation still running; same-key replay does not redispatch or "
+            "mark reconciliation."
+        )
+        return out
+
+    # Stale / interrupted running op with unresolved dispatches.
+    ledger = _arm_ledger(op)
+    changed = False
+    for arm_key, entry in list(ledger.items()):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("status") == "dispatched":
+            entry["status"] = "unknown"
+            entry["error_type"] = "ReconciliationRequired"
+            entry["error"] = (
+                "Provider outcome unknown after interrupted/stale attempt; "
+                "budget retained; no retry."
+            )
+            entry["no_retry"] = True
+            ledger[arm_key] = entry
+            changed = True
+
+    if changed or op.status == OP_STATUS_RUNNING:
+        _set_arm_ledger(op, ledger)
+        report = dict(op.report) if isinstance(op.report, dict) else {}
+        arms_out = list(report.get("arms") or [])
+        by_arm = {
+            str(a.get("arm")).upper(): a for a in arms_out if isinstance(a, dict) and a.get("arm")
+        }
+        for arm_key, entry in ledger.items():
+            if entry.get("status") == "unknown":
+                row = dict(by_arm.get(arm_key) or {"arm": arm_key})
+                row.update(
+                    {
+                        "status": "unknown",
+                        "error_type": entry.get("error_type"),
+                        "error": entry.get("error"),
+                        "no_retry": True,
+                        "result_ref": None,
+                        "result_url": None,
+                    }
                 )
-                entry["no_retry"] = True
-                ledger[arm_key] = entry
-                changed = True
-        if changed or op.status == OP_STATUS_RUNNING:
-            _set_arm_ledger(op, ledger)
-            report = dict(op.report) if isinstance(op.report, dict) else {}
-            # Mirror unknown arms into arms[] for the API report.
-            arms_out = list(report.get("arms") or [])
-            by_arm = {
-                str(a.get("arm")).upper(): a for a in arms_out if isinstance(a, dict) and a.get("arm")
-            }
-            for arm_key, entry in ledger.items():
-                if entry.get("status") == "unknown":
-                    row = dict(by_arm.get(arm_key) or {"arm": arm_key})
-                    row.update(
-                        {
-                            "status": "unknown",
-                            "error_type": entry.get("error_type"),
-                            "error": entry.get("error"),
-                            "no_retry": True,
-                            "result_ref": None,
-                            "result_url": None,
-                        }
-                    )
-                    by_arm[arm_key] = row
-            report["arms"] = list(by_arm.values())
-            report["status"] = OP_STATUS_RECONCILIATION
-            op.report = report
-            op.status = OP_STATUS_RECONCILIATION
-            op.error_detail = (op.error_detail or "reconciliation_required")[:512]
-            _durable_commit(db)
-            db.refresh(op)
+                by_arm[arm_key] = row
+        report["arms"] = list(by_arm.values())
+        report["status"] = OP_STATUS_RECONCILIATION
+        op.report = report
+        op.status = OP_STATUS_RECONCILIATION
+        op.error_detail = (op.error_detail or "reconciliation_required")[:512]
+        _durable_commit(db)
+        db.refresh(op)
 
     return _report_from_operation(op)
 

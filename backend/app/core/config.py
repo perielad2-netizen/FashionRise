@@ -290,6 +290,8 @@ class Settings(BaseSettings):
     fitting_room_model_compare_max_provider_calls: int = 3
     # Bounded retention for private compare outputs (hours).
     fitting_room_model_compare_retention_hours: int = 72
+    # Running ops with no ledger heartbeat older than this are treated as interrupted.
+    fitting_room_model_compare_stale_seconds: int = 900
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
