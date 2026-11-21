@@ -5,20 +5,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Safe-area + live browser/Android chrome so the CTA is never clipped. */
   padding: max(0.5rem, env(safe-area-inset-top, 0px)) max(0.5rem, env(safe-area-inset-right, 0px))
-    max(0.5rem, env(safe-area-inset-bottom, 0px)) max(0.5rem, env(safe-area-inset-left, 0px));
+    max(
+      0.75rem,
+      env(safe-area-inset-bottom, 0px),
+      calc(0.5rem + var(--fr-browser-chrome-bottom, 0px))
+    )
+    max(0.5rem, env(safe-area-inset-left, 0px));
   background: rgba(4, 6, 12, 0.78);
   box-sizing: border-box;
   max-height: 100dvh;
   max-height: var(--fr-visible-height, 100dvh);
   overflow: hidden;
+  overscroll-behavior: contain;
   animation: createRise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dialog {
   width: min(28rem, 100%);
-  max-height: min(88dvh, 40rem);
-  max-height: min(88dvh, var(--fr-visible-height, 88dvh), 40rem);
+  /* Bound to the true visible viewport (not layout 100dvh under Android nav). */
+  max-height: min(
+    40rem,
+    calc(
+      var(--fr-visible-height, 100dvh) - 1.25rem - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - var(--fr-browser-chrome-bottom, 0px)
+    )
+  );
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -31,6 +44,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.5);
   font-family: var(--fr-sans, 'DM Sans', system-ui, sans-serif);
+  box-sizing: border-box;
 }
 
 .header {
@@ -153,7 +167,13 @@
 
 .footer {
   flex: 0 0 auto;
-  padding: 0.65rem 1rem max(0.85rem, env(safe-area-inset-bottom, 0px));
+  /* Keep Upload & Generate fully above Android nav / browser chrome. */
+  padding: 0.65rem 1rem
+    max(
+      0.85rem,
+      env(safe-area-inset-bottom, 0px),
+      calc(0.65rem + var(--fr-browser-chrome-bottom, 0px))
+    );
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(12, 10, 16, 0.72);
 }
@@ -293,22 +313,51 @@
 }
 
 @media (max-width: 640px) {
+  .backdrop {
+    /* Bottom-sheet style: keeps the sticky CTA on-screen on short Android viewports. */
+    align-items: flex-end;
+  }
+
   .dialog {
     width: 100%;
-    max-height: min(92dvh, calc(100dvh - 1rem));
+    max-height: calc(
+      var(--fr-visible-height, 100dvh) - max(0.75rem, env(safe-area-inset-top, 0px)) -
+        max(0.75rem, env(safe-area-inset-bottom, 0px)) - var(--fr-browser-chrome-bottom, 0px)
+    );
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
   }
 
   .preview {
-    max-height: min(30vh, 11rem);
+    max-height: min(26vh, 9.5rem);
+  }
+
+  .photoHit {
+    min-height: 8.5rem;
   }
 
   .body {
     gap: 0.55rem;
     padding: 0.25rem 0.9rem 0.75rem;
+    /* Explicit touch scroll so consent + terms can move above the sticky CTA. */
+    overflow-y: auto;
+    touch-action: pan-y;
   }
 
   .header {
     padding: 0.85rem 0.9rem 0.4rem;
+  }
+
+  .footer {
+    padding-bottom: max(
+      1rem,
+      env(safe-area-inset-bottom, 0px),
+      calc(0.85rem + var(--fr-browser-chrome-bottom, 0px))
+    );
+  }
+
+  .primary {
+    min-height: 44px;
   }
 }
 
