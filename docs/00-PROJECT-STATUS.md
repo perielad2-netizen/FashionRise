@@ -3,24 +3,31 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Completed — Stage 2 one bounded live A/B/C compare · PR #470 (2026-11-21 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Code SHA | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** (no new code deploy) · Alembic **038** |
+| Operation | **`d6d6c075-2ae1-4ab9-8a8a-3dab67524cd5`** · idempotency `e1341dbf-2d80-4b65-8ee0-dc89ca87edab` · owner **NoaPeri** |
+| Inputs | Same person photo + same FashionRise look plate (Look · Nov 20, 2026 front / gallery `bcd7ca04…`) for all arms · consent `fitting-room-model-compare-v1` |
+| Wall time | ~116.6 s total HTTP |
+| Arm A | OpenAI **`chatgpt-image-latest`** · status **ok** · 46992 ms · est **6¢** · private `…/results/…/A` · 1024×1536 |
+| Arm B | OpenAI **`gpt-image-2.6-sunburst`** · status **ok** · 26428 ms · est **6¢** · private `…/results/…/B` · 1024×1536 |
+| Arm C | FASHN **`tryon-max`** quality 2k · status **ok** · 39505 ms · **4 credits ≈ 32¢** · private `…/results/…/C` · 1696×2528 |
+| Budget | **1** op claimed · **3** provider calls dispatched · **0** retries · `authorization_exhausted=true` |
+| Stars | **unchanged** (`stars_touched=false`; owner wallet still unlimited) |
+| Storage | `private_fitting_compare/<owner>/<op>/arm_{A,B,C}.png` — not public StaticFiles; owner-auth GET only |
+| Safety after | `LIVE_HTTP=false` again · `ENABLED=true` · allowlist NoaPeri · identity lock **false** · Direct Edit V2 **true** · paid path **armed=false** |
+| Human review | **No automatic winner.** Score Face·Hair · Dress fidelity · Shoulder decorations · Body/pose · Background. Review copies under agent artifacts `model-compare-stage2/`. |
+| Exact next action | Human visual pick of preferred arm for product path. **No second paid compare** without new authorize. Do **not** re-enable identity lock unless chosen after review. |
+
 ## Validated — Owner-only model-compare preflight (LIVE_HTTP off) · PR #470 (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Code SHA (unchanged) | **`31af6ca635166b499cbfe0029f89c69785ac77b9`** — no new code deploy; config-only |
-| Docs | [#471](https://github.com/perielad2-netizen/FashionRise/pull/471) merged → `main` @ **`0dcd57c4`** (docs-only; **not** a prod code deploy) |
-| `.env` backup | `/root/fashionrise-backups/pr470-preflight-20261121T181341Z/backend.env` |
-| Migration | Still **`038` (head)** |
-| Restart | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` — all **active** |
-| Health | `/health` ok · `/ready` ok · `https://fashionrise.app/` **200** · Runway **200** |
-| Flags | `ENABLED=true` · `LIVE_HTTP=false` · `MAX_PAID_OPS=1` · `MAX_PROVIDER_CALLS=3` · identity lock **false** · Direct Edit V2 **true** |
-| Owner allowlist | Verified single account **NoaPeri** (`perielad@gmail.com` + uuid + username facets) — most recent Fitting Room actor today; OpenAI/FASHN provider-wide keys **unchanged** |
-| Preflight `GET /api/v1/ai/fitting-room/model-compare/preflight` | Owner → **200**: `enabled=true`, `live_http=false`, `armed=false`, `owner_allowlisted=true`, `provider_gates.all_ready=true`, `ops_claimed=0`, `provider_calls_dispatched=0`, `authorize_paid=false`, `stars_touched=false`, `paid_calls=0` |
-| Access control | Anonymous → **401**; non-owner → **403** owner-only; ordinary Fitting Room preflight still **401** unauth |
-| Ledger | **0** rows in `fitting_room_model_compare_operations` |
-| Providers | No external OpenAI/FASHN image calls; GET preflight + no-network gates only |
-| Not done (STOP) | `LIVE_HTTP` remains **false** · no `authorize_paid=true` · no paid A/B/C · no photos · identity lock **not** re-enabled |
-| Exact next action | **Separate explicit authorize:** set `FITTING_ROOM_MODEL_COMPARE_LIVE_HTTP=true`, restart, then **one** bounded paid A/B/C (`authorize_paid=true`, max 1 op / 3 provider calls). Human score Face·Dress·Shoulders·Pose·Background. Do **not** re-enable identity lock. |
+| Code SHA | **`31af6ca6`** · docs [#471](https://github.com/perielad2-netizen/FashionRise/pull/471)/[#472](https://github.com/perielad2-netizen/FashionRise/pull/472) merged (docs-only) |
+| Preflight (before Stage 2) | Owner `enabled=true`, `live_http=false`, `armed=false`, `owner_allowlisted=true`, gates ready, ledger empty |
+| Outcome | Superseded by Stage 2 section above (one paid op consumed; live HTTP re-disabled) |
 
 ## Deployed — Fitting Room model-compare infrastructure (fail-closed) · PR #470 (2026-11-21 Asia/Jerusalem)
 
