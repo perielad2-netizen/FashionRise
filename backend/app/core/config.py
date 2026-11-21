@@ -260,7 +260,8 @@ class Settings(BaseSettings):
     # Social look ChatGPT-clone: one images.edit (person + look plate), no materialize.
     # Model should be a high-fidelity edit model (gpt-image-2 matches OpenAI try-on docs).
     fitting_room_look_chatgpt_clone_enabled: bool = True
-    fitting_room_look_openai_model: str = "gpt-image-2"
+    # Prefer ChatGPT's own image lane when the API key exposes it.
+    fitting_room_look_openai_model: str = "chatgpt-image-latest"
     fitting_room_look_openai_quality: str = "high"
 
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).

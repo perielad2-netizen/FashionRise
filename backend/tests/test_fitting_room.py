@@ -1287,7 +1287,7 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
     _enable_fitting_room(monkeypatch, live=True)
     monkeypatch.setattr(fr, "_fashn_max_fallback_armed", lambda: True)
     monkeypatch.setenv("FITTING_ROOM_LOOK_CHATGPT_CLONE_ENABLED", "true")
-    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "gpt-image-2")
+    monkeypatch.setenv("FITTING_ROOM_LOOK_OPENAI_MODEL", "chatgpt-image-latest")
     get_settings.cache_clear()
     calls: list[str] = []
 
@@ -1305,7 +1305,7 @@ def test_look_chatgpt_clone_skips_materialize_and_color_lock(client, db_session,
         assert "mannequin" not in lowered
         return tryon_result_png(), {
             "provider": "openai_images_edit",
-            "model": "gpt-image-2",
+            "model": "chatgpt-image-latest",
             "quality": "high",
             "chatgpt_clone": True,
         }

@@ -1285,6 +1285,29 @@ _IMAGE_EDIT_SNAPSHOT_ALIASES: dict[str, str] = {
 _FASHIONRISE_EDIT_QUALITIES: frozenset[str] = frozenset({"low", "medium", "high", "auto"})
 
 _IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
+    # Consumer ChatGPT image lane — closest match to in-chat “fit this on the photo”.
+    "chatgpt-image-latest": ImageEditCapabilities(
+        model_id="chatgpt-image-latest",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2.6-sunburst": ImageEditCapabilities(
+        model_id="gpt-image-2.6-sunburst",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
     "gpt-image-2.5-sunburst": ImageEditCapabilities(
         model_id="gpt-image-2.5-sunburst",
         status="supported",

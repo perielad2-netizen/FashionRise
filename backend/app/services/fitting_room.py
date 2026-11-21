@@ -1147,7 +1147,7 @@ def _run_chatgpt_clone_images_edit(
 ) -> tuple[bytes, dict[str, Any]]:
     """One OpenAI images.edit — same shape as ChatGPT: person + design, short prompt.
 
-    Uses ``fitting_room_look_openai_model`` (default ``gpt-image-2``, high fidelity).
+    Uses ``fitting_room_look_openai_model`` (default ``chatgpt-image-latest``).
     Does **not** charcoal-matte the design, materialize, or color-lock.
     """
     from openai import OpenAI
@@ -1158,7 +1158,12 @@ def _run_chatgpt_clone_images_edit(
     settings = get_settings()
     if not (settings.openai_api_key or "").strip():
         raise ProviderNotAvailableError("OPENAI_API_KEY missing")
-    model = (settings.fitting_room_look_openai_model or "gpt-image-2").strip()
+    from app.services.sketch_openai import image_edit_capabilities
+
+    model = (settings.fitting_room_look_openai_model or "chatgpt-image-latest").strip()
+    caps = image_edit_capabilities(model)
+    if caps is None or caps.status != "supported":
+        model = "gpt-image-2"
     assert_image_model_editable(model)
     quality = (settings.fitting_room_look_openai_quality or "high").strip()
     size = (settings.openai_image_size or "1024x1536").strip()
