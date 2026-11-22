@@ -14,7 +14,7 @@ from app.schemas.design import (
     DesignRevisionRead,
     DesignUpdate,
 )
-from app.schemas.design_share import DesignShareRequest, DesignShareResult
+from app.schemas.design_share import DesignShareRequest, DesignShareResult, DesignShareTransferRead
 from app.services import design_service, design_share_service
 
 router = APIRouter()
@@ -32,6 +32,28 @@ def create_design(
 def list_my_designs(user: CurrentUser, db: Session = Depends(get_db)) -> list[DesignRead]:
     rows = design_service.list_my_designs(db, user)
     return [DesignRead.model_validate(r) for r in rows]
+
+
+@router.get("/shares/incoming", response_model=list[DesignShareTransferRead])
+def list_incoming_design_shares(
+    user: CurrentUser, db: Session = Depends(get_db)
+) -> list[DesignShareTransferRead]:
+    """Pending design shares waiting for this user to accept or decline."""
+    return design_share_service.list_incoming_shares(db, user)
+
+
+@router.post("/shares/{transfer_id}/accept", response_model=DesignShareResult)
+def accept_incoming_design_share(
+    transfer_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> DesignShareResult:
+    return design_share_service.accept_design_share(db, user, transfer_id)
+
+
+@router.post("/shares/{transfer_id}/reject", response_model=DesignShareTransferRead)
+def reject_incoming_design_share(
+    transfer_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> DesignShareTransferRead:
+    return design_share_service.reject_design_share(db, user, transfer_id)
 
 
 @router.get("/{design_id}/revisions", response_model=list[DesignRevisionRead])

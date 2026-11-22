@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FolderOpen, RefreshCw, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, FolderOpen, RefreshCw, Share2, Trash2, X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { PREVIEW_PAGE_SIZE, PreviewRenderer } from '@/lib/designPreview'
 import {
@@ -12,6 +12,13 @@ import {
 import type { SaveStatus } from '@/lib/draftDocument'
 import type { Stroke } from '@/lib/strokes'
 import type { ModelChoice } from '@/shell/modelTypes'
+import { ApiError } from '@/services/api/client'
+import {
+  acceptDesignShare,
+  listIncomingDesignShares,
+  rejectDesignShare,
+  type DesignShareTransfer,
+} from '@/services/designShareApi'
 import { deleteSavedDesign, listSavedDesigns } from '@/services/savedDesignsApi'
 import { ShareDesignDialog } from '@/shell/components/ShareDesignDialog'
 import styles from './MyDesignsScreen.module.css'
@@ -184,6 +191,8 @@ export function MyDesignsScreen({
   const [renderer] = useState(() => new PreviewRenderer({ ownerId }))
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
   const [shareRecord, setShareRecord] = useState<SavedDesignRecord | null>(null)
+  const [incoming, setIncoming] = useState<DesignShareTransfer[]>([])
+  const [inboxBusyId, setInboxBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const workingKeyRef = useRef<string | null>(null)
   const deleteInFlightRef = useRef(false)
@@ -215,10 +224,53 @@ export function MyDesignsScreen({
     return () => controller.abort()
   }, [ownerId, libraryVersion, reloadToken])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    listIncomingDesignShares(controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted) setIncoming(rows)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setIncoming([])
+      })
+    return () => controller.abort()
+  }, [ownerId, libraryVersion, reloadToken])
+
   const refresh = useCallback(() => {
     setState({ status: 'loading' })
     setReloadToken((v) => v + 1)
   }, [])
+
+  const answerShare = useCallback(
+    async (transfer: DesignShareTransfer, decision: 'accept' | 'reject') => {
+      if (inboxBusyId) return
+      setInboxBusyId(transfer.id)
+      setNotice(null)
+      try {
+        if (decision === 'accept') {
+          const result = await acceptDesignShare(transfer.id)
+          setNotice(result.message)
+          setIncoming((prev) => prev.filter((row) => row.id !== transfer.id))
+          setReloadToken((v) => v + 1)
+        } else {
+          await rejectDesignShare(transfer.id)
+          setNotice('Share declined.')
+          setIncoming((prev) => prev.filter((row) => row.id !== transfer.id))
+        }
+      } catch (err: unknown) {
+        setNotice(
+          err instanceof ApiError
+            ? err.message
+            : decision === 'accept'
+              ? 'Could not accept this share.'
+              : 'Could not decline this share.',
+        )
+      } finally {
+        setInboxBusyId(null)
+      }
+    },
+    [inboxBusyId],
+  )
 
   const workingSnapshot = useMemo<SavedDesignSnapshot>(
     () => ({
@@ -332,7 +384,7 @@ export function MyDesignsScreen({
           <p className={styles.eyebrow}>FashionRise</p>
           <h1 className={styles.title}>My Designs</h1>
           <p className={styles.subtitle}>
-            Private to you — or share a saved design with a friend so they can continue it.
+            Private to you — share with a friend; they approve before it lands in their designs.
           </p>
         </div>
         <div className={styles.headActions}>
@@ -357,6 +409,60 @@ export function MyDesignsScreen({
           <p className={styles.notice} role="status">
             {notice}
           </p>
+        ) : null}
+
+        {incoming.length > 0 ? (
+          <section className={styles.section} aria-labelledby="my-designs-inbox">
+            <h2 id="my-designs-inbox" className={styles.sectionTitle}>
+              Waiting for you
+              <span className={styles.count}>{incoming.length}</span>
+            </h2>
+            <ul className={styles.inboxList} aria-label="Incoming design shares">
+              {incoming.map((row) => {
+                const title = row.source_title || 'Untitled design'
+                const busy = inboxBusyId === row.id
+                return (
+                  <li key={row.id} className={styles.inboxCard}>
+                    <div className={styles.inboxCopy}>
+                      <h3 className={styles.cardTitle}>{title}</h3>
+                      <p className={styles.cardMeta}>
+                        From @{row.from_username || 'friend'}
+                        {row.note ? (
+                          <>
+                            <span aria-hidden="true"> · </span>
+                            <span>{row.note}</span>
+                          </>
+                        ) : null}
+                      </p>
+                      <p className={styles.hint}>
+                        Accept to add it to My Designs with their fabrics and models.
+                      </p>
+                    </div>
+                    <div className={styles.inboxActions}>
+                      <button
+                        type="button"
+                        className={styles.declineBtn}
+                        disabled={busy || inboxBusyId != null}
+                        onClick={() => void answerShare(row, 'reject')}
+                      >
+                        <X size={14} aria-hidden="true" />
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.openBtn}
+                        disabled={busy || inboxBusyId != null}
+                        onClick={() => void answerShare(row, 'accept')}
+                      >
+                        <Check size={14} aria-hidden="true" />
+                        {busy ? 'Accepting…' : 'Accept'}
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
         ) : null}
 
         <section className={styles.section} aria-labelledby="my-designs-working">

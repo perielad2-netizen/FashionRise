@@ -87,8 +87,8 @@ export function ShareDesignDialog({ record, onClose, onShared }: Props) {
     >
       <div className={styles.body}>
         <p className={styles.lead}>
-          Your friend gets a copy they can continue in Studio, with access to your fabrics and
-          models. They can Magic, publish to FashionRise, and send it back anytime.
+          Your friend gets an invite to approve. After they Accept, they can continue in Studio
+          with your fabrics and models, Magic, publish, and send it back anytime.
         </p>
 
         {phase === 'loading' ? (

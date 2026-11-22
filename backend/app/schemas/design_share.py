@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +21,9 @@ class DesignShareTransferRead(BaseModel):
     source_design_id: uuid.UUID | None
     received_design_id: uuid.UUID | None
     note: str | None
+    status: str
+    source_title: str | None = None
+    responded_at: datetime | None = None
     created_at: datetime
     from_username: str | None = None
     to_username: str | None = None
@@ -32,6 +34,6 @@ class DesignShareTransferRead(BaseModel):
 
 class DesignShareResult(BaseModel):
     transfer: DesignShareTransferRead
-    received_design: DesignRead
+    received_design: DesignRead | None = None
     collaboration_id: uuid.UUID
     message: str

@@ -1,4 +1,4 @@
-"""Share saved design with accepted friend — copy + fabric/model grants."""
+"""Share saved design with accepted friend — pending approval then copy + grants."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _save_design(client, tokens, *, title: str = "Shared look") -> dict:
     return res.json()
 
 
-def test_share_design_with_friend_copies_and_grants(client, db_session):
+def test_share_requires_accept_before_my_designs(client, db_session):
     peri = register_with_invite(client, db_session, "peri_share@example.com", "PeriShare")
     yaniv = register_with_invite(client, db_session, "yaniv_share@example.com", "YanivShare")
     from app.models.user import User
@@ -56,7 +56,6 @@ def test_share_design_with_friend_copies_and_grants(client, db_session):
     yaniv_user = db_session.query(User).filter(User.username == "YanivShare").one()
     ensure_accepted_friends(db_session, peri_user, yaniv_user)
 
-    # Peri uploads a fabric so share grants it.
     from io import BytesIO
 
     from PIL import Image
@@ -81,27 +80,75 @@ def test_share_design_with_friend_copies_and_grants(client, db_session):
     )
     assert share.status_code == 201, share.text
     payload = share.json()
-    assert payload["received_design"]["user_id"] == str(yaniv_user.id)
-    assert payload["transfer"]["fabrics_granted"] >= 1
-    assert "From PeriShare:" in payload["received_design"]["title"]
-    meta = payload["received_design"]["metadata"]
-    assert meta["receivedViaShare"] is True
-    assert meta["sharedFromUsername"] == "PeriShare"
+    assert payload["received_design"] is None
+    assert payload["transfer"]["status"] == "pending"
+    transfer_id = payload["transfer"]["id"]
 
-    # Friend sees the design in My Designs and can load Peri's fabric image.
+    # Not in My Designs until accepted.
+    mine_before = client.get("/api/v1/designs/my", headers=_auth(yaniv))
+    assert mine_before.status_code == 200
+    assert all("Collab dress" not in (row.get("title") or "") for row in mine_before.json())
+
+    # Fabric not granted yet.
+    fabrics_before = client.get("/api/v1/fabrics", headers=_auth(yaniv))
+    assert fabric_id not in {row["id"] for row in fabrics_before.json()}
+
+    inbox = client.get("/api/v1/designs/shares/incoming", headers=_auth(yaniv))
+    assert inbox.status_code == 200, inbox.text
+    assert len(inbox.json()) == 1
+    assert inbox.json()[0]["id"] == transfer_id
+    assert inbox.json()[0]["from_username"] == "PeriShare"
+
+    accepted = client.post(
+        f"/api/v1/designs/shares/{transfer_id}/accept",
+        headers=_auth(yaniv),
+    )
+    assert accepted.status_code == 200, accepted.text
+    accepted_body = accepted.json()
+    assert accepted_body["transfer"]["status"] == "accepted"
+    assert accepted_body["received_design"]["user_id"] == str(yaniv_user.id)
+    assert "From PeriShare:" in accepted_body["received_design"]["title"]
+    assert accepted_body["transfer"]["fabrics_granted"] >= 1
+
     mine = client.get("/api/v1/designs/my", headers=_auth(yaniv))
-    assert mine.status_code == 200
     ids = {row["id"] for row in mine.json()}
-    assert payload["received_design"]["id"] in ids
+    assert accepted_body["received_design"]["id"] in ids
 
     fabrics = client.get("/api/v1/fabrics", headers=_auth(yaniv))
-    assert fabrics.status_code == 200
-    fabric_ids = {row["id"] for row in fabrics.json()}
-    assert fabric_id in fabric_ids
-
+    assert fabric_id in {row["id"] for row in fabrics.json()}
     img = client.get(f"/api/v1/fabrics/{fabric_id}/image", headers=_auth(yaniv))
     assert img.status_code == 200, img.text
-    assert img.headers.get("content-type", "").startswith("image/")
+
+    empty = client.get("/api/v1/designs/shares/incoming", headers=_auth(yaniv))
+    assert empty.json() == []
+
+
+def test_share_reject_keeps_out_of_my_designs(client, db_session):
+    peri = register_with_invite(client, db_session, "peri_reject@example.com", "PeriReject")
+    yaniv = register_with_invite(client, db_session, "yaniv_reject@example.com", "YanivReject")
+    from app.models.user import User
+
+    peri_user = db_session.query(User).filter(User.username == "PeriReject").one()
+    yaniv_user = db_session.query(User).filter(User.username == "YanivReject").one()
+    ensure_accepted_friends(db_session, peri_user, yaniv_user)
+
+    design = _save_design(client, peri, title="No thanks")
+    share = client.post(
+        f"/api/v1/designs/{design['id']}/share",
+        headers=_auth(peri),
+        json={"friend_user_id": str(yaniv_user.id)},
+    )
+    transfer_id = share.json()["transfer"]["id"]
+    rejected = client.post(
+        f"/api/v1/designs/shares/{transfer_id}/reject",
+        headers=_auth(yaniv),
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+
+    mine = client.get("/api/v1/designs/my", headers=_auth(yaniv))
+    assert all("No thanks" not in (row.get("title") or "") for row in mine.json())
+    assert client.get("/api/v1/designs/shares/incoming", headers=_auth(yaniv)).json() == []
 
 
 def test_share_requires_accepted_friend(client, db_session):
@@ -119,7 +166,7 @@ def test_share_requires_accepted_friend(client, db_session):
     assert res.status_code == 403
 
 
-def test_share_back_and_forth(client, db_session):
+def test_share_back_and_forth_with_approval(client, db_session):
     peri = register_with_invite(client, db_session, "peri_ping@example.com", "PeriPing")
     yaniv = register_with_invite(client, db_session, "yaniv_pong@example.com", "YanivPong")
     from app.models.user import User
@@ -135,7 +182,10 @@ def test_share_back_and_forth(client, db_session):
         json={"friend_user_id": str(yaniv_user.id)},
     )
     assert first.status_code == 201, first.text
-    received_id = first.json()["received_design"]["id"]
+    tid = first.json()["transfer"]["id"]
+    accepted = client.post(f"/api/v1/designs/shares/{tid}/accept", headers=_auth(yaniv))
+    assert accepted.status_code == 200, accepted.text
+    received_id = accepted.json()["received_design"]["id"]
 
     back = client.post(
         f"/api/v1/designs/{received_id}/share",
@@ -143,5 +193,9 @@ def test_share_back_and_forth(client, db_session):
         json={"friend_user_id": str(peri_user.id), "note": "Back to you"},
     )
     assert back.status_code == 201, back.text
-    assert back.json()["received_design"]["user_id"] == str(peri_user.id)
-    assert "From YanivPong:" in back.json()["received_design"]["title"]
+    assert back.json()["transfer"]["status"] == "pending"
+    back_id = back.json()["transfer"]["id"]
+    peri_accept = client.post(f"/api/v1/designs/shares/{back_id}/accept", headers=_auth(peri))
+    assert peri_accept.status_code == 200, peri_accept.text
+    assert peri_accept.json()["received_design"]["user_id"] == str(peri_user.id)
+    assert "From YanivPong:" in peri_accept.json()["received_design"]["title"]
