@@ -77,6 +77,8 @@ export type SavedDesignRecord = {
   createdAt: string
   saveRequestId: string
   snapshot: SavedDesignSnapshot
+  /** Present when this saved design arrived via friend share. */
+  sharedFromUsername?: string | null
 }
 
 /** A row that claims the saved-design schema but fails validation. Shown, never opened. */
@@ -385,6 +387,10 @@ export function parseSavedDesign(row: DesignRowLike, ownerId: string): SavedDesi
   if (typeof data.saveRequestId !== 'string' || !data.saveRequestId) return null
   const snapshot = parseSavedDesignSnapshot(data.snapshot)
   if (!snapshot) return null
+  const sharedFrom =
+    typeof meta.sharedFromUsername === 'string' && meta.sharedFromUsername.trim()
+      ? meta.sharedFromUsername.trim()
+      : null
   return {
     id: row.id,
     title: typeof row.title === 'string' ? row.title : '',
@@ -395,6 +401,7 @@ export function parseSavedDesign(row: DesignRowLike, ownerId: string): SavedDesi
     createdAt: row.created_at,
     saveRequestId: data.saveRequestId,
     snapshot,
+    sharedFromUsername: sharedFrom,
   }
 }
 

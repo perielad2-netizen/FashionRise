@@ -200,13 +200,37 @@ def create_fabric_asset_from_png(
     return row
 
 
-def list_fabric_assets(db: Session, user: User) -> list[FabricAsset]:
+def list_owned_fabric_assets(db: Session, user: User) -> list[FabricAsset]:
     return (
         db.query(FabricAsset)
         .filter(FabricAsset.owner_id == user.id, FabricAsset.deleted_at.is_(None))
         .order_by(FabricAsset.created_at.desc())
         .all()
     )
+
+
+def list_fabric_assets(db: Session, user: User) -> list[FabricAsset]:
+    """Own fabrics plus friend-shared fabrics from design collaborations."""
+    from app.services import design_share_service
+
+    return design_share_service.list_accessible_fabrics(db, user)
+
+
+def get_truly_owned_fabric_asset(
+    db: Session,
+    user: User,
+    asset_id: uuid.UUID,
+    *,
+    include_deleted: bool = True,
+) -> FabricAsset:
+    """True owner only — delete and mutate stay owner-scoped."""
+    q = db.query(FabricAsset).filter(FabricAsset.id == asset_id, FabricAsset.owner_id == user.id)
+    if not include_deleted:
+        q = q.filter(FabricAsset.deleted_at.is_(None))
+    row = q.first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fabric not found")
+    return row
 
 
 def get_owned_fabric_asset(
@@ -216,13 +240,12 @@ def get_owned_fabric_asset(
     *,
     include_deleted: bool = True,
 ) -> FabricAsset:
-    q = db.query(FabricAsset).filter(FabricAsset.id == asset_id, FabricAsset.owner_id == user.id)
-    if not include_deleted:
-        q = q.filter(FabricAsset.deleted_at.is_(None))
-    row = q.first()
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fabric not found")
-    return row
+    """Owner or collaborator with a fabric grant (read / paint fills)."""
+    from app.services import design_share_service
+
+    return design_share_service.get_accessible_fabric_asset(
+        db, user, asset_id, include_deleted=include_deleted
+    )
 
 
 def resolve_fabric_image_file(db: Session, user: User, asset_id: uuid.UUID) -> Path:
@@ -246,7 +269,7 @@ def resolve_fabric_image_file(db: Session, user: User, asset_id: uuid.UUID) -> P
 
 
 def soft_delete_fabric_asset(db: Session, user: User, asset_id: uuid.UUID) -> FabricAsset:
-    row = get_owned_fabric_asset(db, user, asset_id, include_deleted=False)
+    row = get_truly_owned_fabric_asset(db, user, asset_id, include_deleted=False)
     row.deleted_at = datetime.now(timezone.utc)
     db.add(row)
     db.commit()

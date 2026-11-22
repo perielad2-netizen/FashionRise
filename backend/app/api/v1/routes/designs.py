@@ -14,7 +14,8 @@ from app.schemas.design import (
     DesignRevisionRead,
     DesignUpdate,
 )
-from app.services import design_service
+from app.schemas.design_share import DesignShareRequest, DesignShareResult
+from app.services import design_service, design_share_service
 
 router = APIRouter()
 
@@ -95,6 +96,17 @@ def delete_saved_design(
     """Delete one owner-private saved design (v1/v2 only). Rejects working drafts."""
     design_service.delete_saved_design(db, design_id, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{design_id}/share", response_model=DesignShareResult, status_code=status.HTTP_201_CREATED)
+def share_design_with_friend(
+    design_id: uuid.UUID,
+    data: DesignShareRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> DesignShareResult:
+    """Copy a saved design to an accepted friend and grant fabrics/models access."""
+    return design_share_service.share_design_with_friend(db, user, design_id, data)
 
 
 @router.get("/{design_id}", response_model=DesignRead)

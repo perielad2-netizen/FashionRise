@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Preview — Share design with friend (continue + fabrics/models) (2026-11-22 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Feature | My Designs → Share → pick accepted friend → friend gets a saved copy + grants to sender fabrics/models |
+| API | `POST /api/v1/designs/{id}/share` `{friend_user_id, note?}` |
+| Tables | `design_collaborations` · `design_share_transfers` · `shared_asset_grants` (Alembic **039**) |
+| Loop | Friend can Open → edit → Magic → publish to FashionRise → Share back (unlimited) |
+| Edge | Designs POST already allowlisted (`…/share` under existing designs location) |
+| Next | Owner web test: two friends share a design both ways |
+
 ## LIVE — Create Model nginx consent/upload allowlist (2026-11-22 Asia/Jerusalem)
 
 | Field | Value |

@@ -205,7 +205,8 @@ def get_croquis(
     db: Session = Depends(get_db),
 ) -> PersonalCroquisRead:
     _ = request.url
-    row = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
+    # Read allows design-share grants; mutations stay on get_owned_croquis.
+    row = pcs.get_accessible_croquis(db, user, croquis_id, include_archived=True)
     return _croquis_read(db, user, row)
 
 
