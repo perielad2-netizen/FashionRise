@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { ApiError } from '@/services/api/client'
 import { listFriends, type Friendship } from '@/services/friendsApi'
 import { shareDesignWithFriend } from '@/services/designShareApi'
+import { profileAvatarSrc } from '@/services/profilesApi'
 import type { SavedDesignRecord } from '@/lib/savedDesign'
 import styles from './ShareDesignDialog.module.css'
 
@@ -14,6 +15,42 @@ type Props = {
 }
 
 type Phase = 'loading' | 'pick' | 'sending' | 'error'
+
+function FriendPickAvatar({
+  userId,
+  avatarUrl,
+  label,
+}: {
+  userId: string
+  avatarUrl: string | null
+  label: string
+}) {
+  const [broken, setBroken] = useState(false)
+  // Match Friends / Runway: null = no photo; otherwise resolve private or legacy URL.
+  const src =
+    avatarUrl === null
+      ? null
+      : profileAvatarSrc(
+          userId,
+          avatarUrl || `/api/v1/profiles/${encodeURIComponent(userId)}/avatar`,
+          avatarUrl,
+        )
+
+  if (!src || broken) {
+    return <UserRound size={18} aria-hidden="true" />
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => setBroken(true)}
+      data-testid={`share-friend-avatar-${userId}`}
+      aria-label={label}
+    />
+  )
+}
 
 export function ShareDesignDialog({ record, onClose, onShared }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
@@ -112,6 +149,7 @@ export function ShareDesignDialog({ record, onClose, onShared }: Props) {
             {friends.map((row) => {
               const friend = row.friend
               const selected = selectedId === friend.user_id
+              const label = friend.display_name || friend.username
               return (
                 <li key={row.id}>
                   <button
@@ -122,14 +160,14 @@ export function ShareDesignDialog({ record, onClose, onShared }: Props) {
                     aria-pressed={selected}
                   >
                     <span className={styles.avatar} aria-hidden="true">
-                      {friend.avatar_url ? (
-                        <img src={friend.avatar_url} alt="" />
-                      ) : (
-                        <UserRound size={18} />
-                      )}
+                      <FriendPickAvatar
+                        userId={friend.user_id}
+                        avatarUrl={friend.avatar_url}
+                        label={label}
+                      />
                     </span>
                     <span className={styles.friendCopy}>
-                      <strong>{friend.display_name || friend.username}</strong>
+                      <strong>{label}</strong>
                       <span>@{friend.username}</span>
                     </span>
                     {selected ? <Share2 size={16} aria-hidden="true" /> : null}
