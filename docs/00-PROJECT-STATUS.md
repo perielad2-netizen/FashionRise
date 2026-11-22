@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## LIVE — Create Model nginx consent/upload allowlist (2026-11-22 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Create Model → **Unable to reach FashionRise. Check that the API is running.** |
+| Root cause | `OPTIONS/POST /api/v1/personal-croquis/consent/upload` missing from nginx allowlist → **403** (CORS preflight fails; UI maps to “API not running”) |
+| Fix | Live nginx: exact `location = …/consent/upload` + `…/{uuid}/publish`; docs `PROPOSED-NGINX-PERSONAL-CROQUIS-ALLOWLIST.md` |
+| Verify | `OPTIONS …/consent/upload` with `Origin: https://localhost` → **200** |
+| FE/BE deploy | **Not required** — edge-only; retry Upload & Generate on Android |
+| Backup | `/root/nginx-fashionrise.app.bak-consent-upload-*` on VPS |
+
 ## LIVE — Model B Fitting Room for everyone (2026-11-21 Asia/Jerusalem)
 
 | Field | Value |
