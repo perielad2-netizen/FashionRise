@@ -473,4 +473,96 @@ describe('workingDocumentFromSnapshot', () => {
     expect(next.back?.strokes).toHaveLength(1)
     expect(next.activeSide).toBe('back')
   })
+
+  it('clears prior Back ink when opening a front-only (v1) design', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = upgradeDraftToV2(
+      doc({
+        back: {
+          strokes: [
+            {
+              id: 'old-back',
+              tool: 'draw',
+              points: [1, 1, 0.5, 2, 2, 0.5],
+              color: '#111111',
+              size: 4,
+              opacity: 1,
+            },
+          ],
+          fills: [],
+        },
+        activeSide: 'back',
+        clientRevision: 12,
+      }),
+    )
+    // Friend-shared / older saves often omit Back entirely.
+    const snapshot: SavedDesignSnapshot = {
+      strokes: [
+        {
+          id: 'front-only',
+          tool: 'draw',
+          points: [5, 5, 0.5, 6, 6, 0.5],
+          color: '#00AA55',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+      fills: [],
+      model: 'female',
+      brush: { sizeId: 'medium', opacity: 1, color: '#00AA55' },
+      dimmed: false,
+    }
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 12, snapshot })
+    expect(next.strokes.map((s) => s.id)).toEqual(['front-only'])
+    expect(next.back?.strokes ?? []).toEqual([])
+    expect(next.back?.fills ?? []).toEqual([])
+    expect(next.activeSide).toBe('front')
+    expect(next.clearBackIntent).toBe(true)
+    expect(next.clientRevision).toBe(13)
+  })
+
+  it('replaces prior Back with the snapshot Back (including empty bag)', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = upgradeDraftToV2(
+      doc({
+        back: {
+          strokes: [
+            {
+              id: 'stale-back',
+              tool: 'draw',
+              points: [9, 9, 1],
+              color: '#000',
+              size: 2,
+              opacity: 1,
+            },
+          ],
+          fills: [],
+        },
+        activeSide: 'front',
+        clientRevision: 3,
+      }),
+    )
+    const snapshot = snapshotFromDocument(
+      upgradeDraftToV2(
+        doc({
+          strokes: [
+            {
+              id: 'new-front',
+              tool: 'draw',
+              points: [1, 1, 1],
+              color: '#222',
+              size: 2,
+              opacity: 1,
+            },
+          ],
+          back: { strokes: [], fills: [] },
+          activeSide: 'front',
+        }),
+      ),
+    )
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 3, snapshot })
+    expect(next.back?.strokes).toEqual([])
+    expect(next.clearBackIntent).toBe(true)
+    expect(next.strokes.map((s) => s.id)).toEqual(['new-front'])
+  })
 })
