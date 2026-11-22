@@ -612,7 +612,14 @@ export function MyDesignsScreen({
                 This permanently deletes “{deleteDialog.record.title || 'Untitled design'}” from My
                 Designs. This cannot be undone.
               </p>
-              <p>Your Studio working draft and other saved designs are not affected.</p>
+              {deleteDialog.record.sharedFromUsername ? (
+                <p>
+                  This removes only your copy. @{deleteDialog.record.sharedFromUsername}’s original
+                  design stays in their library.
+                </p>
+              ) : (
+                <p>Your Studio working draft and other saved designs are not affected.</p>
+              )}
             </>
           )}
         </ConfirmDialog>

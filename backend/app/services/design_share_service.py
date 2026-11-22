@@ -187,9 +187,13 @@ def _copy_saved_design_for_recipient(
     if len(title) > 300:
         title = title[:297] + "…"
 
+    schema_name = design_data.get("schema")
+    if schema_name not in design_service.SAVED_DESIGN_SCHEMAS:
+        schema_name = SAVED_DESIGN_V2
     meta: dict[str, Any] = {
         "designKind": SAVED_DESIGN_KIND,
-        "envelope": True,
+        # Must be a schema string — boolean True blocks DELETE /designs/saved/{id}.
+        "envelope": schema_name,
         "saveRequestId": design_data.get("saveRequestId"),
         "savedAt": design_data.get("savedAt"),
         "receivedViaShare": True,

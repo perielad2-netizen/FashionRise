@@ -21,7 +21,7 @@ def _save_design(client, tokens, *, title: str = "Shared look") -> dict:
         "status": "draft",
         "metadata": {
             "designKind": "saved_design",
-            "envelope": True,
+            "envelope": "fashionrise.saved_design.v2",
             "saveRequestId": save_id,
         },
         "design_data": {
@@ -199,3 +199,85 @@ def test_share_back_and_forth_with_approval(client, db_session):
     assert peri_accept.status_code == 200, peri_accept.text
     assert peri_accept.json()["received_design"]["user_id"] == str(peri_user.id)
     assert "From YanivPong:" in peri_accept.json()["received_design"]["title"]
+
+
+def test_recipient_can_delete_copy_without_touching_source(client, db_session):
+    """Recipient deletes their copy only; sender's original stays."""
+    peri = register_with_invite(client, db_session, "peri_delcopy@example.com", "PeriDelCopy")
+    yaniv = register_with_invite(client, db_session, "yaniv_delcopy@example.com", "YanivDelCopy")
+    from app.models.user import User
+
+    peri_user = db_session.query(User).filter(User.username == "PeriDelCopy").one()
+    yaniv_user = db_session.query(User).filter(User.username == "YanivDelCopy").one()
+    ensure_accepted_friends(db_session, peri_user, yaniv_user)
+
+    design = _save_design(client, peri, title="Keep mine")
+    source_id = design["id"]
+    share = client.post(
+        f"/api/v1/designs/{source_id}/share",
+        headers=_auth(peri),
+        json={"friend_user_id": str(yaniv_user.id)},
+    )
+    assert share.status_code == 201, share.text
+    tid = share.json()["transfer"]["id"]
+    accepted = client.post(f"/api/v1/designs/shares/{tid}/accept", headers=_auth(yaniv))
+    assert accepted.status_code == 200, accepted.text
+    copy_id = accepted.json()["received_design"]["id"]
+    assert accepted.json()["received_design"]["metadata"]["envelope"] == "fashionrise.saved_design.v2"
+    assert accepted.json()["received_design"]["metadata"]["receivedViaShare"] is True
+
+    deleted = client.delete(f"/api/v1/designs/saved/{copy_id}", headers=_auth(yaniv))
+    assert deleted.status_code == 204, deleted.text
+
+    assert client.get(f"/api/v1/designs/{copy_id}", headers=_auth(yaniv)).status_code == 404
+    still = client.get(f"/api/v1/designs/{source_id}", headers=_auth(peri))
+    assert still.status_code == 200, still.text
+    assert still.json()["title"] == "Keep mine"
+
+
+def test_legacy_boolean_envelope_share_copy_can_be_deleted(client, db_session):
+    """Early share copies wrote metadata.envelope=True; delete must still work."""
+    from app.models.garment_design import GarmentDesign
+    from app.services.design_service import SAVED_DESIGN_V2
+
+    peri = register_with_invite(client, db_session, "peri_legacy@example.com", "PeriLegacy")
+    headers = _auth(peri)
+    me = client.get("/api/v1/auth/me", headers=headers).json()
+    save_id = str(uuid.uuid4())
+    row = GarmentDesign(
+        user_id=uuid.UUID(me["id"]),
+        title="Legacy share copy",
+        garment_category="dress",
+        visibility="private",
+        status="draft",
+        metadata_={
+            "designKind": "saved_design",
+            "envelope": True,
+            "receivedViaShare": True,
+            "saveRequestId": save_id,
+        },
+        design_data={
+            "schema": SAVED_DESIGN_V2,
+            "saveRequestId": save_id,
+            "savedAt": "2026-11-22T00:00:00Z",
+            "sourceRevision": 1,
+            "snapshot": {
+                "strokes": [],
+                "fills": [],
+                "model": "female",
+                "brush": {"size": 8, "opacity": 1, "color": "#111111"},
+                "dimmed": False,
+                "activeSide": "front",
+                "back": {"strokes": [], "fills": []},
+                "personalCroquisId": None,
+                "personalCroquisVersion": None,
+            },
+        },
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+
+    deleted = client.delete(f"/api/v1/designs/saved/{row.id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+    assert client.get(f"/api/v1/designs/{row.id}", headers=headers).status_code == 404
