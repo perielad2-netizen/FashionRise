@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   MAX_SNAPSHOT_STROKES,
   SAVED_DESIGN_SCHEMA,
@@ -435,6 +435,10 @@ describe('validateDesignTitle', () => {
 })
 
 describe('workingDocumentFromSnapshot', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('advances strictly above local and server revisions and drops session references', () => {
     const current = doc({ clientRevision: 5, customReferenceUrl: 'blob:x', model: 'custom' })
     const snapshot = snapshotFromDocument(doc({ model: 'female' }))
@@ -472,5 +476,111 @@ describe('workingDocumentFromSnapshot', () => {
     expect(next.schema).toBe(STUDIO_DRAFT_SCHEMA_V2)
     expect(next.back?.strokes).toHaveLength(1)
     expect(next.activeSide).toBe('back')
+  })
+
+  it('clears previous Back ink when opening a front-only (v1) saved design', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = upgradeDraftToV2(
+      doc({
+        back: {
+          strokes: [
+            {
+              id: 'old-back',
+              tool: 'draw',
+              points: [1, 1, 0.5],
+              color: '#111111',
+              size: 2,
+              opacity: 1,
+            },
+          ],
+          fills: [],
+        },
+        activeSide: 'back',
+      }),
+    )
+    const snapshot = snapshotFromDocument(doc({ model: 'female' }))
+    expect(snapshot.back).toBeUndefined()
+    expect(snapshot.activeSide).toBeUndefined()
+
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 1, snapshot })
+    expect(next.schema).toBe(STUDIO_DRAFT_SCHEMA_V2)
+    expect(next.activeSide).toBe('front')
+    expect(next.back).toEqual({ strokes: [], fills: [] })
+    expect(next.clearBackIntent).toBe(true)
+  })
+
+  it('replaces previous Back with the opened design Back (no residue)', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = upgradeDraftToV2(
+      doc({
+        back: {
+          strokes: [
+            {
+              id: 'old-back',
+              tool: 'draw',
+              points: [1, 1, 0.5],
+              color: '#111111',
+              size: 2,
+              opacity: 1,
+            },
+          ],
+          fills: [],
+        },
+        activeSide: 'back',
+      }),
+    )
+    const snapshot = snapshotFromDocument({
+      ...upgradeDraftToV2(doc()),
+      back: {
+        strokes: [
+          {
+            id: 'new-back',
+            tool: 'draw',
+            points: [9, 9, 0.5],
+            color: '#222222',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+      activeSide: 'front',
+    })
+
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 1, snapshot })
+    expect(next.back?.strokes.map((s) => s.id)).toEqual(['new-back'])
+    expect(next.clearBackIntent).toBeUndefined()
+  })
+
+  it('stamps clearBackIntent when opened design has an explicit empty Back bag', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = upgradeDraftToV2(
+      doc({
+        back: {
+          strokes: [
+            {
+              id: 'residue',
+              tool: 'draw',
+              points: [5, 5, 0.5],
+              color: '#333333',
+              size: 2,
+              opacity: 1,
+            },
+          ],
+          fills: [],
+        },
+        activeSide: 'back',
+      }),
+    )
+    const snapshot: SavedDesignSnapshot = {
+      ...snapshotFromDocument(doc()),
+      back: { strokes: [], fills: [] },
+      activeSide: 'front',
+    }
+
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 1, snapshot })
+    expect(next.back).toEqual({ strokes: [], fills: [] })
+    expect(next.activeSide).toBe('front')
+    expect(next.clearBackIntent).toBe(true)
   })
 })

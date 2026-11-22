@@ -428,6 +428,11 @@ export function partitionSavedDesigns(rows: DesignRowLike[], ownerId: string): S
  * Working-draft content for an opened saved design. The revision advances strictly above
  * both the local and the last server-acknowledged revision so the OCC write is a normal
  * forward transition of the same singleton row.
+ *
+ * Opening always replaces BOTH sides: Front from the snapshot strokes/fills, and Back from
+ * the snapshot's back bag (or empty when omitted). This prevents previous-session Back ink
+ * from lingering when the opened design is front-only / v1. When clearing prior Back ink,
+ * `clearBackIntent` is stamped so OCC does not treat the clear as a false multi-device conflict.
  */
 export function workingDocumentFromSnapshot(args: {
   current: StudioDraftDocument
@@ -436,6 +441,13 @@ export function workingDocumentFromSnapshot(args: {
   now?: Date
 }): StudioDraftDocument {
   const floor = Math.max(args.current.clientRevision, args.serverRevision ?? 0)
+  const hadBackInk = documentHasBackInk(args.current)
+  const openedBack = args.snapshot.back
+    ? cloneSideBag({
+        strokes: args.snapshot.back.strokes.map(canonicalStroke),
+        fills: cloneFills(args.snapshot.back.fills ?? []),
+      })
+    : emptySideBag()
   let next: StudioDraftDocument = {
     ...args.current,
     strokes: args.snapshot.strokes.map(canonicalStroke),
@@ -450,18 +462,19 @@ export function workingDocumentFromSnapshot(args: {
     clientRevision: floor + 1,
     updatedAt: (args.now ?? new Date()).toISOString(),
   }
-  if (isStudioFrontBackEnabled() && (args.snapshot.back || args.snapshot.activeSide)) {
+  if (isStudioFrontBackEnabled()) {
     next = upgradeDraftToV2(next)
     next.activeSide = args.snapshot.activeSide === 'back' ? 'back' : 'front'
-    next.back = args.snapshot.back
-      ? cloneSideBag({
-          strokes: args.snapshot.back.strokes.map(canonicalStroke),
-          fills: cloneFills(args.snapshot.back.fills ?? []),
-        })
-      : emptySideBag()
-  } else if (documentHasBackInk(next) || args.snapshot.back) {
-    next = upgradeDraftToV2(next)
-    if (args.snapshot.back) next.back = cloneSideBag(args.snapshot.back)
+    next.back = openedBack
+    if (hadBackInk && !sideHasInk(openedBack)) {
+      next.clearBackIntent = true
+    } else {
+      delete next.clearBackIntent
+    }
+  } else {
+    delete next.back
+    delete next.activeSide
+    delete next.clearBackIntent
   }
   return next
 }
