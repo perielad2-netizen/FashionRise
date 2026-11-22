@@ -604,6 +604,17 @@ export function prepareKeepDeviceDocument(
   const localBack = rebased.back ? cloneSideBag(rebased.back) : null
   const serverBack = server.back ? cloneSideBag(server.back) : emptySideBag()
   const keepLocalBack = Boolean(localBack && sideHasInk(localBack))
+  // Open Design (and explicit Clear Back) stamp clearBackIntent when replacing
+  // prior Back ink with empty — do not rehydrate cloud Back over that intent.
+  if (local.clearBackIntent) {
+    return {
+      ...rebased,
+      schema: STUDIO_DRAFT_SCHEMA_V2,
+      activeSide: normalizeActiveSide(rebased),
+      back: localBack ?? emptySideBag(),
+      clearBackIntent: true,
+    }
+  }
   return {
     ...rebased,
     schema: STUDIO_DRAFT_SCHEMA_V2,

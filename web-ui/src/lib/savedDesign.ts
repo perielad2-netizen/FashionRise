@@ -428,6 +428,10 @@ export function partitionSavedDesigns(rows: DesignRowLike[], ownerId: string): S
  * Working-draft content for an opened saved design. The revision advances strictly above
  * both the local and the last server-acknowledged revision so the OCC write is a normal
  * forward transition of the same singleton row.
+ *
+ * Front and Back bags always come from the snapshot — never from the previous working
+ * draft. Opening a front-only (or empty-Back) design must clear leftover Back ink so
+ * Studio does not show remnants of the prior sketch.
  */
 export function workingDocumentFromSnapshot(args: {
   current: StudioDraftDocument
@@ -436,8 +440,18 @@ export function workingDocumentFromSnapshot(args: {
   now?: Date
 }): StudioDraftDocument {
   const floor = Math.max(args.current.clientRevision, args.serverRevision ?? 0)
+  const priorHadBackInk = documentHasBackInk(args.current)
+  const priorWasV2 = isStudioDraftV2(args.current) || 'back' in args.current
+
+  // Strip prior side bags before applying the snapshot so empty/absent Back cannot
+  // leak through via object spread.
+  const base = { ...args.current }
+  delete (base as { back?: unknown }).back
+  delete (base as { activeSide?: unknown }).activeSide
+  delete (base as { clearBackIntent?: unknown }).clearBackIntent
+
   let next: StudioDraftDocument = {
-    ...args.current,
+    ...base,
     strokes: args.snapshot.strokes.map(canonicalStroke),
     fills: cloneFills(args.snapshot.fills ?? []),
     model: args.snapshot.model,
@@ -450,18 +464,32 @@ export function workingDocumentFromSnapshot(args: {
     clientRevision: floor + 1,
     updatedAt: (args.now ?? new Date()).toISOString(),
   }
-  if (isStudioFrontBackEnabled() && (args.snapshot.back || args.snapshot.activeSide)) {
+
+  const snapshotBack = args.snapshot.back
+    ? cloneSideBag({
+        strokes: args.snapshot.back.strokes.map(canonicalStroke),
+        fills: cloneFills(args.snapshot.back.fills ?? []),
+      })
+    : null
+  const snapshotWantsSides =
+    Boolean(args.snapshot.back) ||
+    args.snapshot.activeSide !== undefined ||
+    savedSnapshotHasBackInk(args.snapshot)
+
+  if (isStudioFrontBackEnabled() && (snapshotWantsSides || priorWasV2 || priorHadBackInk)) {
     next = upgradeDraftToV2(next)
     next.activeSide = args.snapshot.activeSide === 'back' ? 'back' : 'front'
-    next.back = args.snapshot.back
-      ? cloneSideBag({
-          strokes: args.snapshot.back.strokes.map(canonicalStroke),
-          fills: cloneFills(args.snapshot.back.fills ?? []),
-        })
-      : emptySideBag()
-  } else if (documentHasBackInk(next) || args.snapshot.back) {
+    next.back = snapshotBack ?? emptySideBag()
+    // Emptying previously present Back ink needs clearBackIntent for OCC.
+    if (priorHadBackInk && !sideHasInk(next.back)) {
+      next.clearBackIntent = true
+    }
+  } else if (snapshotBack) {
     next = upgradeDraftToV2(next)
-    if (args.snapshot.back) next.back = cloneSideBag(args.snapshot.back)
+    next.back = snapshotBack
+    if (args.snapshot.activeSide === 'back' || args.snapshot.activeSide === 'front') {
+      next.activeSide = args.snapshot.activeSide
+    }
   }
   return next
 }

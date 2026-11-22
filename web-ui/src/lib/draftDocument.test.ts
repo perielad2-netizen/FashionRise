@@ -256,4 +256,48 @@ describe('draftDocument', () => {
     expect(kept.strokes[0]?.id).toBe('front-1')
     expect(kept.clientRevision).toBeGreaterThan(10)
   })
+
+  it('Keep-this-device honors clearBackIntent instead of restoring cloud Back', async () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const { prepareKeepDeviceDocument: prepare, STUDIO_DRAFT_SCHEMA_V2: v2 } =
+      await import('@/lib/draftDocument')
+    const server = bumpDraftDocument(createEmptyDraftDocument(), {
+      schema: v2,
+      activeSide: 'front',
+      back: {
+        strokes: [
+          {
+            id: 'cloud-back',
+            tool: 'draw',
+            points: [1, 2, 1],
+            color: '#000',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+    } as never)
+    ;(server as { clientRevision: number }).clientRevision = 8
+    const local = bumpDraftDocument(createEmptyDraftDocument(), {
+      schema: v2,
+      activeSide: 'front',
+      back: { strokes: [], fills: [] },
+      clearBackIntent: true,
+      strokes: [
+        {
+          id: 'opened-front',
+          tool: 'draw',
+          points: [3, 4, 1],
+          color: '#111',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+    } as never)
+    const kept = prepare(local, server, 8)
+    expect(kept.back?.strokes ?? []).toEqual([])
+    expect(kept.clearBackIntent).toBe(true)
+    expect(kept.strokes[0]?.id).toBe('opened-front')
+  })
 })
