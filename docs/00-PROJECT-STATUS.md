@@ -12,8 +12,9 @@
 | Tables | Alembic **039** + **040** (`status`, `source_title`, `responded_at` on `design_share_transfers`) |
 | UX | Share dialog: “invite to approve”; inbox Accept/Decline on My Designs |
 | Loop | After accept: Open → edit → Magic → publish → Share back (each send needs approval again) |
-| Tip | BE `/opt/fashionrise/src` @ **`61fb0ceb`** (alembic **040**) · FE `/var/www/fashionrise/releases/61fb0ceb-design-share-approve` · `/version.json` → `61fb0ceb` |
-| Rollback FE | `ln -sfn /var/www/fashionrise/releases/f34bd487-design-share /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Tip | BE `/opt/fashionrise/src` @ **`2f77f667`** (alembic **040**) · FE `/var/www/fashionrise/releases/2f77f667-share-copy-delete` · `/version.json` → `2f77f667` |
+| Delete copy | Recipient can delete their shared copy via My Designs trash; sender original untouched (fixed `envelope: true` block) |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/61fb0ceb-design-share-approve /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | PR | [#482](https://github.com/perielad2-netizen/FashionRise/pull/482) |
 
 ## LIVE — Create Model nginx consent/upload allowlist (2026-11-22 Asia/Jerusalem)
