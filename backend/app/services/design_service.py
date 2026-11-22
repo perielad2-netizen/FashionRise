@@ -843,6 +843,16 @@ def delete_design(db: Session, design_id: uuid.UUID, user: User) -> None:
     db.commit()
 
 
+def _envelope_allows_saved_delete(envelope: Any, schema: Any) -> bool:
+    """Accept schema-string envelopes, or legacy boolean True used by early share copies."""
+    if envelope is None:
+        return True
+    if envelope in SAVED_DESIGN_SCHEMAS:
+        return True
+    # Early friend-share copies wrote envelope=True; treat as OK when schema is a saved v1/v2.
+    return envelope is True and _is_saved_schema(schema)
+
+
 def _is_deletable_saved_design(design: GarmentDesign) -> bool:
     """Strict saved-only delete eligibility: private V1/V2, no Studio signals, not damaged."""
     if design.visibility != "private":
@@ -857,8 +867,7 @@ def _is_deletable_saved_design(design: GarmentDesign) -> bool:
     kind = meta.get("designKind")
     if kind is not None and kind != SAVED_DESIGN_KIND:
         return False
-    envelope = meta.get("envelope")
-    if envelope is not None and envelope not in SAVED_DESIGN_SCHEMAS:
+    if not _envelope_allows_saved_delete(meta.get("envelope"), schema):
         return False
     try:
         _validate_saved_design_data(data)
@@ -870,9 +879,10 @@ def _is_deletable_saved_design(design: GarmentDesign) -> bool:
 def delete_saved_design(db: Session, design_id: uuid.UUID, user: User) -> None:
     """Owner-authorized delete for private saved_design.v1/v2 only.
 
-    Rejects Studio working drafts, unknown/damaged envelopes, non-private rows,
-    and other design kinds. Non-owners see a privacy-preserving 404.
-    Generic ``delete_design`` remains unchanged for other API consumers.
+    Deletes only this owner's row (including a received friend-share copy). Never
+    touches another user's original. Rejects Studio working drafts, unknown/damaged
+    envelopes, non-private rows, and other design kinds. Non-owners see a
+    privacy-preserving 404. Generic ``delete_design`` remains unchanged.
     """
     d = db.get(GarmentDesign, design_id)
     if not d:

@@ -3,16 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-## Preview — Share design with friend (continue + fabrics/models) (2026-11-22 Asia/Jerusalem)
+## LIVE — Share design approve before My Designs (2026-11-22 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Feature | My Designs → Share → pick accepted friend → friend gets a saved copy + grants to sender fabrics/models |
-| API | `POST /api/v1/designs/{id}/share` `{friend_user_id, note?}` |
-| Tables | `design_collaborations` · `design_share_transfers` · `shared_asset_grants` (Alembic **039**) |
-| Loop | Friend can Open → edit → Magic → publish to FashionRise → Share back (unlimited) |
-| Edge | Designs POST already allowlisted (`…/share` under existing designs location) |
-| Next | Owner web test: two friends share a design both ways |
+| Feature | Share sends a **pending invite**; recipient Accept/Decline in My Designs → Waiting for you. Copy + fabric/model grants only on Accept |
+| API | `POST …/designs/{id}/share` · `GET …/designs/shares/incoming` · `POST …/shares/{id}/accept` · `POST …/shares/{id}/reject` |
+| Tables | Alembic **039** + **040** (`status`, `source_title`, `responded_at` on `design_share_transfers`) |
+| UX | Share dialog: “invite to approve”; inbox Accept/Decline on My Designs |
+| Loop | After accept: Open → edit → Magic → publish → Share back (each send needs approval again) |
+| Tip | BE `/opt/fashionrise/src` @ **`2f77f667`** (alembic **040**) · FE `/var/www/fashionrise/releases/2f77f667-share-copy-delete` · `/version.json` → `2f77f667` |
+| Delete copy | Recipient can delete their shared copy via My Designs trash; sender original untouched (fixed `envelope: true` block) |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/61fb0ceb-design-share-approve /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| PR | [#482](https://github.com/perielad2-netizen/FashionRise/pull/482) |
 
 ## LIVE — Create Model nginx consent/upload allowlist (2026-11-22 Asia/Jerusalem)
 

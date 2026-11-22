@@ -1,8 +1,8 @@
 """Share a saved design with an accepted friend so they can continue it.
 
-Creates a recipient-owned saved-design copy, grants read access to the
-sender's fabrics and models (croquis), and records the transfer so friends
-can pass the design back and forth.
+Share creates a *pending* invite. Only when the friend accepts do we create
+their saved-design copy and grant fabrics/models. Friends can pass designs
+back and forth; each send needs approval again.
 """
 
 from __future__ import annotations
@@ -15,10 +15,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.design_collaboration import (
     ASSET_KIND_CROQUIS,
     ASSET_KIND_FABRIC,
+    SHARE_STATUS_ACCEPTED,
+    SHARE_STATUS_PENDING,
+    SHARE_STATUS_REJECTED,
     DesignCollaboration,
     DesignShareTransfer,
     SharedAssetGrant,
@@ -184,9 +187,13 @@ def _copy_saved_design_for_recipient(
     if len(title) > 300:
         title = title[:297] + "…"
 
+    schema_name = design_data.get("schema")
+    if schema_name not in design_service.SAVED_DESIGN_SCHEMAS:
+        schema_name = SAVED_DESIGN_V2
     meta: dict[str, Any] = {
         "designKind": SAVED_DESIGN_KIND,
-        "envelope": True,
+        # Must be a schema string — boolean True blocks DELETE /designs/saved/{id}.
+        "envelope": schema_name,
         "saveRequestId": design_data.get("saveRequestId"),
         "savedAt": design_data.get("savedAt"),
         "receivedViaShare": True,
@@ -218,6 +225,41 @@ def _copy_saved_design_for_recipient(
     return created
 
 
+def _transfer_read(
+    db: Session,
+    transfer: DesignShareTransfer,
+    *,
+    fabrics_granted: int = 0,
+    croquis_granted: int = 0,
+    received: GarmentDesign | None = None,
+) -> DesignShareTransferRead:
+    from_user = db.get(User, transfer.from_user_id)
+    to_user = db.get(User, transfer.to_user_id)
+    received_read = DesignRead.model_validate(received) if received is not None else None
+    if received_read is None and transfer.received_design_id is not None:
+        row = db.get(GarmentDesign, transfer.received_design_id)
+        if row is not None:
+            received_read = DesignRead.model_validate(row)
+    return DesignShareTransferRead(
+        id=transfer.id,
+        collaboration_id=transfer.collaboration_id,
+        from_user_id=transfer.from_user_id,
+        to_user_id=transfer.to_user_id,
+        source_design_id=transfer.source_design_id,
+        received_design_id=transfer.received_design_id,
+        note=transfer.note,
+        status=transfer.status,
+        source_title=transfer.source_title,
+        responded_at=transfer.responded_at,
+        created_at=transfer.created_at,
+        from_username=from_user.username if from_user else None,
+        to_username=to_user.username if to_user else None,
+        received_design=received_read,
+        fabrics_granted=fabrics_granted,
+        croquis_granted=croquis_granted,
+    )
+
+
 def share_design_with_friend(
     db: Session,
     user: User,
@@ -238,63 +280,139 @@ def share_design_with_friend(
         raise NotFoundError("Friend not found")
     friendship_service.require_accepted_friends(db, user, friend)
 
+    # One open invite per source design + recipient.
+    existing_pending = db.scalar(
+        select(DesignShareTransfer).where(
+            DesignShareTransfer.source_design_id == source.id,
+            DesignShareTransfer.to_user_id == friend.id,
+            DesignShareTransfer.status == SHARE_STATUS_PENDING,
+        )
+    )
+    if existing_pending is not None:
+        raise ConflictError(
+            f"You already sent this design to {friend.username}. "
+            "Wait for them to accept or decline."
+        )
+
     collaboration = _get_or_create_collaboration(
         db, from_user=user, to_user=friend, origin_design_id=source.id
     )
-    fabrics_granted, croquis_granted = _grant_sender_library(
-        db, collaboration=collaboration, granter=user, grantee=friend
-    )
-
-    transfer_id = uuid.uuid4()
-    received = _copy_saved_design_for_recipient(
-        db,
-        source=source,
-        from_user=user,
-        to_user=friend,
-        collaboration=collaboration,
-        transfer_id=transfer_id,
-        note=data.note,
-    )
-
     transfer = DesignShareTransfer(
-        id=transfer_id,
+        id=uuid.uuid4(),
         collaboration_id=collaboration.id,
         from_user_id=user.id,
         to_user_id=friend.id,
         source_design_id=source.id,
-        received_design_id=received.id,
+        received_design_id=None,
         note=(data.note.strip() if data.note and data.note.strip() else None),
+        status=SHARE_STATUS_PENDING,
+        source_title=(source.title or "Untitled design")[:300],
+        responded_at=None,
     )
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+
+    transfer_read = _transfer_read(db, transfer)
+    return DesignShareResult(
+        transfer=transfer_read,
+        received_design=None,
+        collaboration_id=collaboration.id,
+        message=(
+            f"Invite sent to {friend.username}. "
+            "They’ll see it in My Designs and must Accept before it is added."
+        ),
+    )
+
+
+def list_incoming_shares(db: Session, user: User) -> list[DesignShareTransferRead]:
+    rows = db.scalars(
+        select(DesignShareTransfer)
+        .where(
+            DesignShareTransfer.to_user_id == user.id,
+            DesignShareTransfer.status == SHARE_STATUS_PENDING,
+        )
+        .order_by(DesignShareTransfer.created_at.desc())
+    ).all()
+    return [_transfer_read(db, row) for row in rows]
+
+
+def _get_pending_for_recipient(
+    db: Session, user: User, transfer_id: uuid.UUID
+) -> DesignShareTransfer:
+    transfer = db.get(DesignShareTransfer, transfer_id)
+    if transfer is None or transfer.to_user_id != user.id:
+        raise NotFoundError("Share invite not found")
+    if transfer.status != SHARE_STATUS_PENDING:
+        raise ConflictError("This share invite was already answered.")
+    return transfer
+
+
+def accept_design_share(db: Session, user: User, transfer_id: uuid.UUID) -> DesignShareResult:
+    transfer = _get_pending_for_recipient(db, user, transfer_id)
+    if transfer.source_design_id is None:
+        raise ValidationAppError("This share invite no longer has a source design.")
+    source = db.get(GarmentDesign, transfer.source_design_id)
+    if source is None:
+        raise NotFoundError("The shared design is no longer available.")
+    from_user = db.get(User, transfer.from_user_id)
+    if from_user is None or not from_user.is_active:
+        raise NotFoundError("The sender is no longer available.")
+    friendship_service.require_accepted_friends(db, user, from_user)
+
+    collaboration = db.get(DesignCollaboration, transfer.collaboration_id)
+    if collaboration is None:
+        collaboration = _get_or_create_collaboration(
+            db, from_user=from_user, to_user=user, origin_design_id=source.id
+        )
+        transfer.collaboration_id = collaboration.id
+
+    fabrics_granted, croquis_granted = _grant_sender_library(
+        db, collaboration=collaboration, granter=from_user, grantee=user
+    )
+    received = _copy_saved_design_for_recipient(
+        db,
+        source=source,
+        from_user=from_user,
+        to_user=user,
+        collaboration=collaboration,
+        transfer_id=transfer.id,
+        note=transfer.note,
+    )
+    transfer.received_design_id = received.id
+    transfer.status = SHARE_STATUS_ACCEPTED
+    transfer.responded_at = _utcnow()
     db.add(transfer)
     db.commit()
     db.refresh(transfer)
     db.refresh(received)
 
-    received_read = DesignRead.model_validate(received)
-    transfer_read = DesignShareTransferRead(
-        id=transfer.id,
-        collaboration_id=transfer.collaboration_id,
-        from_user_id=transfer.from_user_id,
-        to_user_id=transfer.to_user_id,
-        source_design_id=transfer.source_design_id,
-        received_design_id=transfer.received_design_id,
-        note=transfer.note,
-        created_at=transfer.created_at,
-        from_username=user.username,
-        to_username=friend.username,
-        received_design=received_read,
+    transfer_read = _transfer_read(
+        db,
+        transfer,
         fabrics_granted=fabrics_granted,
         croquis_granted=croquis_granted,
+        received=received,
     )
     return DesignShareResult(
         transfer=transfer_read,
-        received_design=received_read,
-        collaboration_id=collaboration.id,
+        received_design=DesignRead.model_validate(received),
+        collaboration_id=transfer.collaboration_id,
         message=(
-            f"Shared with {friend.username}. They can open it in My Designs, "
-            "use your fabrics and models, create Magic, and publish to FashionRise."
+            f"Accepted design from {from_user.username}. "
+            "It’s in My Designs — open it to continue, Magic, or publish."
         ),
     )
+
+
+def reject_design_share(db: Session, user: User, transfer_id: uuid.UUID) -> DesignShareTransferRead:
+    transfer = _get_pending_for_recipient(db, user, transfer_id)
+    transfer.status = SHARE_STATUS_REJECTED
+    transfer.responded_at = _utcnow()
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+    return _transfer_read(db, transfer)
 
 
 def has_fabric_grant(db: Session, user: User, asset_id: uuid.UUID) -> bool:

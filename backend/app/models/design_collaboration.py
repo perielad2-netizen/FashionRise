@@ -14,6 +14,10 @@ from app.db.base import Base
 ASSET_KIND_FABRIC = "fabric"
 ASSET_KIND_CROQUIS = "croquis"
 
+SHARE_STATUS_PENDING = "pending"
+SHARE_STATUS_ACCEPTED = "accepted"
+SHARE_STATUS_REJECTED = "rejected"
+
 
 class DesignCollaboration(Base):
     """Unordered friend pair that can pass designs back and forth."""
@@ -44,9 +48,15 @@ class DesignCollaboration(Base):
 
 
 class DesignShareTransfer(Base):
-    """One send of a design copy from friend A → friend B."""
+    """One send of a design from friend A → friend B (pending until accepted)."""
 
     __tablename__ = "design_share_transfers"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected')",
+            name="ck_design_share_transfers_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     collaboration_id: Mapped[uuid.UUID] = mapped_column(
@@ -68,6 +78,11 @@ class DesignShareTransfer(Base):
         UUID(as_uuid=True), ForeignKey("garment_designs.id", ondelete="SET NULL"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=SHARE_STATUS_PENDING, index=True
+    )
+    source_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
