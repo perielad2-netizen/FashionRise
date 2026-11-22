@@ -2,6 +2,11 @@ from app.models.ai_job import AIJob
 from app.models.body_measurement_profile import BodyMeasurementProfile
 from app.models.color_palette import ColorPalette
 from app.models.content_report import ContentReport
+from app.models.design_collaboration import (
+    DesignCollaboration,
+    DesignShareTransfer,
+    SharedAssetGrant,
+)
 from app.models.design_export import DesignExport
 from app.models.design_revision import DesignRevision
 from app.models.fabric_asset import FabricAsset
@@ -59,8 +64,11 @@ __all__ = [
     "CompetitionGroupMember",
     "CompetitionWeek",
     "ContentReport",
+    "DesignCollaboration",
     "DesignExport",
     "DesignRevision",
+    "DesignShareTransfer",
+    "SharedAssetGrant",
     "FabricAsset",
     "FittingRoomModelCompareOperation",
     "GalleryComment",

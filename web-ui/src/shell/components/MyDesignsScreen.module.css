@@ -104,14 +104,10 @@
 
 .ghostBtn:disabled,
 .openBtn:disabled,
-.deleteIcon:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .ghostBtn:active:not(:disabled),
 .openBtn:active:not(:disabled),
 .moreBtn:active:not(:disabled),
+.shareIcon:active:not(:disabled),
 .deleteIcon:active:not(:disabled) {
   transform: scale(0.98);
 }
@@ -119,6 +115,7 @@
 .ghostBtn:focus-visible,
 .openBtn:focus-visible,
 .moreBtn:focus-visible,
+.shareIcon:focus-visible,
 .deleteIcon:focus-visible {
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
@@ -310,11 +307,17 @@
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.deleteIcon {
+.tileActions {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+
+.shareIcon,
+.deleteIcon {
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -328,10 +331,41 @@
   backdrop-filter: blur(8px);
 }
 
+.shareIcon:hover {
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(190, 24, 93, 0.45);
+  color: #fbcfe8;
+}
+
 .deleteIcon:hover {
   border-color: rgba(248, 113, 113, 0.5);
   background: rgba(127, 29, 29, 0.55);
   color: #fecaca;
+}
+
+.shareIcon:disabled,
+.deleteIcon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sharedBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  max-width: calc(100% - 96px);
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: rgba(12, 10, 16, 0.78);
+  color: #f9a8d4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .srOnly {

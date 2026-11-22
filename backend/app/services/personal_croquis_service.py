@@ -596,7 +596,7 @@ def upload_source_photo(
         raise
 
 
-def list_personal_croquis(db: Session, user: User) -> list[PersonalCroquis]:
+def list_owned_personal_croquis(db: Session, user: User) -> list[PersonalCroquis]:
     return (
         db.query(PersonalCroquis)
         .filter(
@@ -610,6 +610,13 @@ def list_personal_croquis(db: Session, user: User) -> list[PersonalCroquis]:
     )
 
 
+def list_personal_croquis(db: Session, user: User) -> list[PersonalCroquis]:
+    """Own models plus friend-shared models from design collaborations."""
+    from app.services import design_share_service
+
+    return design_share_service.list_accessible_croquis(db, user)
+
+
 def get_owned_croquis(
     db: Session,
     user: User,
@@ -618,6 +625,7 @@ def get_owned_croquis(
     include_archived: bool = False,
     include_erased: bool = False,
 ) -> PersonalCroquis:
+    """True owner only — mutations (generate/archive/publish/delete) stay owner-scoped."""
     q = db.query(PersonalCroquis).filter(
         PersonalCroquis.id == croquis_id,
         PersonalCroquis.owner_id == user.id,
@@ -635,14 +643,31 @@ def get_owned_croquis(
     return row
 
 
+def get_accessible_croquis(
+    db: Session,
+    user: User,
+    croquis_id: uuid.UUID,
+    *,
+    include_archived: bool = False,
+) -> PersonalCroquis:
+    """Owner or collaborator with a croquis grant (read / pin / Magic underlay)."""
+    from app.services import design_share_service
+
+    return design_share_service.get_accessible_croquis(
+        db, user, croquis_id, include_archived=include_archived
+    )
+
+
 def latest_accepted_version(
     db: Session, user: User, croquis_id: uuid.UUID
 ) -> PersonalCroquisVersion | None:
+    # Authorize via owner/grant first; versions remain owned by the croquis owner.
+    croquis = get_accessible_croquis(db, user, croquis_id, include_archived=True)
     return (
         db.query(PersonalCroquisVersion)
         .filter(
-            PersonalCroquisVersion.croquis_id == croquis_id,
-            PersonalCroquisVersion.owner_id == user.id,
+            PersonalCroquisVersion.croquis_id == croquis.id,
+            PersonalCroquisVersion.owner_id == croquis.owner_id,
             PersonalCroquisVersion.status == VERSION_STATUS_ACCEPTED,
         )
         .order_by(PersonalCroquisVersion.version.desc())
@@ -656,13 +681,13 @@ def get_exact_version(
     croquis_id: uuid.UUID,
     version: int,
 ) -> PersonalCroquisVersion:
-    # Ownership on croquis first — never leak existence across owners.
-    get_owned_croquis(db, user, croquis_id, include_archived=True, include_erased=True)
+    # Ownership or grant on croquis first — never leak existence across strangers.
+    croquis = get_accessible_croquis(db, user, croquis_id, include_archived=True)
     row = (
         db.query(PersonalCroquisVersion)
         .filter(
-            PersonalCroquisVersion.croquis_id == croquis_id,
-            PersonalCroquisVersion.owner_id == user.id,
+            PersonalCroquisVersion.croquis_id == croquis.id,
+            PersonalCroquisVersion.owner_id == croquis.owner_id,
             PersonalCroquisVersion.version == version,
         )
         .first()
@@ -679,12 +704,15 @@ def get_owned_media_asset(
     *,
     allow_erased_meta: bool = False,
 ) -> PrivateMediaAsset:
-    row = (
-        db.query(PrivateMediaAsset)
-        .filter(PrivateMediaAsset.id == asset_id, PrivateMediaAsset.owner_id == user.id)
-        .first()
-    )
+    from app.services import design_share_service
+
+    row = db.query(PrivateMediaAsset).filter(PrivateMediaAsset.id == asset_id).first()
     if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    allowed = row.owner_id == user.id or design_share_service.media_asset_accessible_via_croquis_grant(
+        db, user, row
+    )
+    if not allowed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     if not allow_erased_meta and (
         row.erase_requested_at is not None or row.bytes_purged_at is not None

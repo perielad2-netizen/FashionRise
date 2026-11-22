@@ -258,6 +258,16 @@ def search_designers(
     return hits
 
 
+def require_accepted_friends(db: Session, user_a: User, user_b: User) -> UserFriendship:
+    """Raise if A and B are not an accepted friendship pair."""
+    if user_a.id == user_b.id:
+        raise ForbiddenError("Cannot share with yourself")
+    row = _find_pair(db, user_a.id, user_b.id)
+    if row is None or row.status != FRIENDSHIP_ACCEPTED:
+        raise ForbiddenError("You can only share designs with accepted friends")
+    return row
+
+
 def ensure_accepted_friends(db: Session, user_a: User, user_b: User) -> UserFriendship:
     """Idempotent operator helper — create or upgrade to accepted friendship."""
     if user_a.id == user_b.id:

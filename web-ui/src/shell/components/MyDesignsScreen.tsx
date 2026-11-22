@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FolderOpen, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, FolderOpen, RefreshCw, Share2, Trash2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { PREVIEW_PAGE_SIZE, PreviewRenderer } from '@/lib/designPreview'
 import {
@@ -13,6 +13,7 @@ import type { SaveStatus } from '@/lib/draftDocument'
 import type { Stroke } from '@/lib/strokes'
 import type { ModelChoice } from '@/shell/modelTypes'
 import { deleteSavedDesign, listSavedDesigns } from '@/services/savedDesignsApi'
+import { ShareDesignDialog } from '@/shell/components/ShareDesignDialog'
 import styles from './MyDesignsScreen.module.css'
 
 type WorkingDraft = {
@@ -91,12 +92,14 @@ function SavedDesignCard({
   renderer,
   onOpen,
   onDelete,
+  onShare,
   disabled,
 }: {
   record: SavedDesignRecord
   renderer: PreviewRenderer | null
   onOpen: (id: string) => void
   onDelete: (record: SavedDesignRecord) => void
+  onShare: (record: SavedDesignRecord) => void
   disabled: boolean
 }) {
   const url = usePreview(renderer, `saved:${record.id}`, record.snapshot)
@@ -115,16 +118,31 @@ function SavedDesignCard({
           <PreviewImage url={url} label={`Preview of ${title}`} />
         </div>
         {backBadge ? <span className={styles.backBadge}>Back</span> : null}
-        <button
-          type="button"
-          className={styles.deleteIcon}
-          onClick={() => onDelete(record)}
-          disabled={disabled}
-          aria-label={`Delete ${title}`}
-        >
-          <Trash2 size={15} aria-hidden="true" />
-          <span className={styles.srOnly}>Delete</span>
-        </button>
+        {record.sharedFromUsername ? (
+          <span className={styles.sharedBadge}>From @{record.sharedFromUsername}</span>
+        ) : null}
+        <div className={styles.tileActions}>
+          <button
+            type="button"
+            className={styles.shareIcon}
+            onClick={() => onShare(record)}
+            disabled={disabled}
+            aria-label={`Share ${title} with a friend`}
+          >
+            <Share2 size={15} aria-hidden="true" />
+            <span className={styles.srOnly}>Share</span>
+          </button>
+          <button
+            type="button"
+            className={styles.deleteIcon}
+            onClick={() => onDelete(record)}
+            disabled={disabled}
+            aria-label={`Delete ${title}`}
+          >
+            <Trash2 size={15} aria-hidden="true" />
+            <span className={styles.srOnly}>Delete</span>
+          </button>
+        </div>
         <div className={styles.tileFooter}>
           <div className={styles.tileCopy}>
             <h3 className={styles.cardTitle} title={title}>
@@ -165,6 +183,7 @@ export function MyDesignsScreen({
   const [reloadToken, setReloadToken] = useState(0)
   const [renderer] = useState(() => new PreviewRenderer({ ownerId }))
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
+  const [shareRecord, setShareRecord] = useState<SavedDesignRecord | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const workingKeyRef = useRef<string | null>(null)
   const deleteInFlightRef = useRef(false)
@@ -235,7 +254,14 @@ export function MyDesignsScreen({
   const askDelete = useCallback((record: SavedDesignRecord) => {
     deleteTriggerRef.current = document.activeElement as HTMLElement | null
     setNotice(null)
+    setShareRecord(null)
     setDeleteDialog({ phase: 'confirm', record })
+  }, [])
+
+  const askShare = useCallback((record: SavedDesignRecord) => {
+    setNotice(null)
+    setDeleteDialog(null)
+    setShareRecord(record)
   }, [])
 
   const closeDeleteDialog = useCallback(() => {
@@ -305,7 +331,9 @@ export function MyDesignsScreen({
         <div className={styles.brandBlock}>
           <p className={styles.eyebrow}>FashionRise</p>
           <h1 className={styles.title}>My Designs</h1>
-          <p className={styles.subtitle}>Private to your account. Only you can see these.</p>
+          <p className={styles.subtitle}>
+            Private to you — or share a saved design with a friend so they can continue it.
+          </p>
         </div>
         <div className={styles.headActions}>
           <button
@@ -402,7 +430,8 @@ export function MyDesignsScreen({
                   renderer={renderer}
                   onOpen={onOpen}
                   onDelete={askDelete}
-                  disabled={opening || deleteDialog?.phase === 'deleting'}
+                  onShare={askShare}
+                  disabled={opening || deleteDialog?.phase === 'deleting' || shareRecord != null}
                 />
               ))}
             </ul>
@@ -481,6 +510,18 @@ export function MyDesignsScreen({
             </>
           )}
         </ConfirmDialog>
+      ) : null}
+
+      {shareRecord ? (
+        <ShareDesignDialog
+          record={shareRecord}
+          onClose={() => setShareRecord(null)}
+          onShared={(message) => {
+            setShareRecord(null)
+            setNotice(message)
+            setReloadToken((v) => v + 1)
+          }}
+        />
       ) : null}
     </section>
   )
