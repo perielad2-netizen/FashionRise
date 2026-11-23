@@ -632,8 +632,14 @@ def update_croquis_sex(
     *,
     sex: str,
 ) -> PersonalCroquis:
-    """Owner sets/corrects male/female for Try On Person garment disambiguation."""
-    row = get_owned_croquis(db, user, croquis_id, include_archived=False)
+    """Set/correct male/female for Try On Person garment disambiguation.
+
+    Owner **or** design-share grantee (same access as Studio underlay / Try On).
+    Older shared Create Model rows often lack sex; collaborators must be able to
+    set it or Try On Person stays blocked with a false “Croquis not found”.
+    Delete / archive / publish stay owner-only via ``get_owned_croquis``.
+    """
+    row = get_accessible_croquis(db, user, croquis_id, include_archived=False)
     row.sex = normalize_croquis_sex(sex, required=True)
     db.add(row)
     db.commit()

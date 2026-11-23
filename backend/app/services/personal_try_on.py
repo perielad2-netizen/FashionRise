@@ -778,7 +778,8 @@ def enqueue_personal_try_on(
         )
     croquis_sex = pcs.normalize_croquis_sex(getattr(croquis, "sex", None), required=False)
     if provider_name == TRY_ON_PROVIDER_OPENAI and croquis_sex is None:
-        # Ambiguous shorts/skirts need an owner male/female flag before image gen.
+        # Ambiguous shorts/skirts need a male/female flag before image gen
+        # (owner or share grantee via PATCH …/sex).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select male or female for this model before Try On Person.",

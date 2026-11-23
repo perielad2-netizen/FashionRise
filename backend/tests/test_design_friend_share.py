@@ -25,6 +25,7 @@ from tests.croquis_test_fixtures import (
     adults_body,
     ai_body,
     enable_synthetic_croquis_notices,
+    record_upload_rights,
     storage_body,
 )
 
@@ -471,3 +472,95 @@ def test_share_grants_croquis_and_friend_can_try_on_person(client, db_session, m
     set_try_on_provider_override(None)
     set_croquis_provider_override(None)
     get_settings.cache_clear()
+
+
+def test_friend_can_patch_sex_on_shared_legacy_model(client, db_session, monkeypatch):
+    """Shared Create Model without sex: friend Male/Female chooser must not 404."""
+    enable_synthetic_croquis_notices(monkeypatch)
+    get_settings.cache_clear()
+    monkeypatch.setenv("MY_CROQUIS_UPLOAD_ENABLED", "true")
+    get_settings.cache_clear()
+
+    peri = register_with_invite(client, db_session, "peri_sex_share@example.com", "PeriSexShare")
+    yaniv = register_with_invite(client, db_session, "yaniv_sex_share@example.com", "YanivSexShare")
+    stranger = register_with_invite(client, db_session, "stranger_sex@example.com", "StrangerSex")
+    from app.models.design_collaboration import (
+        ASSET_KIND_CROQUIS,
+        DesignCollaboration,
+        SharedAssetGrant,
+    )
+    from app.models.user import User
+
+    peri_user = db_session.query(User).filter(User.username == "PeriSexShare").one()
+    yaniv_user = db_session.query(User).filter(User.username == "YanivSexShare").one()
+    ensure_accepted_friends(db_session, peri_user, yaniv_user)
+
+    croquis_base = "/api/v1/personal-croquis"
+    assert (
+        client.post(
+            f"{croquis_base}/attestations/adults",
+            headers=_auth(peri),
+            json=adults_body(),
+        ).status_code
+        == 200
+    )
+    storage = client.post(
+        f"{croquis_base}/consent/storage",
+        headers=_auth(peri),
+        json=storage_body(),
+    )
+    assert storage.status_code == 200, storage.text
+    record_upload_rights(client, peri)
+    # Legacy upload path: no sex on Create Model (pre-picker clients / old rows).
+    up = client.post(
+        f"{croquis_base}/photos",
+        headers=_auth(peri),
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+        data={"storage_consent_id": storage.json()["id"], "display_name": "Legacy shared"},
+    )
+    assert up.status_code == 201, up.text
+    croquis_id = up.json()["id"]
+    assert up.json().get("sex") in (None, "")
+
+    # Same access path as Accept share: collaboration + croquis grant (Noa/Yaniv prod case).
+    low, high = sorted([peri_user.id, yaniv_user.id], key=lambda u: str(u))
+    collab = DesignCollaboration(
+        id=uuid.uuid4(),
+        user_low_id=low,
+        user_high_id=high,
+        created_by_id=peri_user.id,
+        origin_design_id=None,
+    )
+    db_session.add(collab)
+    db_session.add(
+        SharedAssetGrant(
+            id=uuid.uuid4(),
+            collaboration_id=collab.id,
+            granter_id=peri_user.id,
+            grantee_id=yaniv_user.id,
+            asset_kind=ASSET_KIND_CROQUIS,
+            asset_id=uuid.UUID(croquis_id),
+        )
+    )
+    db_session.flush()
+
+    # Stranger still cannot mutate.
+    denied = client.patch(
+        f"{croquis_base}/{croquis_id}/sex",
+        headers=_auth(stranger),
+        json={"sex": "male"},
+    )
+    assert denied.status_code == 404, denied.text
+
+    # Friend with croquis grant can set male/female for Try On Person.
+    patched = client.patch(
+        f"{croquis_base}/{croquis_id}/sex",
+        headers=_auth(yaniv),
+        json={"sex": "male"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["sex"] == "male"
+
+    got = client.get(f"{croquis_base}/{croquis_id}", headers=_auth(yaniv))
+    assert got.status_code == 200
+    assert got.json()["sex"] == "male"

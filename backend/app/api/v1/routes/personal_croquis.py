@@ -178,7 +178,7 @@ def patch_croquis_sex(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> PersonalCroquisRead:
-    """Owner sets male/female so Try On Person can disambiguate pants vs dress."""
+    """Owner or share grantee sets male/female so Try On can disambiguate pants vs dress."""
     _ = request.url
     croquis = pcs.update_croquis_sex(db, user, croquis_id, sex=body.sex)
     return _croquis_read(db, user, croquis)

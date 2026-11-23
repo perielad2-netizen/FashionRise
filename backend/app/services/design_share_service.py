@@ -86,6 +86,9 @@ def _grant_asset(
     asset_kind: str,
     asset_id: uuid.UUID,
 ) -> bool:
+    # Sessions use autoflush=False — flush so library + pinned grants in the same
+    # accept do not insert duplicate rows for uq_shared_asset_grants_target.
+    db.flush()
     existing = db.scalar(
         select(SharedAssetGrant).where(
             SharedAssetGrant.collaboration_id == collaboration_id,
