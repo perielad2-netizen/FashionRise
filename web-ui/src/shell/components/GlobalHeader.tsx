@@ -121,11 +121,19 @@ export function GlobalHeader({
 
   useEffect(() => {
     if (!menuOpen) return
-    const onDoc = (e: MouseEvent) => {
+    // pointerdown covers touch/WebView outside taps (mousedown alone is flaky).
+    const onDoc = (e: Event) => {
       if (!menuWrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
     }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [menuOpen])
 
   const avatarSrc =

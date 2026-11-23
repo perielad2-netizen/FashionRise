@@ -447,6 +447,22 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId(`runway-tab-${tabId}`))
   }
 
+  it('closes the Account menu on outside pointerdown', async () => {
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
+    expect(screen.getByRole('menu', { name: 'FashionRise menu' })).toBeInTheDocument()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu', { name: 'FashionRise menu' })).not.toBeInTheDocument()
+  })
+
+  it('closes the Account menu on Escape', async () => {
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await openMoreMenu()
+    expect(screen.getByRole('menu', { name: 'FashionRise menu' })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: 'FashionRise menu' })).not.toBeInTheDocument()
+  })
+
   it('opens My Profile when openOwnProfile deep-link is set', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
