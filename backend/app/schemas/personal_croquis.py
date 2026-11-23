@@ -184,7 +184,10 @@ class PhotoUploadFormNote(BaseModel):
     """Documentation-only schema — multipart uses Form fields."""
 
     storage_consent_id: uuid.UUID = Field(description="Valid croquis_storage consent id")
-    sex: CroquisSex = Field(description="Owner-declared male or female for Try On Person")
+    sex: CroquisSex | None = Field(
+        default=None,
+        description="Owner-declared male/female when provided; optional for legacy native clients",
+    )
     display_name: str | None = None
 
 

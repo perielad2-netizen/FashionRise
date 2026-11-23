@@ -1,7 +1,8 @@
 .backdrop {
+  /* Portaled to document.body — must stay above shell panes (z-index 80+). */
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;

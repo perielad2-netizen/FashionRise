@@ -144,7 +144,9 @@ def upload_photo(
     user: CurrentUser,
     file: UploadFile = File(...),
     storage_consent_id: uuid.UUID = Form(...),
-    sex: str = Form(...),
+    # Optional for native builds that predate the Male/Female Create Model control.
+    # Try On Person still requires sex (PATCH /sex or Create Model picker on web).
+    sex: str | None = Form(default=None),
     display_name: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> PersonalCroquisRead:

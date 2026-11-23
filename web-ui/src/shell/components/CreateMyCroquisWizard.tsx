@@ -11,6 +11,7 @@
  * public publishing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ApiError } from '@/services/api/client'
 import {
   acceptPersonalCroquisVersion,
@@ -104,6 +105,37 @@ export function CreateMyCroquisWizard({
   useEffect(() => {
     stepRef.current = step
   }, [step])
+
+  // Keep the dialog above Android/Samsung/Chrome bottom toolbars via visualViewport.
+  // Mirror ConfirmDialog — required when portaled to document.body from My Models
+  // (parent modelsRise transform otherwise traps position:fixed).
+  useEffect(() => {
+    if (!open) return
+    const vv = window.visualViewport
+    const sync = () => {
+      const layoutH = window.innerHeight || 0
+      const visibleH = vv?.height ?? layoutH
+      const offsetTop = vv?.offsetTop ?? 0
+      const chromeBottom = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
+      const target = document.querySelector(
+        '[data-testid="create-model-wizard-backdrop"]',
+      ) as HTMLElement | null
+      target?.style.setProperty('--fr-browser-chrome-bottom', `${chromeBottom}px`)
+      target?.style.setProperty('--fr-visible-height', `${Math.round(visibleH)}px`)
+    }
+    sync()
+    // Re-sync after portal paint.
+    const raf = window.requestAnimationFrame(sync)
+    vv?.addEventListener('resize', sync)
+    vv?.addEventListener('scroll', sync)
+    window.addEventListener('resize', sync)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      vv?.removeEventListener('resize', sync)
+      vv?.removeEventListener('scroll', sync)
+      window.removeEventListener('resize', sync)
+    }
+  }, [open])
 
   const cancelInFlightGenerate = useCallback(() => {
     // Only abandon mid-generation. Preview close/accept must not re-reject.
@@ -344,11 +376,15 @@ export function CreateMyCroquisWizard({
 
   if (!open) return null
 
-  return (
+  // Portal to document.body so position:fixed is not trapped by My Models
+  // modelsRise transform (Android modal jump after picker / on X close).
+  const overlay = (
     <>
     <div
       className={`fr-keyboard-overlay ${styles.backdrop}`}
       role="presentation"
+      data-portal="document-body"
+      data-testid="create-model-wizard-backdrop"
       onClick={handleClose}
     >
       <div
@@ -593,4 +629,7 @@ export function CreateMyCroquisWizard({
     <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </>
   )
+
+  if (typeof document === 'undefined') return overlay
+  return createPortal(overlay, document.body)
 }
