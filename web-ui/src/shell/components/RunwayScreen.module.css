@@ -492,6 +492,7 @@
 .immersiveActions .commentBtnOn,
 .immersiveActions .tryOnBtn,
 .immersiveActions .reportBtn,
+.immersiveActions .unpublishBtn,
 .immersiveActions .statChip {
   display: inline-flex;
   flex-direction: column;
@@ -520,6 +521,36 @@
 
 .immersiveActions .reportBtn {
   color: #fecaca;
+}
+
+.immersiveActions .unpublishBtn {
+  color: #fda4af;
+}
+
+.unpublishBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid rgba(253, 164, 175, 0.35);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecdd3;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.unpublishBtn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.unpublishBtn:focus-visible {
+  outline: 2px solid #fda4af;
+  outline-offset: 2px;
 }
 
 .actionCount {

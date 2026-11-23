@@ -574,31 +574,33 @@
   color: #fecdd3;
 }
 
-/* Edit sheet */
+/* Edit Designer Card — full front page (not a bottom sheet) */
 .sheetBackdrop {
   position: fixed;
   inset: 0;
   z-index: 70;
-  display: grid;
-  place-items: end center;
-  padding: max(10px, env(safe-area-inset-bottom)) 10px 10px;
-  background: rgba(4, 5, 10, 0.72);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: #07080d;
 }
 
 .sheet {
-  width: min(100%, 440px);
+  flex: 1 1 auto;
+  width: 100%;
   max-width: 100%;
-  max-height: min(88dvh, 720px);
-  max-height: min(88dvh, var(--fr-visible-height, 88dvh), 720px);
+  max-height: none;
+  min-height: 0;
   overflow: auto;
-  display: grid;
-  gap: 12px;
-  padding: 16px 16px 18px;
-  border-radius: 20px 20px 16px 16px;
-  background: linear-gradient(180deg, #17141c 0%, #0d0f16 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: max(16px, env(safe-area-inset-top)) 18px max(12px, env(safe-area-inset-bottom));
+  border-radius: 0;
+  background: linear-gradient(180deg, #14121a 0%, #0a0c12 55%, #07080d 100%);
+  border: 0;
   color: #fff;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: none;
   box-sizing: border-box;
 }
 
@@ -661,9 +663,11 @@
 }
 
 .editForm {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .editLabel {
@@ -729,6 +733,12 @@
   grid-template-columns: 1fr;
   gap: 8px;
   min-width: 0;
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding-top: 14px;
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(7, 8, 13, 0) 0%, #07080d 28%, #07080d 100%);
 }
 
 .sheetActions .primaryBtn,
@@ -936,13 +946,9 @@
 }
 
 @media (min-width: 720px) {
-  .sheetBackdrop {
-    place-items: center;
-    padding: 24px;
-  }
-
   .sheet {
-    border-radius: 20px;
+    max-width: 520px;
+    margin: 0 auto;
   }
 
   .looksGrid {

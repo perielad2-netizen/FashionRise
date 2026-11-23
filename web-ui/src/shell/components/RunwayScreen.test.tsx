@@ -155,6 +155,12 @@ vi.mock('@/services/pushApi', () => ({
   setPushDesired: vi.fn(),
 }))
 
+const unpublishLookFromRunway = vi.fn()
+
+vi.mock('@/services/looksApi', () => ({
+  unpublishLookFromRunway: (...args: unknown[]) => unpublishLookFromRunway(...args),
+}))
+
 let authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
 
 vi.mock('@/services/auth/AuthProvider', () => ({
@@ -237,6 +243,8 @@ describe('RunwayScreen', () => {
     disableRunwayPush.mockReset()
     runwayPushIsEnabled.mockReset()
     ensureDefaultRunwayPush.mockReset()
+    unpublishLookFromRunway.mockReset()
+    unpublishLookFromRunway.mockResolvedValue({ id: 'look-mine' })
     fetchGalleryImageBlob.mockReset()
     fetchGalleryImageBlob.mockResolvedValue(new Blob(['look'], { type: 'image/png' }))
     plantFittingRoomGarment.mockReset()
@@ -1234,5 +1242,35 @@ describe('RunwayScreen', () => {
     expect(await screen.findByTestId('runway-like-burst-dbl-1')).toBeInTheDocument()
     expect(likeGalleryItem).not.toHaveBeenCalled()
     expect(unlikeGalleryItem).not.toHaveBeenCalled()
+  })
+
+  it('lets the owner remove their own look from FashionRise with StarOff confirm', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'discover') {
+        return [
+          {
+            ...circleItem,
+            id: 'mine-1',
+            look_id: 'look-mine',
+            user_id: 'viewer-1',
+            title: 'My published look',
+            username: 'viewer',
+          },
+        ]
+      }
+      if (opts?.sort === 'circle') return []
+      if (opts?.sort === 'following') return []
+      if (opts?.sort === 'top10') return []
+      return []
+    })
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const unpublish = await screen.findByTestId('runway-unpublish-mine-1')
+    expect(unpublish).toHaveAttribute('aria-label', 'Remove from FashionRise')
+    fireEvent.click(unpublish)
+    expect(await screen.findByRole('heading', { name: /Remove from FashionRise/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^Remove$/i }))
+    await waitFor(() => expect(unpublishLookFromRunway).toHaveBeenCalledWith('look-mine'))
+    await waitFor(() => expect(screen.queryByTestId('runway-unpublish-mine-1')).toBeNull())
   })
 })

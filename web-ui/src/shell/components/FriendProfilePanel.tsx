@@ -46,7 +46,7 @@ export type DesignerRef = {
 
 type Props = {
   friend: FriendUser | DesignerRef
-  /** When true and viewing self, open the Edit Designer Card sheet once ready. */
+  /** When true and viewing self, open the Edit Designer Card page once ready. */
   startInEditMode?: boolean
   /** Open another designer profile (e.g. from the Followers list). */
   onOpenDesigner?: (designer: DesignerRef) => void
@@ -583,19 +583,12 @@ export function FriendProfilePanel({
           className={`fr-keyboard-overlay ${styles.sheetBackdrop}`}
           role="presentation"
           data-testid="designer-profile-editor"
-          onClick={(e) => {
-            if (e.target !== e.currentTarget) return
-            if (editBusy) return
-            if (shouldIgnoreOverlayDismiss()) return
-            setEditing(false)
-          }}
         >
           <div
             className={styles.sheet}
             role="dialog"
             aria-modal="true"
             aria-labelledby={editTitleId}
-            onClick={(e) => e.stopPropagation()}
           >
             <h2 id={editTitleId} className={styles.sheetTitle}>
               Edit Designer Card

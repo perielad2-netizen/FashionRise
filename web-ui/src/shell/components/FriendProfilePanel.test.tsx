@@ -206,7 +206,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
     await waitFor(() => expect(screen.getByTestId('friend-look-g1')).toBeInTheDocument())
   })
 
-  it('shows own designed profile first and opens edit sheet on demand', async () => {
+  it('shows own designed profile first and opens edit page on demand', async () => {
     getPublicProfile.mockResolvedValue({
       id: 'p-me',
       user_id: 'viewer-1',

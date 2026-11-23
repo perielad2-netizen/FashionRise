@@ -25,11 +25,14 @@ import {
   Shirt,
   Sparkles,
   Star,
+  StarOff,
   User,
   UserPlus,
   Users,
   X,
 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
+import { unpublishLookFromRunway } from '@/services/looksApi'
 import {
   fetchGalleryImageBlob,
   getGalleryItem,
@@ -1797,11 +1800,12 @@ function RunwayCard({
   const tapStartRef = useRef<{ x: number; y: number } | null>(null)
   const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null)
   const [heartBurstKey, setHeartBurstKey] = useState(0)
-  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | 'follow' | 'tryon' | null>(
-    null,
-  )
+  const [busy, setBusy] = useState<
+    'like' | 'score' | 'comment' | 'follow' | 'tryon' | 'unpublish' | null
+  >(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
+  const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comments, setComments] = useState<GalleryComment[] | null>(null)
   const [commentsError, setCommentsError] = useState<string | null>(null)
@@ -2095,6 +2099,23 @@ function RunwayCard({
       setBusy(null)
     }
   }, [busy, followingDesigner, isOwn, item.user_id, viewerId])
+
+  const onConfirmUnpublish = useCallback(async () => {
+    if (!isOwn || !item.look_id || busy) return
+    setBusy('unpublish')
+    setActionError(null)
+    try {
+      await unpublishLookFromRunway(item.look_id)
+      setUnpublishConfirmOpen(false)
+      onHideReported?.(item.id)
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError ? err.message : 'Could not remove this look from FashionRise.',
+      )
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, isOwn, item.id, item.look_id, onHideReported])
 
   const onScore = useCallback(
     async (raw: string) => {
@@ -2392,6 +2413,23 @@ function RunwayCard({
           {!immersive ? <span>Report</span> : null}
         </button>
       ) : null}
+      {isOwn && item.look_id ? (
+        <button
+          type="button"
+          className={styles.unpublishBtn}
+          aria-label="Remove from FashionRise"
+          data-testid={`runway-unpublish-${item.id}`}
+          disabled={busy === 'unpublish'}
+          onClick={() => {
+            setCommentsOpen(false)
+            setActionError(null)
+            setUnpublishConfirmOpen(true)
+          }}
+        >
+          <StarOff size={immersive ? 24 : 12} aria-hidden />
+          {!immersive ? <span>Remove</span> : null}
+        </button>
+      ) : null}
     </div>
   )
 
@@ -2561,6 +2599,39 @@ function RunwayCard({
             onHideReported?.(galleryItemId)
           }}
         />
+      ) : null}
+      {unpublishConfirmOpen ? (
+        <ConfirmDialog
+          title="Remove from FashionRise"
+          busy={busy === 'unpublish'}
+          onEscape={() => {
+            if (busy === 'unpublish') return
+            setUnpublishConfirmOpen(false)
+          }}
+          actions={[
+            {
+              label: 'Keep',
+              variant: 'ghost',
+              disabled: busy === 'unpublish',
+              onClick: () => setUnpublishConfirmOpen(false),
+            },
+            {
+              label: busy === 'unpublish' ? 'Removing…' : 'Remove',
+              variant: 'danger',
+              disabled: busy === 'unpublish',
+              onClick: () => void onConfirmUnpublish(),
+            },
+          ]}
+        >
+          <p data-testid="runway-unpublish-confirm-body">
+            This look will leave the FashionRise feed. You can publish it again later from My Looks.
+          </p>
+          {actionError ? (
+            <p className={styles.cardError} role="alert">
+              {actionError}
+            </p>
+          ) : null}
+        </ConfirmDialog>
       ) : null}
       {!compact && commentsOpen
         ? createPortal(
