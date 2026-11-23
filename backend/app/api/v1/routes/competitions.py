@@ -10,14 +10,19 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.user import User
+from uuid import UUID
+
 from app.schemas.competition import (
     CategoryBoardRead,
+    ClaimAwardResultRead,
     CompetitionAwardRead,
     CompetitionStatusRead,
+    PendingAwardClaimRead,
     StreakStatusRead,
 )
-from app.services import competition_service, login_streak
-from app.services.competition_clock import competition_week_start, ensure_utc
+from app.services import competition_awards, competition_service, login_streak
+from app.services.competition_awards import CATEGORY_LABELS
+from app.services.competition_clock import competition_week_start, ensure_utc, week_key
 from app.services.login_streak import STREAK_REWARD_DAYS, STREAK_REWARD_STARS
 
 router = APIRouter()
@@ -60,6 +65,40 @@ def competition_awards(
         db, week_start=start, group_index=group_index
     )
     return [CompetitionAwardRead.model_validate(row) for row in rows]
+
+
+@router.get("/awards/pending", response_model=list[PendingAwardClaimRead])
+def pending_award_claims(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[PendingAwardClaimRead]:
+    """One-time claim dialog: locked-week awards the user has not received yet."""
+    rows = competition_awards.list_unclaimed_awards_for_user(db, user)
+    out: list[PendingAwardClaimRead] = []
+    for row in rows:
+        wk = week_key(row.week_start)
+        out.append(
+            PendingAwardClaimRead(
+                id=str(row.id),
+                category=row.category,
+                label=CATEGORY_LABELS.get(row.category, row.category),
+                stars_amount=int(row.stars_amount),
+                week_start=row.week_start.isoformat(),
+                week_label=f"Week of {wk}",
+            )
+        )
+    return out
+
+
+@router.post("/awards/{award_id}/claim", response_model=ClaimAwardResultRead)
+def claim_award(
+    award_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ClaimAwardResultRead:
+    """Confirm Receive Stars for a weekly award (idempotent)."""
+    result = competition_awards.claim_competition_award(db, user, award_id)
+    return ClaimAwardResultRead.model_validate(result)
 
 
 @router.get("/streak", response_model=StreakStatusRead)

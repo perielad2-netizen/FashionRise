@@ -189,6 +189,7 @@ def list_week_awards(
             "score": r.score,
             "group_index": group_indexes.get(r.group_id),
             "week_start": r.week_start.isoformat(),
+            "claimed_at": r.claimed_at.isoformat() if r.claimed_at else None,
         }
         for r in rows
     ]

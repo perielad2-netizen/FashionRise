@@ -151,6 +151,8 @@ class CompetitionAward(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Null until the winner confirms Receive Stars in the one-time claim dialog.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     group: Mapped["CompetitionGroup"] = relationship(back_populates="awards")
     user: Mapped["User"] = relationship()

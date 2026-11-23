@@ -262,6 +262,7 @@ def settle_group_awards(
             stars_amount=pick.stars,
             payout_key=payout_key,
             score=pick.score,
+            claimed_at=None,
         )
         try:
             with db.begin_nested():
@@ -274,15 +275,68 @@ def settle_group_awards(
             if again is not None:
                 out.append(again)
             continue
-        credit_payout_idempotent(
-            db,
-            user_id=pick.user_id,
-            amount=pick.stars,
-            payout_key=payout_key,
-            reason=f"competition_{pick.category}",
-        )
+        # Stars credit waits for the winner's one-time "Receive Stars" confirm.
         out.append(award)
     return out
+
+
+def list_unclaimed_awards_for_user(db: Session, user: User) -> list[CompetitionAward]:
+    """Locked-week awards the user has not yet claimed (one-time claim dialog)."""
+    return list(
+        db.scalars(
+            select(CompetitionAward)
+            .join(CompetitionWeek, CompetitionWeek.week_start == CompetitionAward.week_start)
+            .where(
+                CompetitionAward.user_id == user.id,
+                CompetitionAward.claimed_at.is_(None),
+                CompetitionWeek.status == "locked",
+            )
+            .order_by(CompetitionAward.week_start.desc(), CompetitionAward.stars_amount.desc())
+        ).all()
+    )
+
+
+def claim_competition_award(db: Session, user: User, award_id: uuid.UUID) -> dict:
+    """Credit Stars for one award and mark it claimed. Idempotent for the owner."""
+    from app.core.errors import ConflictError, NotFoundError
+
+    award = db.get(CompetitionAward, award_id)
+    if award is None or award.user_id != user.id:
+        raise NotFoundError("Award not found")
+
+    week = db.get(CompetitionWeek, award.week_start)
+    if week is None or week.status != "locked":
+        raise ConflictError("This weekly award is not ready to claim yet.")
+
+    already_claimed = award.claimed_at is not None
+    newly_credited = False
+    if not already_claimed:
+        newly_credited = credit_payout_idempotent(
+            db,
+            user_id=user.id,
+            amount=int(award.stars_amount),
+            payout_key=award.payout_key,
+            reason=f"competition_{award.category}",
+        )
+        payout = db.scalar(select(StarPayout).where(StarPayout.payout_key == award.payout_key))
+        if payout is None:
+            raise ConflictError("Stars rewards are not available to claim right now.")
+        award.claimed_at = datetime.now(timezone.utc)
+        db.add(award)
+        db.commit()
+        db.refresh(award)
+        db.refresh(user)
+    return {
+        "id": str(award.id),
+        "category": award.category,
+        "label": CATEGORY_LABELS.get(award.category, award.category),
+        "stars_amount": int(award.stars_amount),
+        "week_start": award.week_start.isoformat(),
+        "claimed_at": award.claimed_at.isoformat() if award.claimed_at else None,
+        "newly_credited": bool(newly_credited),
+        "already_claimed": already_claimed,
+        "ai_stars": int(user.ai_stars or 0),
+    }
 
 
 def lock_and_settle_week(db: Session, week_start: datetime) -> CompetitionWeek:

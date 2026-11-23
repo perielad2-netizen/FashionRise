@@ -73,6 +73,28 @@ export type CompetitionAward = {
   score: number
   group_index: number | null
   week_start: string
+  claimed_at?: string | null
+}
+
+export type PendingAwardClaim = {
+  id: string
+  category: string
+  label: string
+  stars_amount: number
+  week_start: string
+  week_label: string
+}
+
+export type ClaimAwardResult = {
+  id: string
+  category: string
+  label: string
+  stars_amount: number
+  week_start: string
+  claimed_at: string | null
+  newly_credited: boolean
+  already_claimed: boolean
+  ai_stars: number
 }
 
 export type CategoryBoardEntry = {
@@ -115,6 +137,17 @@ export function fetchCompetitionAwards(params?: { week_start?: string; group_ind
   if (params?.group_index != null) q.set('group_index', String(params.group_index))
   const suffix = q.toString() ? `?${q.toString()}` : ''
   return apiRequest<CompetitionAward[]>(`/competitions/awards${suffix}`, { method: 'GET' })
+}
+
+export function fetchPendingAwardClaims() {
+  return apiRequest<PendingAwardClaim[]>('/competitions/awards/pending', { method: 'GET' })
+}
+
+export function claimCompetitionAward(awardId: string) {
+  return apiRequest<ClaimAwardResult>(
+    `/competitions/awards/${encodeURIComponent(awardId)}/claim`,
+    { method: 'POST' },
+  )
 }
 
 export function fetchStreakStatus() {

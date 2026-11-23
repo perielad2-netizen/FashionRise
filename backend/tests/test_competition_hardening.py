@@ -351,19 +351,24 @@ def test_repetitive_comments_do_not_inflate_design_awards(client, db_session):
     assert top_design.user_id == b.id
 
 
-def test_concurrent_settle_workers_single_payout(engine):
-    """Two workers settle the same week in parallel — Stars credited once."""
+def test_concurrent_settle_workers_single_payout(engine, monkeypatch):
+    """Two workers settle the same week in parallel — one award row, claim credits once."""
     import threading
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from sqlalchemy import delete
     from sqlalchemy.orm import sessionmaker
 
+    from app.core.config import get_settings
     from app.core.security import hash_password
     from app.models.competition import CompetitionGroup, CompetitionGroupMember, StarPayout
     from app.models.gallery_like import GalleryLike as GalleryLikeModel
     from app.models.user import User as UserModel
     from app.services import ai_stars
+
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_ENABLED", "true")
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START", "2025-01-05")
+    get_settings.cache_clear()
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     # Isolated past week so committed fixture data does not collide with rolled-back tests.
@@ -440,7 +445,8 @@ def test_concurrent_settle_workers_single_payout(engine):
             ]
 
         assert balances[0] == balances[1]
-        assert balances[0] >= before
+        # Settle no longer auto-credits Stars — claim is separate.
+        assert balances[0] == before
         verify = SessionLocal()
         try:
             week_row = verify.get(CompetitionWeek, week)
@@ -452,10 +458,13 @@ def test_concurrent_settle_workers_single_payout(engine):
             )
             keys = [row.payout_key for row in awards]
             assert len(keys) == len(set(keys))
+            assert awards
+            assert all(row.claimed_at is None for row in awards)
             user = verify.get(UserModel, author_id)
             assert int(user.ai_stars or 0) == balances[0]
         finally:
             verify.close()
+        get_settings.cache_clear()
     finally:
         cleanup = SessionLocal()
         try:

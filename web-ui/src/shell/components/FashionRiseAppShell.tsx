@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Menu, X } from 'lucide-react'
 import { GlobalHeader } from '@/shell/components/GlobalHeader'
 import { GlobalNavigation, type NavDestination } from '@/shell/components/GlobalNavigation'
+import { WeeklyAwardClaimDialog } from '@/shell/components/WeeklyAwardClaimDialog'
 import styles from './FashionRiseAppShell.module.css'
 
 type Props = {
@@ -110,6 +111,7 @@ export function FashionRiseAppShell({
         ) : null}
         <div className={`${styles.main} ${immersive ? styles.mainImmersive : ''}`}>{children}</div>
       </div>
+      <WeeklyAwardClaimDialog />
     </div>
   )
 }

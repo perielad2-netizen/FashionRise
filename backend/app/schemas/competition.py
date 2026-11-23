@@ -58,6 +58,28 @@ class CompetitionAwardRead(BaseModel):
     score: int
     group_index: int | None = None
     week_start: str
+    claimed_at: str | None = None
+
+
+class PendingAwardClaimRead(BaseModel):
+    id: str
+    category: str
+    label: str
+    stars_amount: int
+    week_start: str
+    week_label: str
+
+
+class ClaimAwardResultRead(BaseModel):
+    id: str
+    category: str
+    label: str
+    stars_amount: int
+    week_start: str
+    claimed_at: str | None = None
+    newly_credited: bool = False
+    already_claimed: bool = False
+    ai_stars: int = 0
 
 
 class CategoryBoardEntryRead(BaseModel):

@@ -115,7 +115,13 @@ def test_one_award_per_user_prefers_highest_prize(client, db_session):
     assert picks[0].stars == 50
 
 
-def test_settle_is_idempotent_on_retry(client, db_session):
+def test_settle_is_idempotent_on_retry(client, db_session, monkeypatch):
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_ENABLED", "true")
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START", "2026-11-08")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
     week = competition_week_start(datetime(2026, 11, 11, 12, tzinfo=timezone.utc))
     ensure_competition_week(db_session, now=week + timedelta(hours=1))
     register_with_invite(client, db_session, "idem_a@example.com", "idemA")
@@ -133,12 +139,82 @@ def test_settle_is_idempotent_on_retry(client, db_session):
 
     lock_and_settle_week(db_session, week)
     db_session.refresh(a)
-    mid = int(a.ai_stars or 0)
-    assert mid >= before
+    # Settle selects winners but does not credit until claim.
+    assert int(a.ai_stars or 0) == before
 
     lock_and_settle_week(db_session, week)
     db_session.refresh(a)
-    assert int(a.ai_stars or 0) == mid
+    assert int(a.ai_stars or 0) == before
+
+    from app.models.competition import CompetitionAward
+    from app.services.competition_awards import claim_competition_award
+
+    award = (
+        db_session.query(CompetitionAward)
+        .filter(CompetitionAward.user_id == a.id, CompetitionAward.week_start == week)
+        .one()
+    )
+    claim_competition_award(db_session, a, award.id)
+    db_session.refresh(a)
+    assert int(a.ai_stars or 0) == before + int(award.stars_amount)
+    get_settings.cache_clear()
+
+
+def test_pending_and_claim_award_http(client, db_session, monkeypatch):
+    """Winners see pending awards after settle; claim credits Stars once."""
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_ENABLED", "true")
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START", "2026-11-08")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    week = competition_week_start(datetime(2026, 11, 11, 12, tzinfo=timezone.utc))
+    ensure_competition_week(db_session, now=week + timedelta(hours=1))
+    tokens_a = register_with_invite(client, db_session, "claim_a@example.com", "claimA")
+    register_with_invite(client, db_session, "claim_b@example.com", "claimB")
+    a = _user(db_session, "claim_a@example.com", "claimA")
+    b = _user(db_session, "claim_b@example.com", "claimB")
+    assign_participant(db_session, a.id, now=week + timedelta(hours=1))
+    assign_participant(db_session, b.id, now=week + timedelta(hours=1))
+    item = _publish_item(db_session, a, created_at=week + timedelta(days=1), title="claim look")
+    db_session.add(
+        GalleryLike(user_id=b.id, gallery_item_id=item.id, created_at=week + timedelta(days=2))
+    )
+    db_session.flush()
+    before = int(a.ai_stars or 0)
+
+    lock_and_settle_week(db_session, week)
+    db_session.commit()
+
+    pending = client.get("/api/v1/competitions/awards/pending", headers=_auth(tokens_a))
+    assert pending.status_code == 200
+    rows = pending.json()
+    assert len(rows) >= 1
+    award_id = rows[0]["id"]
+    stars = int(rows[0]["stars_amount"])
+
+    claimed = client.post(
+        f"/api/v1/competitions/awards/{award_id}/claim",
+        headers=_auth(tokens_a),
+    )
+    assert claimed.status_code == 200
+    body = claimed.json()
+    assert body["already_claimed"] is False
+    assert body["newly_credited"] is True
+    assert body["ai_stars"] == before + stars
+
+    again = client.post(
+        f"/api/v1/competitions/awards/{award_id}/claim",
+        headers=_auth(tokens_a),
+    )
+    assert again.status_code == 200
+    assert again.json()["already_claimed"] is True
+    assert again.json()["ai_stars"] == before + stars
+
+    empty = client.get("/api/v1/competitions/awards/pending", headers=_auth(tokens_a))
+    assert empty.status_code == 200
+    assert empty.json() == []
+    get_settings.cache_clear()
 
 
 def test_tick_locks_previous_week_when_new_week_starts(client, db_session):

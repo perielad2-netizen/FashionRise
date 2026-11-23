@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import shellCss from '@/shell/components/FashionRiseAppShell.module.css?raw'
+
+vi.mock('@/shell/components/WeeklyAwardClaimDialog', () => ({
+  WeeklyAwardClaimDialog: () => null,
+}))
 import magicCss from '@/shell/components/MagicLookPanel.module.css?raw'
 import myLooksCss from '@/shell/components/MyLooksScreen.module.css?raw'
 
