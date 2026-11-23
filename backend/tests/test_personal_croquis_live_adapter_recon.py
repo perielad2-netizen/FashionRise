@@ -102,7 +102,7 @@ def _upload_ready(client, tokens, monkeypatch):
         f"{BASE}/photos",
         headers=_auth(tokens),
         files={"file": ("photo.png", load_synthetic_clothed_adult_model_png(), "image/png")},
-        data={"storage_consent_id": c.json()["id"], "display_name": "Synthetic clothed"},
+        data={"sex": "female", "storage_consent_id": c.json()["id"], "display_name": "Synthetic clothed"},
     )
     assert up.status_code == 201, up.text
     return up.json()

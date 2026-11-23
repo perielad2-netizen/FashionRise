@@ -33,9 +33,14 @@ export type PersonalCroquisVersionSummary = {
  * Mirrors Stage A `PersonalCroquisRead` exactly.
  * Field names: `latest_accepted_version`, `archived`, `erased` (not archived_at / latest_accepted).
  */
+/** Owner-declared presentation for Try On Person pants-vs-skirt disambiguation. */
+export type CroquisSex = 'male' | 'female'
+
 export type PersonalCroquisRead = {
   id: string
   display_name: string
+  /** null on legacy models until the owner picks male/female. */
+  sex?: CroquisSex | null
   status: string
   source_asset_id: string | null
   storage_consent_id: string | null
@@ -189,20 +194,37 @@ export async function rejectPersonalCroquisVersion(
   )
 }
 
+export async function updatePersonalCroquisSex(
+  croquisId: string,
+  sex: CroquisSex,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisRead> {
+  return apiRequest<PersonalCroquisRead>(`${BASE}/${croquisId}/sex`, {
+    method: 'PATCH',
+    body: { sex },
+    signal,
+  })
+}
+
 export async function uploadPersonalCroquisPhoto(
   file: File,
   storageConsentId: string,
-  displayName?: string,
-  signal?: AbortSignal,
+  options?: { displayName?: string; sex: CroquisSex; signal?: AbortSignal },
 ): Promise<PersonalCroquisRead> {
   const tokens = tokenStore.get()
   if (!tokens?.accessToken) {
     throw new ApiError('Sign in required to upload a personal croquis photo.', 401, null)
   }
+  const sex = options?.sex
+  if (sex !== 'male' && sex !== 'female') {
+    throw new ApiError('Select male or female for this model.', 400, null)
+  }
   const form = new FormData()
   form.append('file', file, file.name)
   form.append('storage_consent_id', storageConsentId)
-  if (displayName?.trim()) form.append('display_name', displayName.trim())
+  form.append('sex', sex)
+  if (options?.displayName?.trim()) form.append('display_name', options.displayName.trim())
+  const signal = options?.signal
 
   let response: Response
   try {

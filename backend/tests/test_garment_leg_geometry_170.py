@@ -253,7 +253,7 @@ def test_discarded_leg_component_fails_completeness():
 
 def test_openai_sunburst_prompt_unchanged_without_hints():
     prompt = build_try_on_prompt(None)
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v2"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v3"
     # Base Model B sunburst text; no trouser appendix when hints empty.
     assert "Studio design evidence" not in prompt
     with_hints = build_try_on_prompt(openai_trouser_design_hints(analyze_lower_garment_geometry(_narrow_jumpsuit_png())))

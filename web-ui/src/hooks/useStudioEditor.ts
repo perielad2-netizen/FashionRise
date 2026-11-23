@@ -54,6 +54,8 @@ import {
   fetchCroquisAssetBlob,
   getPersonalCroquis,
   getPersonalCroquisVersion,
+  updatePersonalCroquisSex,
+  type CroquisSex,
 } from '@/services/personalCroquisApi'
 import { buildTryOnDesignHints } from '@/lib/tryOnDesignHints'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
@@ -314,6 +316,13 @@ export function useStudioEditor() {
   const [magicResultMode, setMagicResultMode] = useState<MagicResultMode>('fashion')
   const [magicDestinationOpen, setMagicDestinationOpen] = useState(false)
   const [magicDestinationBusy, setMagicDestinationBusy] = useState(false)
+  /** Ask male/female before Try On when the pinned My Model has no sex flag yet. */
+  const [tryOnSexPromptOpen, setTryOnSexPromptOpen] = useState(false)
+  const [tryOnSexPromptBusy, setTryOnSexPromptBusy] = useState(false)
+  const [tryOnSexPromptError, setTryOnSexPromptError] = useState<string | null>(null)
+  const [tryOnSexPendingProvider, setTryOnSexPendingProvider] = useState<'openai' | 'fashn'>(
+    'openai',
+  )
   const [magicTryOnNotice, setMagicTryOnNotice] = useState<string | null>(null)
   const [magicTryOnEstimateCents, setMagicTryOnEstimateCents] = useState<number | null>(null)
   const [magicFashnAvailable, setMagicFashnAvailable] = useState(false)
@@ -2967,13 +2976,70 @@ export function useStudioEditor() {
     void runMagicPipeline()
   }, [runMagicPipeline])
 
+  const ensureTryOnSexThenRun = useCallback(
+    async (provider: 'openai' | 'fashn') => {
+      const doc = authoritativeDocRef.current
+      const croquisId = doc.personalCroquisId
+      if (!croquisId) {
+        void runTryOnPipeline(provider)
+        return
+      }
+      try {
+        const row = await getPersonalCroquis(croquisId)
+        if (row.sex === 'male' || row.sex === 'female') {
+          void runTryOnPipeline(provider)
+          return
+        }
+      } catch {
+        // If croquis fetch fails, still open the sex prompt so Try On can continue after save.
+      }
+      setTryOnSexPendingProvider(provider)
+      setTryOnSexPromptError(null)
+      setTryOnSexPromptBusy(false)
+      setMagicDestinationOpen(false)
+      setTryOnSexPromptOpen(true)
+    },
+    [runTryOnPipeline],
+  )
+
   const chooseTryOnPerson = useCallback(() => {
-    void runTryOnPipeline('openai')
-  }, [runTryOnPipeline])
+    void ensureTryOnSexThenRun('openai')
+  }, [ensureTryOnSexThenRun])
 
   const chooseFashnTryOn = useCallback(() => {
-    void runTryOnPipeline('fashn')
-  }, [runTryOnPipeline])
+    void ensureTryOnSexThenRun('fashn')
+  }, [ensureTryOnSexThenRun])
+
+  const cancelTryOnSexPrompt = useCallback(() => {
+    if (tryOnSexPromptBusy) return
+    setTryOnSexPromptOpen(false)
+    setTryOnSexPromptError(null)
+  }, [tryOnSexPromptBusy])
+
+  const confirmTryOnSex = useCallback(
+    async (sex: CroquisSex) => {
+      const doc = authoritativeDocRef.current
+      const croquisId = doc.personalCroquisId
+      if (!croquisId) {
+        setTryOnSexPromptError('No Create Model is pinned in Studio.')
+        return
+      }
+      setTryOnSexPromptBusy(true)
+      setTryOnSexPromptError(null)
+      try {
+        await updatePersonalCroquisSex(croquisId, sex)
+        setTryOnSexPromptOpen(false)
+        void runTryOnPipeline(tryOnSexPendingProvider)
+      } catch (err) {
+        setTryOnSexPromptError(
+          err instanceof ApiError ? err.message : 'Could not save male/female for this model.',
+        )
+      } finally {
+        setTryOnSexPromptBusy(false)
+      }
+    },
+    [runTryOnPipeline, tryOnSexPendingProvider],
+  )
 
   const onMagic = useCallback(() => {
     if (!magicEnabled) {
@@ -4354,6 +4420,9 @@ export function useStudioEditor() {
     magicResultMode,
     magicDestinationOpen,
     magicDestinationBusy,
+    tryOnSexPromptOpen,
+    tryOnSexPromptBusy,
+    tryOnSexPromptError,
     magicTryOnNotice,
     magicTryOnEstimateCents,
     magicFashnAvailable,
@@ -4409,6 +4478,8 @@ export function useStudioEditor() {
     chooseFashionMagic,
     chooseTryOnPerson,
     chooseFashnTryOn,
+    cancelTryOnSexPrompt,
+    confirmTryOnSex,
     magicCanRecover: Boolean(
       magicJobId ||
         (user?.id &&

@@ -59,7 +59,7 @@ def test_photo_upload_requires_create_model_upload_consent(client, db_session, m
         f"{BASE}/photos",
         headers=_auth(tokens),
         files={"file": ("p.png", _png_bytes(), "image/png")},
-        data={"storage_consent_id": c.json()["id"], "display_name": "X"},
+        data={"sex": "female", "storage_consent_id": c.json()["id"], "display_name": "X"},
     )
     assert denied.status_code == 400, denied.text
     assert "upload agreement" in denied.json()["detail"].lower()
@@ -69,7 +69,7 @@ def test_photo_upload_requires_create_model_upload_consent(client, db_session, m
         f"{BASE}/photos",
         headers=_auth(tokens),
         files={"file": ("p.png", _png_bytes(), "image/png")},
-        data={"storage_consent_id": c.json()["id"], "display_name": "X"},
+        data={"sex": "female", "storage_consent_id": c.json()["id"], "display_name": "X"},
     )
     assert ok.status_code == 201, ok.text
     # Confirm the purpose was recorded for the user.

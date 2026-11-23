@@ -103,8 +103,10 @@ def test_model_b_flag_defaults_false():
 
 def test_model_b_prompt_includes_footwear_and_preserve_clause():
     from app.services.sunburst_try_on_prompt import (
+        MODEL_B_SUNBURST_MALE_PANTS_CLAUSE,
         MODEL_B_SUNBURST_SEX_CLAUSE,
         MODEL_B_SUNBURST_SHORTS_CLAUSE,
+        sex_flag_design_hints,
     )
 
     low = MODEL_B_SUNBURST_PROMPT.lower()
@@ -112,13 +114,18 @@ def test_model_b_prompt_includes_footwear_and_preserve_clause():
     assert MODEL_B_SUNBURST_FOOTWEAR_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_SEX_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_SHORTS_CLAUSE in MODEL_B_SUNBURST_PROMPT
+    assert MODEL_B_SUNBURST_MALE_PANTS_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert "replace the person's existing footwear" in low
     assert "if no footwear is shown in the design, preserve the original shoes" in low
     assert "preserve the person's original face" in low
-    assert "apparent sex and gender presentation" in low
-    assert "do not feminize or masculinize" in low
+    assert "person sex flag" in low
     assert "shorts" in low and "skirt" in low
-    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v2"
+    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v3"
+    male = " ".join(sex_flag_design_hints("male")).lower()
+    assert "person sex flag: male" in male
+    assert "never a skirt" in male
+    female = " ".join(sex_flag_design_hints("female")).lower()
+    assert "person sex flag: female" in female
 
 
 def test_model_b_shared_helper_person_then_design_one_call(monkeypatch):

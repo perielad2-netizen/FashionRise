@@ -24,6 +24,7 @@ from app.schemas.personal_croquis import (
     CroquisPublishRequest,
     GenerateVersionRequest,
     PersonalCroquisRead,
+    PersonalCroquisSexUpdate,
     PersonalCroquisVersionRead,
     consent_to_read,
     croquis_to_read,
@@ -143,6 +144,7 @@ def upload_photo(
     user: CurrentUser,
     file: UploadFile = File(...),
     storage_consent_id: uuid.UUID = Form(...),
+    sex: str = Form(...),
     display_name: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> PersonalCroquisRead:
@@ -158,10 +160,26 @@ def upload_photo(
         raw=raw,
         declared_content_type=file.content_type,
         storage_consent_id=storage_consent_id,
+        sex=sex,
         display_name=display_name,
     )
     latest = pcs.latest_accepted_version(db, user, croquis.id)
     return croquis_to_read(croquis, latest=latest)
+
+
+@router.patch("/{croquis_id}/sex", response_model=PersonalCroquisRead)
+@limiter.limit("60/minute")
+def patch_croquis_sex(
+    request: Request,
+    croquis_id: uuid.UUID,
+    body: PersonalCroquisSexUpdate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisRead:
+    """Owner sets male/female so Try On Person can disambiguate pants vs dress."""
+    _ = request.url
+    croquis = pcs.update_croquis_sex(db, user, croquis_id, sex=body.sex)
+    return _croquis_read(db, user, croquis)
 
 
 @router.get("", response_model=list[PersonalCroquisRead])

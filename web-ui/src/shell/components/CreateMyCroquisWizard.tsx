@@ -24,6 +24,7 @@ import {
   getPersonalCroquisVersion,
   rejectPersonalCroquisVersion,
   uploadPersonalCroquisPhoto,
+  type CroquisSex,
   type PersonalCroquisVersionRead,
 } from '@/services/personalCroquisApi'
 import {
@@ -76,6 +77,7 @@ export function CreateMyCroquisWizard({
   const [step, setStep] = useState<Step>(() => (noticesOk ? 'compose' : 'blocked'))
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [localFile, setLocalFile] = useState<File | null>(null)
+  const [modelSex, setModelSex] = useState<CroquisSex | null>(null)
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
@@ -147,6 +149,10 @@ export function CreateMyCroquisWizard({
       setError('Select a photo first.')
       return
     }
+    if (modelSex !== 'male' && modelSex !== 'female') {
+      setError('Select male or female for this model.')
+      return
+    }
     if (!agreed) {
       setError('Confirm the agreement before uploading.')
       return
@@ -182,7 +188,9 @@ export function CreateMyCroquisWizard({
         notice_version: CREATE_MODEL_UPLOAD_NOTICE_VERSION,
         notice_text_hash: await sha256Hex(formatCreateModelUploadNoticeText()),
       })
-      const created = await uploadPersonalCroquisPhoto(uploadFile, storageEvent.id)
+      const created = await uploadPersonalCroquisPhoto(uploadFile, storageEvent.id, {
+        sex: modelSex,
+      })
       setCroquisId(created.id)
       const ver = acceptedVersionNumber(created)
       if (ver) {
@@ -206,7 +214,16 @@ export function CreateMyCroquisWizard({
       setBusy(false)
       setBusyLabel(null)
     }
-  }, [adultsNotice, agreed, aiNotice, handleClose, localFile, onPinAccepted, storageNotice])
+  }, [
+    adultsNotice,
+    agreed,
+    aiNotice,
+    handleClose,
+    localFile,
+    modelSex,
+    onPinAccepted,
+    storageNotice,
+  ])
 
   // Poll generating → awaiting_review / failed / reconciliation
   useEffect(() => {
@@ -414,6 +431,33 @@ export function CreateMyCroquisWizard({
                 }}
               />
 
+              <fieldset className={styles.sexFieldset} disabled={busy || !localFile}>
+                <legend className={styles.sexLegend}>Model is</legend>
+                <div className={styles.sexRow} role="radiogroup" aria-label="Model sex">
+                  <button
+                    type="button"
+                    className={modelSex === 'male' ? styles.sexOptionActive : styles.sexOption}
+                    aria-pressed={modelSex === 'male'}
+                    data-testid="create-model-sex-male"
+                    onClick={() => setModelSex('male')}
+                  >
+                    Male
+                  </button>
+                  <button
+                    type="button"
+                    className={modelSex === 'female' ? styles.sexOptionActive : styles.sexOption}
+                    aria-pressed={modelSex === 'female'}
+                    data-testid="create-model-sex-female"
+                    onClick={() => setModelSex('female')}
+                  >
+                    Female
+                  </button>
+                </div>
+                <p className={styles.hint}>
+                  Saved for Try On Person so pants and skirts are not confused.
+                </p>
+              </fieldset>
+
               <LegalConsentField
                 checked={agreed}
                 onCheckedChange={setAgreed}
@@ -461,7 +505,7 @@ export function CreateMyCroquisWizard({
               <button
                 type="button"
                 className={styles.primary}
-                disabled={!localFile || !agreed || busy || !aiNotice}
+                disabled={!localFile || !modelSex || !agreed || busy || !aiNotice}
                 onClick={() => setSpendOpen(true)}
               >
                 {busy ? (

@@ -170,7 +170,7 @@ def test_pg014_upload_stored_source_sha_matches_fixture(pg014_engine, dedicated_
             raw=source,
             declared_content_type="image/png",
             storage_consent_id=storage.id,
-            display_name="pg014-sha",
+            sex="female", display_name="pg014-sha",
         )
         asset = db.get(PrivateMediaAsset, croquis.source_asset_id)
         assert asset is not None

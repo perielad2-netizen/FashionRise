@@ -125,6 +125,7 @@ async function selectPhotoAndAgree() {
   const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
   fireEvent.change(input, { target: { files: [file] } })
+  fireEvent.click(screen.getByTestId('create-model-sex-male'))
   fireEvent.click(screen.getByRole('checkbox'))
 }
 
@@ -312,10 +313,11 @@ describe('CreateMyCroquisWizard offline harness', () => {
     await waitFor(() => expect(attestAdults).toHaveBeenCalled())
     await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
     await waitFor(() => expect(acknowledgeCreateModelUploadConsent).toHaveBeenCalled())
-    await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalledWith(
-      expect.any(File),
-      'consent-1',
-    ))
+    await waitFor(() =>
+      expect(uploadPersonalCroquisPhoto).toHaveBeenCalledWith(expect.any(File), 'consent-1', {
+        sex: 'male',
+      }),
+    )
     await waitFor(() =>
       expect(acknowledgeAiConsent).toHaveBeenCalledWith(
         expect.objectContaining({ croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' }),

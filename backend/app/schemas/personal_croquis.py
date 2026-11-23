@@ -76,11 +76,21 @@ class CroquisPublishRequest(BaseModel):
     notice_text_hash: str = Field(min_length=64, max_length=64)
 
 
+CroquisSex = Literal["male", "female"]
+
+
+class PersonalCroquisSexUpdate(BaseModel):
+    """Set or correct the owner-declared male/female flag used by Try On Person."""
+
+    sex: CroquisSex
+
+
 class PersonalCroquisRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     display_name: str
+    sex: CroquisSex | None = None
     status: str
     source_asset_id: uuid.UUID | None = None
     storage_consent_id: uuid.UUID | None = None
@@ -130,9 +140,12 @@ def croquis_to_read(row, *, latest=None, fashionrise_item_id=None) -> PersonalCr
             geometry_profile=latest.geometry_profile,
             accepted_at=latest.accepted_at,
         )
+    sex_val = getattr(row, "sex", None)
+    sex: CroquisSex | None = sex_val if sex_val in ("male", "female") else None
     return PersonalCroquisRead(
         id=row.id,
         display_name=row.display_name,
+        sex=sex,
         status=row.status,
         source_asset_id=row.source_asset_id,
         storage_consent_id=row.storage_consent_id,
@@ -171,6 +184,7 @@ class PhotoUploadFormNote(BaseModel):
     """Documentation-only schema — multipart uses Form fields."""
 
     storage_consent_id: uuid.UUID = Field(description="Valid croquis_storage consent id")
+    sex: CroquisSex = Field(description="Owner-declared male or female for Try On Person")
     display_name: str | None = None
 
 
