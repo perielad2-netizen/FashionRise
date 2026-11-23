@@ -2,17 +2,51 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import uuid
 
+from PIL import Image
+
+from app.core.config import get_settings
+from app.services.ai_worker import run_magic_worker_tick
 from app.services.friendship_service import ensure_accepted_friends
+from app.services.personal_croquis_provider import (
+    MockCroquisProvider,
+    set_croquis_provider_override,
+)
+from app.services.personal_try_on_provider import (
+    TRY_ON_CONSENT_VERSION,
+    TRY_ON_PROMPT_VERSION,
+    set_try_on_provider_override,
+)
 from tests.auth_test_helpers import register_with_invite
+from tests.croquis_test_fixtures import (
+    adults_body,
+    ai_body,
+    enable_synthetic_croquis_notices,
+    storage_body,
+)
 
 
 def _auth(tokens: dict) -> dict[str, str]:
     return {"Authorization": f"Bearer {tokens['access_token']}"}
 
 
-def _save_design(client, tokens, *, title: str = "Shared look") -> dict:
+def _png_bytes(size: tuple[int, int] = (64, 96), color=(200, 100, 80, 255)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGBA", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _save_design(
+    client,
+    tokens,
+    *,
+    title: str = "Shared look",
+    personal_croquis_id: str | None = None,
+    personal_croquis_version: int | None = None,
+) -> dict:
     save_id = str(uuid.uuid4())
     body = {
         "title": title,
@@ -32,13 +66,13 @@ def _save_design(client, tokens, *, title: str = "Shared look") -> dict:
             "snapshot": {
                 "strokes": [],
                 "fills": [],
-                "model": "female",
+                "model": "personal" if personal_croquis_id else "female",
                 "brush": {"size": 8, "opacity": 1, "color": "#111111"},
                 "dimmed": False,
                 "activeSide": "front",
                 "back": {"strokes": [], "fills": []},
-                "personalCroquisId": None,
-                "personalCroquisVersion": None,
+                "personalCroquisId": personal_croquis_id,
+                "personalCroquisVersion": personal_croquis_version,
             },
         },
     }
@@ -56,11 +90,7 @@ def test_share_requires_accept_before_my_designs(client, db_session):
     yaniv_user = db_session.query(User).filter(User.username == "YanivShare").one()
     ensure_accepted_friends(db_session, peri_user, yaniv_user)
 
-    from io import BytesIO
-
-    from PIL import Image
-
-    buf = BytesIO()
+    buf = io.BytesIO()
     Image.new("RGB", (64, 64), color=(200, 40, 120)).save(buf, format="PNG")
     buf.seek(0)
     up = client.post(
@@ -281,3 +311,156 @@ def test_legacy_boolean_envelope_share_copy_can_be_deleted(client, db_session):
     deleted = client.delete(f"/api/v1/designs/saved/{row.id}", headers=headers)
     assert deleted.status_code == 204, deleted.text
     assert client.get(f"/api/v1/designs/{row.id}", headers=headers).status_code == 404
+
+
+class _MockTryOnProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_photo: bytes | None = None
+
+    def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None):
+        self.calls += 1
+        self.last_photo = photo_png
+        out = _png_bytes((80, 120), (10, 20, 30, 255))
+        return out, {"actual_cost_cents": 4, "prompt_version": TRY_ON_PROMPT_VERSION}
+
+
+def test_share_grants_croquis_and_friend_can_try_on_person(client, db_session, monkeypatch):
+    """Accept grants My Model + fabrics; friend Try On Person must use the shared photo."""
+    enable_synthetic_croquis_notices(monkeypatch)
+    get_settings.cache_clear()
+    monkeypatch.setenv("MY_CROQUIS_UPLOAD_ENABLED", "true")
+    monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
+    monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", "5")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_RUN", "1")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_USER_DAY", "5")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY", "5")
+    monkeypatch.setenv("MY_CROQUIS_AI_ESTIMATE_CENTS", "3")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_EXPOSURE_CENTS", "100")
+    get_settings.cache_clear()
+    set_croquis_provider_override(MockCroquisProvider(cost_cents=2))
+    mock_try = _MockTryOnProvider()
+    set_try_on_provider_override(mock_try)
+
+    peri = register_with_invite(client, db_session, "peri_tryon_share@example.com", "PeriTryShare")
+    yaniv = register_with_invite(client, db_session, "yaniv_tryon_share@example.com", "YanivTryShare")
+    from app.models.user import User
+
+    peri_user = db_session.query(User).filter(User.username == "PeriTryShare").one()
+    yaniv_user = db_session.query(User).filter(User.username == "YanivTryShare").one()
+    ensure_accepted_friends(db_session, peri_user, yaniv_user)
+
+    croquis_base = "/api/v1/personal-croquis"
+    assert (
+        client.post(
+            f"{croquis_base}/attestations/adults",
+            headers=_auth(peri),
+            json=adults_body(),
+        ).status_code
+        == 200
+    )
+    storage = client.post(
+        f"{croquis_base}/consent/storage",
+        headers=_auth(peri),
+        json=storage_body(),
+    )
+    assert storage.status_code == 200, storage.text
+    up = client.post(
+        f"{croquis_base}/photos",
+        headers=_auth(peri),
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+        data={"storage_consent_id": storage.json()["id"], "display_name": "Shared model"},
+    )
+    assert up.status_code == 201, up.text
+    croquis = up.json()
+    croquis_id = croquis["id"]
+    ai = client.post(
+        f"{croquis_base}/consent/ai",
+        headers=_auth(peri),
+        json=ai_body(croquis_id=croquis_id),
+    )
+    assert ai.status_code == 200, ai.text
+    gen = client.post(
+        f"{croquis_base}/{croquis_id}/versions/generate",
+        headers=_auth(peri),
+        json={"ai_consent_id": ai.json()["id"], "idempotency_key": "g-share-tryon"},
+    )
+    assert gen.status_code == 201, gen.text
+    from app.services.personal_croquis_worker import run_croquis_worker_tick
+
+    run_croquis_worker_tick(db_session, limit=4)
+    acc = client.post(
+        f"{croquis_base}/{croquis_id}/versions/1/accept",
+        headers=_auth(peri),
+        json={},
+    )
+    assert acc.status_code == 200, acc.text
+
+    # Friend cannot read the croquis before Accept.
+    assert client.get(f"{croquis_base}/{croquis_id}", headers=_auth(yaniv)).status_code == 404
+
+    design = _save_design(
+        client,
+        peri,
+        title="Pinned My Model look",
+        personal_croquis_id=croquis_id,
+        personal_croquis_version=1,
+    )
+    share = client.post(
+        f"/api/v1/designs/{design['id']}/share",
+        headers=_auth(peri),
+        json={"friend_user_id": str(yaniv_user.id), "note": "design with my model"},
+    )
+    assert share.status_code == 201, share.text
+    transfer_id = share.json()["transfer"]["id"]
+    accepted = client.post(
+        f"/api/v1/designs/shares/{transfer_id}/accept",
+        headers=_auth(yaniv),
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["transfer"]["croquis_granted"] >= 1
+    received = accepted.json()["received_design"]
+    snap = (received.get("design_data") or {}).get("snapshot") or {}
+    assert snap.get("personalCroquisId") == croquis_id
+    assert snap.get("personalCroquisVersion") == 1
+
+    # Underlay path: friend can read croquis + version after grant.
+    got = client.get(f"{croquis_base}/{croquis_id}", headers=_auth(yaniv))
+    assert got.status_code == 200, got.text
+    assert got.json()["id"] == croquis_id
+
+    garment = "data:image/png;base64," + base64.b64encode(
+        _png_bytes((48, 64), (30, 90, 200, 200))
+    ).decode("ascii")
+    try_on = client.post(
+        "/api/v1/ai/personal-try-on",
+        headers=_auth(yaniv),
+        json={
+            "croquis_id": croquis_id,
+            "croquis_version": 1,
+            "garment_image_base64": garment,
+            "idempotency_key": f"try_on:share-{uuid.uuid4()}",
+            "source_revision": 1,
+            "content_fingerprint": "fp-share-try-on",
+            "consent_acknowledged": True,
+            "consent_version": TRY_ON_CONSENT_VERSION,
+        },
+    )
+    assert try_on.status_code == 201, try_on.text
+    job_id = try_on.json()["id"]
+    assert try_on.json()["user_id"] == str(yaniv_user.id)
+
+    n = run_magic_worker_tick(db_session, limit=4)
+    assert n >= 1
+    assert mock_try.calls == 1
+    assert mock_try.last_photo and len(mock_try.last_photo) > 32
+
+    done = client.get(f"/api/v1/ai/jobs/{job_id}", headers=_auth(yaniv))
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "completed"
+    assert done.json()["result_data"]["mode"] == "try_on_person"
+    assert done.json()["result_data"]["image_url"]
+
+    set_try_on_provider_override(None)
+    set_croquis_provider_override(None)
+    get_settings.cache_clear()

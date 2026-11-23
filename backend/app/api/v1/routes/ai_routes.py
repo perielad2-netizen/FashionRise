@@ -244,7 +244,11 @@ def personal_try_on(
     body: PersonalTryOnBody,
     db: Session = Depends(get_db),
 ) -> AIJobRead:
-    """Enqueue photorealistic Try On Person using the owner's original croquis photo."""
+    """Enqueue photorealistic Try On Person using an accessible croquis photo.
+
+    Caller must own the croquis or hold a design-share croquis grant (friend
+    who accepted a shared design with My Model). Stars debit the caller.
+    """
     _ = request.url
     job = try_on_service.enqueue_personal_try_on(
         db,

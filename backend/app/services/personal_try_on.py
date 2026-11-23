@@ -1,9 +1,10 @@
 """Personal Try On Person — enqueue + worker completion.
 
 Freeze garment artwork + croquis/source binding at enqueue. Resolve the original
-photograph on the server from the owner's accepted croquis version. Spend uses
+photograph on the server from an accepted croquis version the caller can access
+(true owner **or** design-share croquis grant). Spend uses
 ``PersonalCroquisSpendReservation`` under the same operator ceilings as croquis
-generate (idempotency keys prefixed ``try_on:``).
+generate (idempotency keys prefixed ``try_on:``). Stars debit the caller.
 """
 
 from __future__ import annotations
@@ -767,7 +768,8 @@ def enqueue_personal_try_on(
     if existing is not None:
         return existing
 
-    croquis = pcs.get_owned_croquis(db, user, croquis_id)
+    # Owner or design-share grantee (friend accepted a share) — same as Studio underlay.
+    croquis = pcs.get_accessible_croquis(db, user, croquis_id)
     if croquis.source_asset_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1380,8 +1382,8 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         croquis_id = uuid.UUID(str(data["croquis_id"]))
         source_asset_id = uuid.UUID(str(data["source_asset_id"]))
         croquis_version = int(data["croquis_version"])
-        # Re-validate ownership + source still present (no wrong-photo attribution).
-        croquis = pcs.get_owned_croquis(db, user, croquis_id)
+        # Re-validate access (owner or share grant) + source still present.
+        croquis = pcs.get_accessible_croquis(db, user, croquis_id)
         if croquis.source_asset_id != source_asset_id:
             return _fail("Original photograph binding changed — refusing Try On Person.")
         version = pcs.get_exact_version(db, user, croquis_id, croquis_version)
@@ -1816,7 +1818,7 @@ def enqueue_garment_realism(
     if existing is not None:
         return existing
 
-    croquis = pcs.get_owned_croquis(db, user, croquis_id)
+    croquis = pcs.get_accessible_croquis(db, user, croquis_id)
     version = pcs.get_exact_version(db, user, croquis_id, croquis_version)
     if version.status != VERSION_STATUS_ACCEPTED:
         raise HTTPException(
