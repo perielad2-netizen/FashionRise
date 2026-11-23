@@ -172,52 +172,39 @@ def test_try_on_prompt_is_not_sketch_polish():
     assert "flat sketch" not in TRY_ON_PROMPT_V1.lower()
 
 
-def test_try_on_prompt_v2_restored_for_ordinary_openai_path():
-    """#168/#174/#182 — live OpenAI Try On uses V2.2; V3 swimwear wording stays archive-only.
+def test_try_on_prompt_matches_fitting_room_model_b_sunburst():
+    """Live OpenAI Try On Person uses the same Fitting Room Model B sunburst prompt.
 
-    Production evidence: every try-on-person-v3 job failed with
-    PROVIDER_MODERATION_BLOCKED / moderation_stage=input / categories=sexual,
-    including ordinary magenta top + orange shorts + cap (461c9419…). Last
-    successful ordinary outfit used try-on-person-v2 on the same croquis photo.
-    V2.2 keeps that base, clarifies fashion slits must not become trousers, and
-    adds pale/bridal neckline + sleeve fidelity (#182).
+    V2.8 / V3 remain archive-only. V3 swimwear wording must never be activated
+    (moderation_blocked on ordinary outfits — job 461c9419…).
     """
-    from app.services.personal_try_on_provider import TRY_ON_PROMPT_V2_8
+    from app.services.sunburst_try_on_prompt import (
+        MODEL_B_SUNBURST_FOOTWEAR_CLAUSE,
+        MODEL_B_SUNBURST_PROMPT,
+    )
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.8"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v1"
     active = build_try_on_prompt(None)
-    assert active == TRY_ON_PROMPT_V2_8
+    assert active == MODEL_B_SUNBURST_PROMPT
+    assert MODEL_B_SUNBURST_FOOTWEAR_CLAUSE in active
     # Live prompt must not carry V3 swimwear / skin-uncovering language.
     assert "swimwear" not in active.lower()
     assert "lingerie" not in active.lower()
     assert "skin previously covered" not in active.lower()
     assert "sexual" not in active.lower()
-    # V2 fidelity rules for ordinary outfits.
-    assert "checkerboard" in active.lower()
-    assert "hats/caps" in active.lower() or "hat/cap" in active.lower()
     assert "photorealistic" in active.lower()
     assert "fashion illustration" not in active.lower()
-    # #174 — slit dress must not be coerced into trousers/jumpsuit.
-    assert "slit" in active.lower()
-    assert "jumpsuit" in active.lower()
-    # #182 — pale bridal / open neckline / both sleeves.
-    assert "matte" in active.lower()
-    assert "plunging" in active.lower() or "deep-v" in active.lower()
-    assert "both sleeves" in active.lower()
-    # #184 — drawn footwear replaces photo shoes/boots.
     assert "footwear" in active.lower() or "shoes" in active.lower()
-    assert "boots" in active.lower()
-    # V2.5 — bare feet when image 2 has no footwear on a high-cut one-piece.
-    assert "bare feet" in active.lower()
-    assert "do not lengthen" in active.lower() or "high-cut" in active.lower()
     # V3 archive retained but not activated.
     assert "swimwear" in TRY_ON_PROMPT_V3.lower()
     assert "opaque" in TRY_ON_PROMPT_V3.lower()
     assert TRY_ON_PROMPT_V3 != TRY_ON_PROMPT_VERSION
+    # V2.8 archive retained for historical job audits.
+    assert TRY_ON_PROMPT_V2_8 != active
     with_hints = build_try_on_prompt(
         ["exact designer colors: #FF8A5B, #C2185B", "upper-plane ink present — include any drawn hat/cap"]
     )
-    assert with_hints.startswith(TRY_ON_PROMPT_V2_8)
+    assert with_hints.startswith(MODEL_B_SUNBURST_PROMPT)
     assert "#FF8A5B" in with_hints
     assert "hat/cap" in with_hints.lower()
     long = "x" * 200
@@ -239,9 +226,13 @@ def test_try_on_edit_kwargs_photo_then_garment(monkeypatch):
         garment_png=garment,
         design_hints=["exact designer colors: #FF69B4", "preserve print topology"],
     )
-    from app.services.personal_try_on_provider import TRY_ON_PROMPT_V2_8
+    from app.services.sunburst_try_on_prompt import (
+        MODEL_B_SUNBURST_MODEL,
+        MODEL_B_SUNBURST_PROMPT,
+    )
 
-    assert kwargs["prompt"].startswith(TRY_ON_PROMPT_V2_8)
+    assert kwargs["prompt"].startswith(MODEL_B_SUNBURST_PROMPT)
+    assert kwargs["model"] == MODEL_B_SUNBURST_MODEL
     assert "swimwear" not in kwargs["prompt"].lower()
     assert "exact designer colors: #FF69B4" in kwargs["prompt"]
     assert "preserve print topology" in kwargs["prompt"]
@@ -255,7 +246,7 @@ def test_openai_try_on_route_independent_from_fashn_prompt_versions():
     from app.services.fashn_garment_realism import GARMENT_REALISM_PROMPT_VERSION
     from app.services.personal_try_on import FASHN_PROMPT_VERSION
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.8"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v1"
     assert TRY_ON_PROMPT_VERSION != GARMENT_REALISM_PROMPT_VERSION
     assert TRY_ON_PROMPT_VERSION != FASHN_PROMPT_VERSION
     assert FASHN_PROMPT_VERSION.startswith("fashn-")

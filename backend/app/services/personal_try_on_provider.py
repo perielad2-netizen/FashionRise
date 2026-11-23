@@ -45,7 +45,9 @@ TRY_ON_JOB_TYPE = "personal_try_on"
 # barefoot one-piece must not keep tall boots (owner red swimsuit kept beige boots).
 # V2.7: high-cut one-piece hem must not be lengthened into a dress (owner back try-on).
 # V2.8: stockings/hosiery/gloves must be kept; fine fashion-knit (not intimate sheer).
-TRY_ON_PROMPT_VERSION = "try-on-person-v2.8"
+# Live OpenAI Try On now shares Fitting Room Model B sunburst prompt + model
+# (see sunburst_try_on_prompt.py). V2.8 text retained for historical jobs / audits.
+TRY_ON_PROMPT_VERSION = "try-on-person-model-b-sunburst-v1"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -461,13 +463,15 @@ def _sanitize_design_hint(text: str) -> str:
 
 
 def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
-    """Active OpenAI try-on prompt (V2.8) plus optional Studio-derived design hints.
+    """Active OpenAI try-on prompt — Fitting Room Model B sunburst + optional hints.
 
-    V3 remains in-module for audit only — do not activate for live OpenAI Try On.
-    Coverage-sensitive swimwear still prefers the separate FASHN provider path;
-    V2.8 keeps high-cut hem fidelity and requires drawn stockings/gloves.
+    Same prompt text as Fitting Room Arm B (``MODEL_B_SUNBURST_PROMPT``). V2.8/V3
+    remain in-module for audit only. Coverage-sensitive swimwear still prefers
+    the separate FASHN provider path.
     """
-    prompt = TRY_ON_PROMPT_V2_8
+    from app.services.sunburst_try_on_prompt import MODEL_B_SUNBURST_PROMPT
+
+    prompt = MODEL_B_SUNBURST_PROMPT
     cleaned: list[str] = []
     for raw in design_hints or []:
         if not isinstance(raw, str):
@@ -531,7 +535,10 @@ class OpenAITryOnImagesEditAdapter:
             raise ProviderNotAvailableError("Empty garment artwork for try-on")
 
         settings = get_settings()
-        model = (settings.openai_image_model or "").strip()
+        # Match Fitting Room Model B: gpt-image-2.6-sunburst (not openai_image_model 2.5).
+        from app.services.sunburst_try_on_prompt import MODEL_B_SUNBURST_MODEL
+
+        model = MODEL_B_SUNBURST_MODEL
         assert_image_model_editable(model)
         size = (settings.openai_image_size or "1024x1536").strip()
         quality = settings.openai_image_quality

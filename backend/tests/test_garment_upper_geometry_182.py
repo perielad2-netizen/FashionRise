@@ -80,16 +80,18 @@ def test_visibility_matte_composites_pale_garment():
         assert sum(cream) / 3 > 180
 
 
-def test_try_on_prompt_v2_2_bridal_rules():
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.8"
+def test_try_on_prompt_matches_model_b_sunburst():
+    from app.services.sunburst_try_on_prompt import MODEL_B_SUNBURST_PROMPT
+
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v1"
     prompt = build_try_on_prompt(None)
-    assert prompt == TRY_ON_PROMPT_V2_8
-    assert "pale cream" in prompt.lower() or "ivory" in prompt.lower()
-    assert "matte" in prompt.lower()
-    assert "plunging" in prompt.lower() or "deep-v" in prompt.lower()
-    assert "both sleeves" in prompt.lower()
+    assert prompt == MODEL_B_SUNBURST_PROMPT
+    assert "photorealistic" in prompt.lower()
+    assert "footwear" in prompt.lower() or "shoes" in prompt.lower()
     assert "swimwear" not in prompt.lower()
     assert "lingerie" not in prompt.lower()
+    # V2.8 bridal archive retained but not the live prompt.
+    assert "pale cream" in TRY_ON_PROMPT_V2_8.lower() or "ivory" in TRY_ON_PROMPT_V2_8.lower()
 
 
 def test_magic_sketch_visibility_lifts_pale_off_white_paper():
