@@ -15,10 +15,7 @@ import {
   type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
-import {
-  onAndroidEditableFocus,
-  shouldIgnoreOverlayDismiss,
-} from '@/lib/androidKeyboardInput'
+import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
 import { syncFollowStatus } from '@/lib/followStatusStore'
 import { publishMyProfileAvatar } from '@/lib/myProfileAvatarStore'
 import {
