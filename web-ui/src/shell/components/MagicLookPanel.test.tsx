@@ -85,11 +85,15 @@ describe('MagicLookPanel', () => {
     expect(screen.getByRole('button', { name: 'Save in My Looks' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Compare original' }))
     expect(screen.getByAltText('Original model photo')).toBeTruthy()
+    expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
     expect(screen.getByLabelText('Original versus try-on')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Show original only' }))
     expect(screen.getByAltText('Original model photo')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Compare garment' }))
+    expect(screen.queryByLabelText('Original versus try-on')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show garment sketch' }))
     expect(screen.getByAltText('Garment artwork')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show try-on preview' }))
+    expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
   })
 
   it('shows a visible fidelity banner and hides Save in My Looks for rejected try-ons', () => {

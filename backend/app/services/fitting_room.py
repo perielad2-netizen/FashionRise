@@ -48,6 +48,7 @@ from app.services.sunburst_try_on_prompt import (
     MODEL_B_SUNBURST_PATH,
     MODEL_B_SUNBURST_PROMPT,
     MODEL_B_SUNBURST_PROMPT_VERSION,
+    MODEL_B_SUNBURST_SKIN_TONE_CLAUSE,
 )
 from app.storage.local import LocalStorageBackend
 

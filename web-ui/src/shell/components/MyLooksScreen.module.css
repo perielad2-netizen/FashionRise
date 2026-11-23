@@ -497,9 +497,10 @@
 
 /* Detail dialog — Mobbin image-first sheet (Character AI / Cosmos / Sora) */
 .overlay {
+  /* Portaled to document.body — sit above shell panes / Create Model peers. */
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -511,7 +512,13 @@
   -webkit-overflow-scrolling: touch;
   /* Clear GlobalHeader (sibling above .body) so title/date are not clipped under it */
   padding: max(12px, calc(var(--fr-header-h) + env(safe-area-inset-top, 0px))) 12px
-    max(12px, env(safe-area-inset-bottom, 0px));
+    max(
+      12px,
+      env(safe-area-inset-bottom, 0px),
+      calc(8px + var(--fr-browser-chrome-bottom, 0px))
+    );
+  max-height: 100dvh;
+  max-height: var(--fr-visible-height, 100dvh);
   background: rgba(4, 6, 12, 0.78);
   backdrop-filter: blur(10px);
   box-sizing: border-box;
@@ -867,15 +874,28 @@
     display: none;
   }
 
-  /* Cap look preview height so action rows stay on-screen without enlarging the shell. */
+  /* Contain full-body looks without cropping; actions stay in sticky footer. */
   .sideFrame {
     aspect-ratio: auto;
-    height: min(44svh, 380px);
-    max-height: min(44svh, 380px);
+    height: auto;
+    max-height: min(48svh, 420px);
+    min-height: min(28svh, 220px);
+  }
+
+  .sideFrame img {
+    width: 100%;
+    height: auto;
+    max-height: min(48svh, 420px);
+    object-fit: contain;
   }
 
   .dialogActions {
-    padding: 10px 14px max(12px, env(safe-area-inset-bottom, 0px));
+    padding: 10px 14px
+      max(
+        12px,
+        env(safe-area-inset-bottom, 0px),
+        calc(10px + var(--fr-browser-chrome-bottom, 0px))
+      );
     gap: 12px;
   }
 

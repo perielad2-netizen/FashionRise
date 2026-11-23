@@ -3,6 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## LIVE — Create Model unify + Try On / My Looks mobile (2026-11-23 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Two Create Model entry points felt inconsistent; upload preview overlapped Change photo; Try On compare labels ambiguous; My Looks detail cramped on Android |
+| Root cause | Both entries already shared one wizard — perceived moderation gaps were provider/photo variance, not dual pipelines. Preview `max-height` exceeded `.photoHit` without `overflow: hidden`. My Looks / Create Model fixed dialogs could be trapped by screen transforms. Try On compare cycle labels described next action poorly. |
+| Fix | Canonical `@/shell/createModel` barrel for both entry points; contained photo frame; body scroll lock + Escape; My Looks detail **portaled** + safe-area; clearer Try On compare labels + scrollable side-by-side; sunburst prompt **v5** (leg colors ≠ skin tone) |
+| Tip | BE `/opt/fashionrise/src` @ **`PENDING`** · FE `/var/www/fashionrise/releases/PENDING` · `/version.json` → `PENDING` |
+| Safety | Same personal-croquis API + provider moderation for both entries; blocked attempts not charged; no moderation bypass |
+| Native | Web/PWA assets sufficient for browser + Capacitor WebView after FE deploy; no native package rebuild required for these UI fixes |
+
 ## LIVE — Create Model upload 422 + Android modal portal (2026-11-23 Asia/Jerusalem)
 
 | Field | Value |

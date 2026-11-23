@@ -26,7 +26,7 @@ import {
   MaterialsDockIcon,
   ModelsDockIcon,
 } from '@/shell/components/StudioToolIcons'
-import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
+import { CreateModelWizard } from '@/shell/createModel'
 import { BetaNotice } from '@/shell/components/BetaNotice'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
@@ -1044,8 +1044,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       ) : null}
 
       {isMyCroquisUiEnabled() && editor.croquisWizardOpen ? (
-        <CreateMyCroquisWizard
+        <CreateModelWizard
           open
+          entryPoint="studio"
           onClose={editor.closeCroquisWizard}
           onPinAccepted={(croquisId, version) =>
             editor.requestPersonalCroquisPin(croquisId, version)

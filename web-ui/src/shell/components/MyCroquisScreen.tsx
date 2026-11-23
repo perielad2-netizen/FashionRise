@@ -10,7 +10,7 @@ import {
   type PersonalCroquisRead,
 } from '@/services/personalCroquisApi'
 import { ApiError } from '@/services/api/client'
-import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
+import { CreateModelWizard } from '@/shell/createModel'
 import styles from './MyCroquisScreen.module.css'
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
@@ -356,8 +356,9 @@ export function MyCroquisScreen({
       </div>
 
       {wizardOpen ? (
-        <CreateMyCroquisWizard
+        <CreateModelWizard
           open
+          entryPoint="my-models"
           onClose={() => setWizardOpen(false)}
           onPinAccepted={onPinAccepted}
         />

@@ -7,6 +7,25 @@ const mocks = vi.hoisted(() => ({
   erasePersonalCroquis: vi.fn(),
   fetchCroquisAssetBlob: vi.fn(),
   isMyCroquisUiEnabled: vi.fn(() => true),
+  CreateModelWizardMock: ({
+    onClose,
+    onPinAccepted,
+    entryPoint,
+  }: {
+    open: boolean
+    onClose: () => void
+    onPinAccepted: (id: string, version: number) => void
+    entryPoint?: string
+  }) => (
+    <div role="dialog" aria-label="Create Model wizard" data-entry-point={entryPoint}>
+      <button type="button" onClick={onClose}>
+        Close wizard
+      </button>
+      <button type="button" onClick={() => onPinAccepted('new-croquis', 1)}>
+        Accept new
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('@/config/myCroquisUi', () => ({
@@ -23,24 +42,9 @@ vi.mock('@/services/personalCroquisApi', async (importOriginal) => {
   }
 })
 
-vi.mock('@/shell/components/CreateMyCroquisWizard', () => ({
-  CreateMyCroquisWizard: ({
-    onClose,
-    onPinAccepted,
-  }: {
-    open: boolean
-    onClose: () => void
-    onPinAccepted: (id: string, version: number) => void
-  }) => (
-    <div role="dialog" aria-label="Create Model wizard">
-      <button type="button" onClick={onClose}>
-        Close wizard
-      </button>
-      <button type="button" onClick={() => onPinAccepted('new-croquis', 1)}>
-        Accept new
-      </button>
-    </div>
-  ),
+vi.mock('@/shell/createModel', () => ({
+  CreateModelWizard: mocks.CreateModelWizardMock,
+  CreateMyCroquisWizard: mocks.CreateModelWizardMock,
 }))
 
 const sampleRows = [

@@ -9,14 +9,15 @@ from __future__ import annotations
 
 # Model B — gpt-image-2.6-sunburst raw person+design path (owner A/B/C Arm B).
 MODEL_B_SUNBURST_MODEL = "gpt-image-2.6-sunburst"
-MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v4"
+MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v5"
 MODEL_B_SUNBURST_PATH = "openai_model_b_sunburst_raw"
 # v4: owner sex flag outranks geometry. Job 2a646dc6 froze male + shorts but the
 # worker then injected "dress with high fashion slit" + "plunging V cleavage" from
 # false-positive plate geometry and those hints filled the 8-slot budget.
+# v5: colored lower-leg / foot regions are garments or footwear — never skin-tone edits.
 MODEL_B_SUNBURST_PROMPT = (
     "Fit the exact garment design from image 2 onto the real person in image 1. "
-    "Preserve the person's original face, hair, body, pose, and background. "
+    "Preserve the person's original face, hair, body, pose, skin tone, and background. "
     "PRIORITY: when Studio design evidence names a person sex flag (male or female), "
     "that flag outranks silhouette guesses — never override it with dress/skirt/cleavage "
     "stereotypes. "
@@ -26,15 +27,21 @@ MODEL_B_SUNBURST_PROMPT = (
     "If the person sex flag is female: keep feminine presentation and follow image 2 "
     "garment type (skirt/dress stays skirt/dress; shorts stay shorts). "
     "Keep the garment's exact type, colors, silhouette, decorative details, neckline, "
-    "and length as drawn in image 2. "
+    "sleeve asymmetry, fabric texture/pattern, layer placement, and length as drawn in image 2. "
     "If image 2 shows separate top and bottom, keep both pieces — do not merge into one dress. "
     "If image 2 shows shorts, cropped trousers, or any short hem ending above mid-calf, "
     "keep that short length — do not lengthen into a skirt, dress, gown, or high slit. "
+    "Colored regions on the lower legs or feet in image 2 are stockings, boots, shoes, or "
+    "other garments — never reinterpret them as changes to the person's skin color. "
     "Make the clothing naturally photorealistic. Do not change anything else. "
     "If the fashion design shows shoes, heels, boots, or other footwear, replace "
     "the person's existing footwear with the matching design footwear, preserving "
     "its style, color, and proportions. If no footwear is shown in the design, "
     "preserve the original shoes."
+)
+MODEL_B_SUNBURST_SKIN_TONE_CLAUSE = (
+    "Colored regions on the lower legs or feet in image 2 are stockings, boots, shoes, or "
+    "other garments — never reinterpret them as changes to the person's skin color."
 )
 MODEL_B_SUNBURST_FOOTWEAR_CLAUSE = (
     "If the fashion design shows shoes, heels, boots, or other footwear, replace "

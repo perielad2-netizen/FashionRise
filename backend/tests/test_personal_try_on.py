@@ -185,7 +185,7 @@ def test_try_on_prompt_matches_fitting_room_model_b_sunburst():
         MODEL_B_SUNBURST_SHORTS_CLAUSE,
     )
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v4"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v5"
     active = build_try_on_prompt(None)
     assert active == MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_FOOTWEAR_CLAUSE in active
@@ -254,7 +254,7 @@ def test_openai_try_on_route_independent_from_fashn_prompt_versions():
     from app.services.fashn_garment_realism import GARMENT_REALISM_PROMPT_VERSION
     from app.services.personal_try_on import FASHN_PROMPT_VERSION
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v4"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v5"
     assert TRY_ON_PROMPT_VERSION != GARMENT_REALISM_PROMPT_VERSION
     assert TRY_ON_PROMPT_VERSION != FASHN_PROMPT_VERSION
     assert FASHN_PROMPT_VERSION.startswith("fashn-")

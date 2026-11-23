@@ -49,11 +49,16 @@ import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './CreateMyCroquisWizard.module.css'
 
+/** Where Create Model was opened — same wizard/API; only post-accept differs. */
+export type CreateModelEntryPoint = 'my-models' | 'studio'
+
 export type CreateMyCroquisWizardProps = {
   open: boolean
   onClose: () => void
   onPinAccepted: (croquisId: string, version: number) => void
   onUseOfflineFixture?: (croquisId: string, version: number) => void
+  /** Telemetry / regression: both entry points must share this component. */
+  entryPoint?: CreateModelEntryPoint
 }
 
 type Step = 'compose' | 'generating' | 'preview' | 'reconciliation' | 'blocked'
@@ -68,6 +73,7 @@ export function CreateMyCroquisWizard({
   onClose,
   onPinAccepted,
   onUseOfflineFixture,
+  entryPoint = 'my-models',
 }: CreateMyCroquisWizardProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const noticesOk = useMemo(() => croquisNoticesAuthorized(), [])
@@ -137,6 +143,16 @@ export function CreateMyCroquisWizard({
     }
   }, [open])
 
+  // Lock background scroll while the portaled sheet is open (both entry points).
+  useEffect(() => {
+    if (!open) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open])
+
   const cancelInFlightGenerate = useCallback(() => {
     // Only abandon mid-generation. Preview close/accept must not re-reject.
     if (stepRef.current !== 'generating') return
@@ -158,6 +174,16 @@ export function CreateMyCroquisWizard({
     })
     onClose()
   }, [cancelInFlightGenerate, onClose])
+
+  // Escape closes cleanly without leaving an invisible overlay.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busy && !spendOpen) handleClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, busy, spendOpen, handleClose])
 
   const onPickLocal = useCallback((file: File) => {
     setError(null)
@@ -385,6 +411,7 @@ export function CreateMyCroquisWizard({
       role="presentation"
       data-portal="document-body"
       data-testid="create-model-wizard-backdrop"
+      data-entry-point={entryPoint}
       onClick={handleClose}
     >
       <div

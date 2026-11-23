@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Archive,
   ArrowLeft,
@@ -188,11 +189,41 @@ function LookDetailDialog({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && !publishConfirmOpen) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, publishConfirmOpen])
+
+  // looksRise transform on the screen can trap position:fixed — portal + lock.
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const vv = window.visualViewport
+    const sync = () => {
+      const layoutH = window.innerHeight || 0
+      const visibleH = vv?.height ?? layoutH
+      const offsetTop = vv?.offsetTop ?? 0
+      const chromeBottom = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
+      const target = document.querySelector(
+        '[data-testid="look-detail-overlay"]',
+      ) as HTMLElement | null
+      target?.style.setProperty('--fr-browser-chrome-bottom', `${chromeBottom}px`)
+      target?.style.setProperty('--fr-visible-height', `${Math.round(visibleH)}px`)
+    }
+    sync()
+    const raf = window.requestAnimationFrame(sync)
+    vv?.addEventListener('resize', sync)
+    vv?.addEventListener('scroll', sync)
+    window.addEventListener('resize', sync)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.cancelAnimationFrame(raf)
+      vv?.removeEventListener('resize', sync)
+      vv?.removeEventListener('scroll', sync)
+      window.removeEventListener('resize', sync)
+    }
+  }, [])
 
   const patch = async (body: Parameters<typeof updateLook>[1]) => {
     setBusy(true)
@@ -250,10 +281,12 @@ function LookDetailDialog({
   const showBothDesktop = Boolean(frontJob && backJob)
   const dualLike = look.kind === 'dual' || showBothDesktop
 
-  return (
+  const overlay = (
     <div
       className={`fr-keyboard-overlay ${styles.overlay}`}
       role="presentation"
+      data-portal="document-body"
+      data-testid="look-detail-overlay"
       onClick={() => {
         // Ignore dismiss while the nested Publish confirm is open — otherwise a
         // checkbox / button tap that reaches this overlay closes the whole look.
@@ -601,6 +634,9 @@ function LookDetailDialog({
       ) : null}
     </div>
   )
+
+  if (typeof document === 'undefined') return overlay
+  return createPortal(overlay, document.body)
 }
 
 export function MyLooksScreen({

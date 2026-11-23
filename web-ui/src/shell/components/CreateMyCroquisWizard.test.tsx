@@ -267,13 +267,51 @@ describe('CreateMyCroquisWizard offline harness', () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     render(
       <div data-testid="models-shell">
-        <CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />
+        <CreateMyCroquisWizard
+          open
+          entryPoint="studio"
+          onClose={() => undefined}
+          onPinAccepted={() => undefined}
+        />
       </div>,
     )
     const backdrop = screen.getByTestId('create-model-wizard-backdrop')
     expect(backdrop.getAttribute('data-portal')).toBe('document-body')
+    expect(backdrop.getAttribute('data-entry-point')).toBe('studio')
     expect(backdrop.parentElement).toBe(document.body)
     expect(screen.getByTestId('models-shell').contains(backdrop)).toBe(false)
+  })
+
+  it('surfaces moderation_blocked without pinning or inventing a model', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    getPersonalCroquisVersion.mockResolvedValue({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      version: 1,
+      status: 'failed',
+      failure_code: 'moderation_blocked',
+      failure_message:
+        'The AI provider blocked this photo (moderation_blocked). FashionRise cannot override that provider decision. This attempt was not charged.',
+      generated_asset_id: null,
+      geometry_profile: 'fit_contain_768x1024_v1',
+      prompt_version: null,
+      created_at: '2026-10-31T12:00:00+00:00',
+      accepted_at: null,
+    })
+    const onPin = vi.fn()
+    render(
+      <CreateMyCroquisWizard
+        open
+        entryPoint="my-models"
+        onClose={() => undefined}
+        onPinAccepted={onPin}
+      />,
+    )
+    await selectPhotoAndAgree()
+    await approveUploadAndGenerate()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/moderation_blocked|not charged/i)
+    expect(onPin).not.toHaveBeenCalled()
+    expect(acceptPersonalCroquisVersion).not.toHaveBeenCalled()
   })
 
   it('surfaces upload-disabled 403 without inventing a generated pin', async () => {

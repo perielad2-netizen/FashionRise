@@ -264,6 +264,9 @@
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.05);
   color: #fff;
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .primary:focus-visible,
@@ -286,7 +289,10 @@
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: 11rem;
+  /* Fixed frame so tall portraits cannot grow past Change photo / CTA. */
+  height: min(36vh, 14rem);
+  max-height: min(36vh, 14rem);
+  min-height: 0;
   margin: 0;
   padding: 0.55rem;
   border-radius: 16px;
@@ -295,6 +301,9 @@
     linear-gradient(160deg, rgba(244, 114, 182, 0.1), transparent 42%),
     #101018;
   cursor: pointer;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex: 0 0 auto;
 }
 
 .photoEmpty {
@@ -306,14 +315,16 @@
 }
 
 .preview {
-  width: auto;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  max-height: min(36vh, 14rem);
-  align-self: center;
+  max-height: 100%;
   object-fit: contain;
+  object-position: center center;
   border-radius: 12px;
   background: #f7f1ea;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  display: block;
 }
 
 .file {
@@ -375,12 +386,9 @@
     border-bottom-right-radius: 16px;
   }
 
-  .preview {
-    max-height: min(26vh, 9.5rem);
-  }
-
   .photoHit {
-    min-height: 8.5rem;
+    height: min(26vh, 9.5rem);
+    max-height: min(26vh, 9.5rem);
   }
 
   .body {

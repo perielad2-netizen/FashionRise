@@ -358,6 +358,17 @@
   background: #f8f4f0;
 }
 
+.stageCompare {
+  /* Side-by-side portraits need room to scroll on narrow Android viewports. */
+  height: auto;
+  max-height: min(72dvh, 720px);
+  min-height: min(48dvh, 420px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 .compareGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -381,6 +392,7 @@
 }
 
 .comparePane figcaption {
+  flex: 0 0 auto;
   padding: 6px 10px;
   font-size: 0.72rem;
   font-weight: 700;
@@ -394,14 +406,27 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  flex: 1;
-  min-height: 0;
+  object-position: center center;
+  flex: 1 1 auto;
+  min-height: 8rem;
   background: #0b1220;
+  display: block;
 }
 
 @media (max-width: 640px) {
   .compareGrid {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .comparePane {
+    min-height: min(38dvh, 320px);
+  }
+
+  .comparePane img {
+    height: min(36dvh, 300px);
+    max-height: min(36dvh, 300px);
   }
 }
 

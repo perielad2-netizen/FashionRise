@@ -25,6 +25,7 @@ from app.services.fitting_room import (
     MODEL_B_SUNBURST_PATH,
     MODEL_B_SUNBURST_PROMPT,
     MODEL_B_SUNBURST_PROMPT_VERSION,
+    MODEL_B_SUNBURST_SKIN_TONE_CLAUSE,
 )
 from app.services.personal_try_on_provider import set_try_on_provider_override
 from tests.auth_test_helpers import register_with_invite
@@ -106,6 +107,7 @@ def test_model_b_prompt_includes_footwear_and_preserve_clause():
         MODEL_B_SUNBURST_MALE_PANTS_CLAUSE,
         MODEL_B_SUNBURST_SEX_CLAUSE,
         MODEL_B_SUNBURST_SHORTS_CLAUSE,
+        MODEL_B_SUNBURST_SKIN_TONE_CLAUSE as SKIN_TONE,
         sex_flag_design_hints,
     )
 
@@ -115,6 +117,10 @@ def test_model_b_prompt_includes_footwear_and_preserve_clause():
     assert MODEL_B_SUNBURST_SEX_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_SHORTS_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_MALE_PANTS_CLAUSE in MODEL_B_SUNBURST_PROMPT
+    assert SKIN_TONE in MODEL_B_SUNBURST_PROMPT
+    assert MODEL_B_SUNBURST_SKIN_TONE_CLAUSE == SKIN_TONE
+    assert "skin tone" in low or "skin color" in low
+    assert "stockings" in low or "footwear" in low
     assert "replace the person's existing footwear" in low
     assert "if no footwear is shown in the design, preserve the original shoes" in low
     assert "preserve the person's original face" in low
@@ -122,7 +128,7 @@ def test_model_b_prompt_includes_footwear_and_preserve_clause():
     assert "outranks silhouette" in low or "priority" in low
     assert "shorts" in low and "skirt" in low
     assert "cleavage" in low
-    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v4"
+    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v5"
     male = " ".join(sex_flag_design_hints("male")).lower()
     assert "person sex flag: male" in male
     assert "never a skirt" in male or "never a skirt" in male.replace("—", " ")

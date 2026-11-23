@@ -137,6 +137,9 @@ describe('MyLooksScreen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View details for Dual runway' }))
     const dialog = await screen.findByRole('dialog', { name: 'Dual runway' })
+    const overlay = screen.getByTestId('look-detail-overlay')
+    expect(overlay.getAttribute('data-portal')).toBe('document-body')
+    expect(overlay.parentElement).toBe(document.body)
     expect(within(dialog).getByRole('button', { name: 'Download' })).toBeInTheDocument()
     expect(within(dialog).getByTestId('look-download')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Share' })).toBeInTheDocument()

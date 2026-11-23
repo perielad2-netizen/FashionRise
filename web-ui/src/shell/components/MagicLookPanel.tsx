@@ -119,12 +119,20 @@ export function MagicLookPanel({
       setDownloadBusy(false)
       downloadInFlight.current = false
       setDownloadNotice(null)
+      setTryOnCompare('result')
+      setCompareSketch(false)
       if (downloadNoticeTimer.current != null) {
         window.clearTimeout(downloadNoticeTimer.current)
         downloadNoticeTimer.current = null
       }
     }
   }, [open])
+
+  // New try-on result must not inherit a stale compare mode from the prior job.
+  useEffect(() => {
+    setTryOnCompare('result')
+    setCompareSketch(false)
+  }, [lookObjectUrl, originalPhotoUrl])
 
   function showDownloadNotice(message: string, tone: 'ok' | 'info' | 'error') {
     if (downloadNoticeTimer.current != null) window.clearTimeout(downloadNoticeTimer.current)
@@ -241,6 +249,7 @@ export function MagicLookPanel({
     const next = available[(idx + 1) % available.length] ?? 'result'
     setTryOnCompare(next)
   }
+  // Labels describe the *next* action (cycle button), not the current mode.
   const tryOnCompareLabel =
     tryOnCompare === 'result'
       ? originalPhotoUrl
@@ -250,9 +259,9 @@ export function MagicLookPanel({
         ? 'Show original only'
         : tryOnCompare === 'original'
           ? activeSketchUrl
-            ? 'Compare garment'
-            : 'Show try-on'
-          : 'Show try-on'
+            ? 'Show garment sketch'
+            : 'Show try-on preview'
+          : 'Show try-on preview'
 
   return (
     <div
@@ -337,7 +346,12 @@ export function MagicLookPanel({
           </div>
         ) : null}
 
-        <div className={styles.stage}>
+        <div
+          className={
+            showTryOnSideBySide ? `${styles.stage} ${styles.stageCompare}` : styles.stage
+          }
+          data-compare-mode={tryOn ? tryOnCompare : comparing ? 'sketch' : 'result'}
+        >
           {busy ? (
             <div className={styles.statusBox} data-testid="magic-generating">
               <div className={styles.generatingVisual} aria-hidden>
