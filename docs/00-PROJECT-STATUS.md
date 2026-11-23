@@ -3,6 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## LIVE — Create Model upload 422 + Android modal portal (2026-11-23 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Create Model → **Personal croquis upload failed** (Android native + web entry points) |
+| Root cause | `POST /api/v1/personal-croquis/photos` → **422** — BE required Form `sex` after male/female work; Capacitor Android build still omits `sex` (`Origin: https://localhost/`) |
+| Logs | 2026-11-23 **11:20:36 / 11:20:47 / 11:27:35 UTC** (≈13:20–13:27 IST) — adults/storage/upload consent **200**, photos **422** |
+| Fix | `sex` Form optional again (Try On still requires via picker/PATCH); clearer upload error mapping; Create Model dialog **portaled to `document.body`** (My Models `modelsRise` transform trapped `position:fixed`) |
+| Tip | Update after deploy — BE `/opt/fashionrise/src` + FE `/var/www/fashionrise/releases/<sha>-create-model-upload-hotfix` |
+| Native | Web/PWA fixed by FE deploy; **installed Android APK still needs store rebuild** for sex picker UI, but upload works without `sex` now |
+| PR | (fill after merge) |
+
 ## LIVE — Share design approve before My Designs (2026-11-22 Asia/Jerusalem)
 
 | Field | Value |

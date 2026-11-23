@@ -566,7 +566,7 @@ def upload_source_photo(
     raw: bytes,
     declared_content_type: str | None,
     storage_consent_id: uuid.UUID,
-    sex: str,
+    sex: str | None = None,
     display_name: str | None = None,
 ) -> PersonalCroquis:
     """Consent-gated source upload. Requires MY_CROQUIS_UPLOAD_ENABLED."""
@@ -600,7 +600,8 @@ def upload_source_photo(
             storage_key=storage_key,
         )
         attestation = _latest_adults_attestation(db, user)
-        sex_norm = normalize_croquis_sex(sex, required=True)
+        # Native Capacitor builds may omit sex until a store rebuild ships the picker.
+        sex_norm = normalize_croquis_sex(sex, required=False)
         croquis = PersonalCroquis(
             id=croquis_id,
             owner_id=user.id,

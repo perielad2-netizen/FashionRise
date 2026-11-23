@@ -263,6 +263,19 @@ describe('CreateMyCroquisWizard offline harness', () => {
     expect(screen.getByRole('button', { name: /Upload & Generate/i })).toHaveTextContent(/−10/)
   })
 
+  it('portals the Create Model dialog to document.body', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    render(
+      <div data-testid="models-shell">
+        <CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />
+      </div>,
+    )
+    const backdrop = screen.getByTestId('create-model-wizard-backdrop')
+    expect(backdrop.getAttribute('data-portal')).toBe('document-body')
+    expect(backdrop.parentElement).toBe(document.body)
+    expect(screen.getByTestId('models-shell').contains(backdrop)).toBe(false)
+  })
+
   it('surfaces upload-disabled 403 without inventing a generated pin', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     const { ApiError } = await import('@/services/api/client')

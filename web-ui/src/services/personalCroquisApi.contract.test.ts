@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   acceptedVersionNumber,
+  formatPersonalCroquisUploadError,
   type PersonalCroquisRead,
   type PersonalCroquisVersionRead,
 } from '@/services/personalCroquisApi'
@@ -80,5 +81,20 @@ describe('Stage A PersonalCroquisRead contract', () => {
     expect(STAGE_A_VERSION_READ.generated_asset_id).toBe(
       STAGE_A_CROQUIS_WITH_ACCEPTED.latest_accepted_version?.generated_asset_id,
     )
+  })
+
+  it('maps FastAPI 422 missing sex and proxy statuses to owner-safe upload messages', () => {
+    expect(
+      formatPersonalCroquisUploadError(422, {
+        detail: [{ type: 'missing', loc: ['body', 'sex'], msg: 'Field required' }],
+      }),
+    ).toMatch(/male or female/i)
+    expect(formatPersonalCroquisUploadError(401, null)).toMatch(/sign in/i)
+    expect(formatPersonalCroquisUploadError(413, null)).toMatch(/too large/i)
+    expect(formatPersonalCroquisUploadError(0, null)).toMatch(/reach FashionRise|connection/i)
+    expect(formatPersonalCroquisUploadError(500, null)).toMatch(/server upload failed/i)
+    expect(
+      formatPersonalCroquisUploadError(400, { detail: 'That photo could not be normalized.' }),
+    ).toBe('That photo could not be normalized.')
   })
 })

@@ -206,23 +206,67 @@ export async function updatePersonalCroquisSex(
   })
 }
 
+/** Map FastAPI / proxy upload failures to owner-safe messages (no tokens/bytes). */
+export function formatPersonalCroquisUploadError(
+  status: number,
+  parsed: unknown,
+  fallback = 'Personal croquis upload failed',
+): string {
+  const detail = (parsed as { detail?: unknown } | null)?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null
+        const row = item as { loc?: unknown; msg?: unknown }
+        const msg = typeof row.msg === 'string' ? row.msg.trim() : ''
+        const loc = Array.isArray(row.loc)
+          ? row.loc
+              .filter((p): p is string | number => typeof p === 'string' || typeof p === 'number')
+              .map(String)
+          : []
+        if (loc.includes('sex')) return 'Select male or female for this model.'
+        return msg || null
+      })
+      .filter((m): m is string => Boolean(m))
+    if (msgs.length) return msgs[0]
+  }
+  if (status === 401 || status === 403) {
+    return 'Sign in expired. Sign in again, then retry Create Model.'
+  }
+  if (status === 413) {
+    return 'That photo is too large to upload. Try a smaller photo, or wait while FashionRise compresses it and try again.'
+  }
+  if (status === 415 || status === 400) {
+    return 'That photo could not be used. Choose a JPEG, PNG, or WebP fashion pose photo.'
+  }
+  if (status === 422) {
+    return 'Create Model could not accept that upload. Check the photo and agreement, then try again.'
+  }
+  if (status === 0) {
+    return 'Unable to reach FashionRise. Check your connection and try again.'
+  }
+  if (status >= 500) {
+    return 'Server upload failed. Please try again in a moment.'
+  }
+  return fallback
+}
+
 export async function uploadPersonalCroquisPhoto(
   file: File,
   storageConsentId: string,
-  options?: { displayName?: string; sex: CroquisSex; signal?: AbortSignal },
+  options?: { displayName?: string; sex?: CroquisSex; signal?: AbortSignal },
 ): Promise<PersonalCroquisRead> {
   const tokens = tokenStore.get()
   if (!tokens?.accessToken) {
     throw new ApiError('Sign in required to upload a personal croquis photo.', 401, null)
   }
   const sex = options?.sex
-  if (sex !== 'male' && sex !== 'female') {
-    throw new ApiError('Select male or female for this model.', 400, null)
-  }
   const form = new FormData()
   form.append('file', file, file.name)
   form.append('storage_consent_id', storageConsentId)
-  form.append('sex', sex)
+  // Web Create Model sends sex; legacy native builds may omit it (BE accepts null).
+  if (sex === 'male' || sex === 'female') form.append('sex', sex)
   if (options?.displayName?.trim()) form.append('display_name', options.displayName.trim())
   const signal = options?.signal
 
@@ -238,7 +282,7 @@ export async function uploadPersonalCroquisPhoto(
       signal,
     })
   } catch {
-    throw new ApiError('Unable to reach FashionRise. Check that the API is running.', 0, null)
+    throw new ApiError(formatPersonalCroquisUploadError(0, null), 0, null)
   }
 
   const text = await response.text()
@@ -251,20 +295,18 @@ export async function uploadPersonalCroquisPhoto(
     }
   }
   if (!response.ok) {
-    const detailFromJson =
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'detail' in parsed &&
-      typeof (parsed as { detail: unknown }).detail === 'string'
-        ? (parsed as { detail: string }).detail
-        : null
-    // Nginx/Cloudflare 413 is often bare HTML — not FastAPI JSON — so surface a clear ask.
-    const detail =
-      detailFromJson ??
-      (response.status === 413
-        ? 'That photo is too large to upload. Try a smaller photo, or wait while FashionRise compresses it and try again.'
-        : 'Personal croquis upload failed')
-    throw new ApiError(detail, response.status, parsed)
+    // Never log Authorization or image bytes — status + sanitized category only.
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      console.warn('[create-model-upload]', {
+        status: response.status,
+        category: formatPersonalCroquisUploadError(response.status, parsed, 'upload_failed'),
+      })
+    }
+    throw new ApiError(
+      formatPersonalCroquisUploadError(response.status, parsed),
+      response.status,
+      parsed,
+    )
   }
   return parsed as PersonalCroquisRead
 }
