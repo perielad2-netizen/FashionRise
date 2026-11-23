@@ -286,36 +286,86 @@ def settle_group_awards(
 
 
 def lock_and_settle_week(db: Session, week_start: datetime) -> CompetitionWeek:
-    """Settle one week under row lock — concurrent workers cannot double-pay."""
-    week = _lock_week(db, week_start)
-    if week.status == "locked":
-        return week
+    """Settle one week under row lock — concurrent workers cannot double-pay.
 
-    groups = list_group_rows(db, week_start)
-    for group in groups:
-        settle_group_awards(db, week_start=week_start, group=group)
+    Weeks locked while Stars gates were OFF (zero awards) can be re-settled once
+    rewards become eligible. Paid weeks stay locked forever.
+    """
+    from app.services.competition_groups import enroll_users_active_this_week
+    from app.services.fashionrise_reward_gates import week_eligible_for_weekly_rewards
+
+    week = _lock_week(db, week_start)
+    eligible = week_eligible_for_weekly_rewards(week_start)
+    existing_awards = db.scalar(
+        select(CompetitionAward.id).where(CompetitionAward.week_start == week_start).limit(1)
+    )
+
+    if week.status == "locked":
+        # Already paid — done. Or still gated off with an empty lock — wait.
+        if existing_awards is not None or not eligible:
+            return week
+        # Locked with zero awards while gates were off → reopen for settlement.
+        week.status = "open"
+        week.locked_at = None
+        db.add(week)
+        db.flush()
+
+    if eligible:
+        # Catch-up enroll engagers who never hit a write-path enroll this week.
+        enroll_users_active_this_week(
+            db,
+            week_start=week_start,
+            week_end=competition_week_end(week_start),
+        )
+        groups = list_group_rows(db, week_start)
+        for group in groups:
+            settle_group_awards(db, week_start=week_start, group=group)
 
     week.status = "locked"
     week.locked_at = datetime.now(timezone.utc)
     db.add(week)
     db.flush()
-    _log.info("competition_week_locked week=%s groups=%s", week_key(week_start), len(groups))
+    _log.info(
+        "competition_week_locked week=%s eligible=%s",
+        week_key(week_start),
+        eligible,
+    )
     return week
 
 
 def outstanding_past_weeks(db: Session, *, now: datetime | None = None) -> list[CompetitionWeek]:
+    """Past weeks that still need settlement.
+
+    Includes locked weeks with zero awards that are now reward-eligible (gates
+    were off when the week first closed).
+    """
+    from app.services.fashionrise_reward_gates import week_eligible_for_weekly_rewards
+
     now_utc = ensure_utc(now or datetime.now(timezone.utc))
     current = competition_week_start(now_utc)
-    return list(
+    rows = list(
         db.scalars(
             select(CompetitionWeek)
-            .where(
-                CompetitionWeek.week_start < current,
-                CompetitionWeek.status != "locked",
-            )
+            .where(CompetitionWeek.week_start < current)
             .order_by(CompetitionWeek.week_start.asc())
         ).all()
     )
+    out: list[CompetitionWeek] = []
+    for week in rows:
+        if week.status != "locked":
+            out.append(week)
+            continue
+        if not week_eligible_for_weekly_rewards(week.week_start):
+            continue
+        has_award = (
+            db.scalar(
+                select(CompetitionAward.id).where(CompetitionAward.week_start == week.week_start).limit(1)
+            )
+            is not None
+        )
+        if not has_award:
+            out.append(week)
+    return out
 
 
 def tick_competitions(db: Session, *, now: datetime | None = None) -> dict:

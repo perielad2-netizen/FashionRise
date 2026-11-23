@@ -97,6 +97,7 @@ vi.mock('@/services/competitionsApi', () => ({
   fetchCompetitionAwards: vi.fn(async () => []),
   fetchStreakStatus: vi.fn(async () => ({
     current_streak: 1,
+    cycle_day: 1,
     last_checkin_date: '2026-11-16',
     lifetime_checkins: 1,
     days_until_reward: 6,
@@ -106,8 +107,16 @@ vi.mock('@/services/competitionsApi', () => ({
     reward_stars: 10,
     rewards_enabled: false,
   })),
+  streakCycleDay: (s: { current_streak?: number; cycle_day?: number; reward_every_days?: number }) => {
+    const every = Math.max(1, s.reward_every_days || 7)
+    if (typeof s.cycle_day === 'number' && s.cycle_day > 0) return Math.min(every, s.cycle_day)
+    const raw = Math.max(0, s.current_streak || 0)
+    if (raw <= 0) return 0
+    return ((raw - 1) % every) + 1
+  },
   postStreakCheckIn: vi.fn(async () => ({
     current_streak: 1,
+    cycle_day: 1,
     last_checkin_date: '2026-11-16',
     lifetime_checkins: 1,
     days_until_reward: 6,

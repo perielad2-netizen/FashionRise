@@ -48,6 +48,19 @@ export type StreakStatus = {
   rewards_enabled?: boolean
   /** Consecutive reward-eligible UTC days (post activation boundary). */
   reward_streak?: number
+  /** 1..reward_every_days progress for UI (never exceeds the cycle). */
+  cycle_day?: number
+}
+
+/** Map unbounded consecutive days onto a 1..N reward-cycle progress. */
+export function streakCycleDay(streak: StreakStatus): number {
+  const every = Math.max(1, streak.reward_every_days || 7)
+  if (typeof streak.cycle_day === 'number' && streak.cycle_day > 0) {
+    return Math.min(every, streak.cycle_day)
+  }
+  const raw = Math.max(0, streak.current_streak || 0)
+  if (raw <= 0) return 0
+  return ((raw - 1) % every) + 1
 }
 
 export type CompetitionAward = {

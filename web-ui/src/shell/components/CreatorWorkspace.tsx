@@ -1029,17 +1029,25 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       {editor.model === 'personal' && editor.personalUnavailable ? (
         <div className={styles.damagedCloudBanner} role="status">
           <p>
-            Model unavailable — your strokes and fills are kept. The pinned My Model reference
-            could not be loaded (erased or inaccessible). Studio will not switch models
-            automatically.
+            This design&apos;s model couldn&apos;t load — your drawing is safe. If a friend shared
+            this look, try again in a moment. Or switch to a Studio model below to keep editing.
           </p>
-          <button
-            type="button"
-            className={styles.damagedCloudBannerButton}
-            onClick={() => editor.reloadPersonalCroquisUnderlay()}
-          >
-            Retry model
-          </button>
+          <div className={styles.damagedCloudBannerActions}>
+            <button
+              type="button"
+              className={styles.damagedCloudBannerButton}
+              onClick={() => editor.reloadPersonalCroquisUnderlay()}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className={styles.damagedCloudBannerButton}
+              onClick={() => editor.setModel('female-hand-hip')}
+            >
+              Use Studio model
+            </button>
+          </div>
         </div>
       ) : null}
 

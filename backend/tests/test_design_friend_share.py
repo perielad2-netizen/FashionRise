@@ -424,10 +424,17 @@ def test_share_grants_croquis_and_friend_can_try_on_person(client, db_session, m
     assert snap.get("personalCroquisId") == croquis_id
     assert snap.get("personalCroquisVersion") == 1
 
-    # Underlay path: friend can read croquis + version after grant.
+    # Underlay path: friend can read croquis + version + asset after grant.
     got = client.get(f"{croquis_base}/{croquis_id}", headers=_auth(yaniv))
     assert got.status_code == 200, got.text
     assert got.json()["id"] == croquis_id
+    ver = client.get(f"{croquis_base}/{croquis_id}/versions/1", headers=_auth(yaniv))
+    assert ver.status_code == 200, ver.text
+    asset_id = ver.json()["generated_asset_id"]
+    assert asset_id
+    img = client.get(f"{croquis_base}/assets/{asset_id}/image", headers=_auth(yaniv))
+    assert img.status_code == 200, img.text
+    assert img.headers.get("content-type", "").startswith("image/")
 
     garment = "data:image/png;base64," + base64.b64encode(
         _png_bytes((48, 64), (30, 90, 200, 200))

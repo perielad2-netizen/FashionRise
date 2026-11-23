@@ -317,6 +317,42 @@ def test_weekly_rewards_respect_launch_boundary(db_session, monkeypatch):
     get_settings.cache_clear()
 
 
+def test_locked_empty_week_resettles_after_rewards_enabled(db_session, monkeypatch):
+    """Weeks locked with 0 awards while gates were OFF can pay once gates turn on."""
+    from app.models.competition import CompetitionWeek
+    from app.services.competition_awards import lock_and_settle_week, outstanding_past_weeks
+    from app.services.competition_groups import ensure_competition_week
+
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_ENABLED", "false")
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START", "")
+    get_settings.cache_clear()
+
+    past = competition_week_start(datetime(2026, 11, 11, 12, tzinfo=timezone.utc))
+    ensure_competition_week(db_session, now=past + timedelta(hours=1))
+    db_session.commit()
+    lock_and_settle_week(db_session, past)
+    db_session.commit()
+    week = db_session.get(CompetitionWeek, past)
+    assert week is not None and week.status == "locked"
+    assert db_session.scalars(select(CompetitionAward)).all() == []
+
+    launch = past
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_ENABLED", "true")
+    monkeypatch.setenv("FASHIONRISE_WEEKLY_REWARDS_LAUNCH_WEEK_START", launch.date().isoformat())
+    get_settings.cache_clear()
+
+    now = datetime(2026, 11, 22, 12, tzinfo=timezone.utc)
+    pending = outstanding_past_weeks(db_session, now=now)
+    assert any(w.week_start == past for w in pending)
+
+    # Re-settle path must reopen and re-lock (may still create 0 awards if no engagers).
+    lock_and_settle_week(db_session, past)
+    db_session.commit()
+    week = db_session.get(CompetitionWeek, past)
+    assert week is not None and week.status == "locked"
+    get_settings.cache_clear()
+
+
 def test_streak_rewards_default_off(client, db_session, monkeypatch):
     monkeypatch.setenv("FASHIONRISE_STREAK_REWARDS_ENABLED", "false")
     get_settings.cache_clear()
@@ -327,9 +363,14 @@ def test_streak_rewards_default_off(client, db_session, monkeypatch):
     for i in range(7):
         status = record_daily_checkin(db_session, user, now=day0 + timedelta(days=i))
     assert status.current_streak == 7
+    assert status.cycle_day == 7
     assert status.rewards_enabled is False
     assert status.stars_awarded == 0
     assert status.rewarded_this_checkin is False
+    # Day 8 must wrap the UI cycle (never 8/7).
+    eighth = record_daily_checkin(db_session, user, now=day0 + timedelta(days=7))
+    assert eighth.current_streak == 8
+    assert eighth.cycle_day == 1
     payouts = db_session.scalars(
         select(StarPayout).where(StarPayout.user_id == user.id, StarPayout.reason == "login_streak")
     ).all()
@@ -337,6 +378,8 @@ def test_streak_rewards_default_off(client, db_session, monkeypatch):
 
     me = client.get("/api/v1/competitions/streak", headers=_auth(tokens))
     assert me.status_code == 200
+    assert me.json()["cycle_day"] == 1
+    assert me.json()["current_streak"] == 8
     assert me.json()["rewards_enabled"] is False
     get_settings.cache_clear()
 

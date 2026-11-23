@@ -39,16 +39,25 @@ vi.mock('@/services/competitionsApi', () => ({
   })),
   fetchCompetitionAwards: vi.fn(async () => []),
   fetchStreakStatus: vi.fn(async () => ({
-    current_streak: 2,
-    longest_streak: 2,
+    current_streak: 8,
+    cycle_day: 1,
+    longest_streak: 8,
     last_checkin_date: '2026-11-16',
-    lifetime_checkins: 2,
+    lifetime_checkins: 8,
     days_until_reward: 5,
     rewarded_this_checkin: false,
     stars_awarded: 0,
-    reward_stars: 7,
+    reward_every_days: 7,
+    reward_stars: 10,
     rewards_enabled: false,
   })),
+  streakCycleDay: (s: { current_streak?: number; cycle_day?: number; reward_every_days?: number }) => {
+    const every = Math.max(1, s.reward_every_days || 7)
+    if (typeof s.cycle_day === 'number' && s.cycle_day > 0) return Math.min(every, s.cycle_day)
+    const raw = Math.max(0, s.current_streak || 0)
+    if (raw <= 0) return 0
+    return ((raw - 1) % every) + 1
+  },
   fetchCategoryBoard: (...args: unknown[]) => fetchCategoryBoard(...args),
 }))
 
@@ -146,7 +155,7 @@ describe('RunwayBoardScreen', () => {
     expect(screen.queryByText('Group 1')).not.toBeInTheDocument()
     expect(screen.queryByText(/Week of/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/left$/i)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Login streak')).toHaveTextContent('Login streak 2/7')
+    expect(screen.getByLabelText('Login streak')).toHaveTextContent('Login streak 1/7')
     expect(screen.getByRole('heading', { level: 2, name: 'Top Designer' })).toBeInTheDocument()
     expect(screen.getByLabelText('Top Designer top three')).toBeInTheDocument()
   })

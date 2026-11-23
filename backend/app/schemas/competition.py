@@ -93,3 +93,5 @@ class StreakStatusRead(BaseModel):
     reward_stars: int = 10
     rewards_enabled: bool = False
     reward_streak: int = 0
+    # 1..reward_every_days for UI (never exceeds the cycle, e.g. never 8/7).
+    cycle_day: int = 0

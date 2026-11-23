@@ -109,6 +109,23 @@ def _grant_asset(
     return True
 
 
+def _snapshot_personal_croquis_id(design_data: dict[str, Any] | None) -> uuid.UUID | None:
+    """Extract the Studio personal model pin from a saved-design envelope/snapshot."""
+    if not isinstance(design_data, dict):
+        return None
+    snap = design_data.get("snapshot")
+    source = snap if isinstance(snap, dict) else design_data
+    if not isinstance(source, dict):
+        return None
+    raw = source.get("personalCroquisId") or source.get("personal_croquis_id")
+    if raw is None:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except (TypeError, ValueError):
+        return None
+
+
 def _grant_sender_library(
     db: Session,
     *,
@@ -155,6 +172,117 @@ def _grant_sender_library(
         ):
             croquis_n += 1
     return fabric_n, croquis_n
+
+
+def _grant_pinned_croquis_from_design(
+    db: Session,
+    *,
+    collaboration: DesignCollaboration,
+    granter: User,
+    grantee: User,
+    design_data: dict[str, Any] | None,
+) -> bool:
+    """Always grant the design's pinned My Model, even when it is archived.
+
+    Historical Studio pins survive archive; recipients still need underlay access.
+    Erased/deleted croquis are not granted.
+    """
+    pin_id = _snapshot_personal_croquis_id(design_data)
+    if pin_id is None:
+        return False
+    croquis = (
+        db.query(PersonalCroquis)
+        .filter(
+            PersonalCroquis.id == pin_id,
+            PersonalCroquis.owner_id == granter.id,
+            PersonalCroquis.deleted_at.is_(None),
+            PersonalCroquis.erase_requested_at.is_(None),
+        )
+        .first()
+    )
+    if croquis is None:
+        return False
+    return _grant_asset(
+        db,
+        collaboration_id=collaboration.id,
+        granter_id=granter.id,
+        grantee_id=grantee.id,
+        asset_kind=ASSET_KIND_CROQUIS,
+        asset_id=croquis.id,
+    )
+
+
+def ensure_croquis_grant_for_shared_pin(
+    db: Session,
+    user: User,
+    croquis_id: uuid.UUID,
+    *,
+    croquis: PersonalCroquis | None = None,
+) -> bool:
+    """Repair missing grants when a received shared design still pins this model.
+
+    Older accepts sometimes granted the live library but missed the pinned id
+    (or the pin belonged to a friend who was not the library pass at accept).
+    """
+    row = croquis or db.get(PersonalCroquis, croquis_id)
+    if row is None:
+        return False
+    if row.owner_id == user.id:
+        return False
+    if row.deleted_at is not None or row.erase_requested_at is not None:
+        return False
+    if has_croquis_grant(db, user, croquis_id):
+        return False
+
+    # Look for a received shared design owned by this user that still pins it.
+    candidates = (
+        db.query(GarmentDesign)
+        .filter(GarmentDesign.user_id == user.id)
+        .order_by(GarmentDesign.updated_at.desc())
+        .limit(200)
+        .all()
+    )
+    matched: GarmentDesign | None = None
+    for design in candidates:
+        meta = design.metadata_ or {}
+        if not meta.get("receivedViaShare"):
+            continue
+        pin = _snapshot_personal_croquis_id(design.design_data if isinstance(design.design_data, dict) else None)
+        if pin == croquis_id:
+            matched = design
+            break
+    if matched is None:
+        return False
+
+    granter = db.get(User, row.owner_id)
+    if granter is None or not granter.is_active:
+        return False
+    try:
+        friendship_service.require_accepted_friends(db, user, granter)
+    except (ForbiddenError, NotFoundError, ConflictError, ValidationAppError):
+        return False
+
+    origin_id = matched.id
+    raw_origin = (matched.metadata_ or {}).get("sharedFromDesignId")
+    if raw_origin:
+        try:
+            origin_id = uuid.UUID(str(raw_origin))
+        except (TypeError, ValueError):
+            origin_id = matched.id
+    collaboration = _get_or_create_collaboration(
+        db, from_user=granter, to_user=user, origin_design_id=origin_id
+    )
+    created = _grant_asset(
+        db,
+        collaboration_id=collaboration.id,
+        granter_id=granter.id,
+        grantee_id=user.id,
+        asset_kind=ASSET_KIND_CROQUIS,
+        asset_id=croquis_id,
+    )
+    if created:
+        db.flush()
+    return created
 
 
 def _copy_saved_design_for_recipient(
@@ -370,6 +498,14 @@ def accept_design_share(db: Session, user: User, transfer_id: uuid.UUID) -> Desi
     fabrics_granted, croquis_granted = _grant_sender_library(
         db, collaboration=collaboration, granter=from_user, grantee=user
     )
+    if _grant_pinned_croquis_from_design(
+        db,
+        collaboration=collaboration,
+        granter=from_user,
+        grantee=user,
+        design_data=source.design_data if isinstance(source.design_data, dict) else None,
+    ):
+        croquis_granted += 1
     received = _copy_saved_design_for_recipient(
         db,
         source=source,
@@ -549,6 +685,9 @@ def get_accessible_croquis(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Croquis not found")
     if row.owner_id == user.id or has_croquis_grant(db, user, croquis_id):
+        return row
+    # Repair older shared designs that still pin this model without a grant row.
+    if ensure_croquis_grant_for_shared_pin(db, user, croquis_id, croquis=row):
         return row
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Croquis not found")
 

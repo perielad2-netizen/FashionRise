@@ -616,6 +616,13 @@
   flex: 1 1 16rem;
 }
 
+.damagedCloudBannerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
 .damagedCloudBannerButton {
   appearance: none;
   border: 1px solid rgba(253, 230, 138, 0.45);

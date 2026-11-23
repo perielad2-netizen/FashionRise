@@ -28,10 +28,19 @@ class StreakStatus:
     stars_awarded: int
     rewards_enabled: bool = False
     reward_streak: int = 0
+    # 1..STREAK_REWARD_DAYS progress inside the current reward cycle (never 8/7).
+    cycle_day: int = 0
 
 
 def utc_today(now: datetime | None = None) -> date:
     return ensure_utc(now or datetime.now(timezone.utc)).date()
+
+
+def cycle_day_from_streak(streak: int) -> int:
+    """Map unbounded consecutive days onto a 1..7 reward-cycle progress."""
+    if streak <= 0:
+        return 0
+    return ((int(streak) - 1) % STREAK_REWARD_DAYS) + 1
 
 
 def _days_until_reward(reward_streak: int, *, rewards_live: bool) -> int:
@@ -104,6 +113,7 @@ def streak_status(db: Session, user: User, *, now: datetime | None = None) -> St
         stars_awarded=0,
         rewards_enabled=rewards_live,
         reward_streak=reward_current,
+        cycle_day=cycle_day_from_streak(current),
     )
 
 
@@ -137,6 +147,7 @@ def record_daily_checkin(
             stars_awarded=0,
             rewards_enabled=status.rewards_enabled,
             reward_streak=status.reward_streak,
+            cycle_day=status.cycle_day,
         )
 
     if last is not None and (today - last).days == 1:
@@ -188,6 +199,7 @@ def record_daily_checkin(
         stars_awarded=stars,
         rewards_enabled=rewards_live,
         reward_streak=new_reward_streak if rewards_live else 0,
+        cycle_day=cycle_day_from_streak(new_streak),
     )
 
 
