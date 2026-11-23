@@ -650,7 +650,7 @@ def get_accessible_croquis(
     *,
     include_archived: bool = False,
 ) -> PersonalCroquis:
-    """Owner or collaborator with a croquis grant (read / pin / Magic underlay)."""
+    """Owner or collaborator with a croquis grant (read / pin / Magic / Try On Person)."""
     from app.services import design_share_service
 
     return design_share_service.get_accessible_croquis(
