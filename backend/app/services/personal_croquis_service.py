@@ -534,6 +534,31 @@ def _safe_unlink_croquis(storage_key: str) -> bool:
     return outcome in {CroquisUnlinkOutcome.REMOVED, CroquisUnlinkOutcome.ALREADY_ABSENT}
 
 
+CROQUIS_SEX_MALE = "male"
+CROQUIS_SEX_FEMALE = "female"
+CROQUIS_SEX_VALUES = frozenset({CROQUIS_SEX_MALE, CROQUIS_SEX_FEMALE})
+
+
+def normalize_croquis_sex(raw: str | None, *, required: bool = False) -> str | None:
+    """Normalize owner-declared male/female. Reject unknown values."""
+    from fastapi import HTTPException, status
+
+    text = (raw or "").strip().lower()
+    if not text:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Select male or female for this model.",
+            )
+        return None
+    if text not in CROQUIS_SEX_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sex must be 'male' or 'female'.",
+        )
+    return text
+
+
 def upload_source_photo(
     db: Session,
     user: User,
@@ -541,6 +566,7 @@ def upload_source_photo(
     raw: bytes,
     declared_content_type: str | None,
     storage_consent_id: uuid.UUID,
+    sex: str,
     display_name: str | None = None,
 ) -> PersonalCroquis:
     """Consent-gated source upload. Requires MY_CROQUIS_UPLOAD_ENABLED."""
@@ -574,10 +600,12 @@ def upload_source_photo(
             storage_key=storage_key,
         )
         attestation = _latest_adults_attestation(db, user)
+        sex_norm = normalize_croquis_sex(sex, required=True)
         croquis = PersonalCroquis(
             id=croquis_id,
             owner_id=user.id,
             display_name=normalize_croquis_display_name(display_name),
+            sex=sex_norm,
             source_asset_id=asset_id,
             status=STATUS_UPLOADED,
             storage_consent_id=consent.id,
@@ -594,6 +622,22 @@ def upload_source_photo(
         if wrote:
             _safe_unlink_croquis(storage_key)
         raise
+
+
+def update_croquis_sex(
+    db: Session,
+    user: User,
+    croquis_id: uuid.UUID,
+    *,
+    sex: str,
+) -> PersonalCroquis:
+    """Owner sets/corrects male/female for Try On Person garment disambiguation."""
+    row = get_owned_croquis(db, user, croquis_id, include_archived=False)
+    row.sex = normalize_croquis_sex(sex, required=True)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def list_owned_personal_croquis(db: Session, user: User) -> list[PersonalCroquis]:

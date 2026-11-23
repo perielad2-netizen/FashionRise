@@ -52,6 +52,9 @@ class PersonalCroquis(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Owner-declared presentation for Try On Person garment-type disambiguation.
+    # Required on new Create Model uploads; nullable for legacy rows until set.
+    sex: Mapped[str | None] = mapped_column(String(16), nullable=True)
     source_asset_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("private_media_assets.id", ondelete="SET NULL"),

@@ -395,6 +395,42 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         </ConfirmDialog>
       ) : null}
 
+      {editor.tryOnSexPromptOpen ? (
+        <ConfirmDialog
+          title="Male or female?"
+          busy={editor.tryOnSexPromptBusy}
+          onEscape={editor.cancelTryOnSexPrompt}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelTryOnSexPrompt,
+              variant: 'ghost',
+              disabled: editor.tryOnSexPromptBusy,
+            },
+            {
+              label: 'Female',
+              onClick: () => void editor.confirmTryOnSex('female'),
+              variant: 'ghost',
+              disabled: editor.tryOnSexPromptBusy,
+            },
+            {
+              label: 'Male',
+              onClick: () => void editor.confirmTryOnSex('male'),
+              variant: 'primary',
+              disabled: editor.tryOnSexPromptBusy,
+            },
+          ]}
+        >
+          <p>
+            Tell FashionRise whether this Create Model photo is male or female. Try On Person uses
+            that flag so pants and skirts are not confused.
+          </p>
+          {editor.tryOnSexPromptError ? (
+            <p role="alert">{editor.tryOnSexPromptError}</p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
+
       {editor.fashnPrepOpen && editor.fashnPrep ? (
         <ConfirmDialog
           title={

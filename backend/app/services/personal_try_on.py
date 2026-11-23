@@ -581,6 +581,7 @@ def enqueue_personal_try_on(
     hints = _normalize_design_hints(design_hints)
     provider_name = _normalize_provider(provider)
     smart_lane = bool(smart_fallback) and provider_name == TRY_ON_PROVIDER_FASHN_MAX
+    # Sex-flag hints are merged after croquis load (see below).
 
     key = (idempotency_key or "").strip()
     if not key or len(key) > 128:
@@ -774,6 +775,13 @@ def enqueue_personal_try_on(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This croquis has no retained original photo for Try On Person.",
+        )
+    croquis_sex = pcs.normalize_croquis_sex(getattr(croquis, "sex", None), required=False)
+    if provider_name == TRY_ON_PROVIDER_OPENAI and croquis_sex is None:
+        # Ambiguous shorts/skirts need an owner male/female flag before image gen.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select male or female for this model before Try On Person.",
         )
     version = pcs.get_exact_version(db, user, croquis_id, croquis_version)
     if version.status != VERSION_STATUS_ACCEPTED:
@@ -1206,6 +1214,16 @@ def enqueue_personal_try_on(
     )
     db.add(reservation)
 
+    # Owner sex flag → priority pants/skirt disambiguation hints (male shorts ≠ dress).
+    if croquis_sex:
+        from app.services.sunburst_try_on_prompt import sex_flag_design_hints
+
+        sex_hints = sex_flag_design_hints(croquis_sex)
+        if sex_hints:
+            hints = _normalize_design_hints(
+                merge_openai_design_hints(sex_hints, hints, max_hints=8)
+            )
+
     # Store garment as base64 in input (same pattern as sketch_polish) — immutable freeze.
     garment_b64 = base64.b64encode(garment_png).decode("ascii")
     input_data: dict[str, Any] = {
@@ -1214,6 +1232,7 @@ def enqueue_personal_try_on(
         "croquis_version": int(version.version),
         "source_asset_id": str(source.id),
         "version_id": str(version.id),
+        "croquis_sex": croquis_sex,
         "garment_image_base64": f"data:image/png;base64,{garment_b64}",
         "garment_fingerprint": garment_fp,
         "content_fingerprint": fp,
@@ -1430,6 +1449,16 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
+        # Re-assert frozen My Model sex flag ahead of geometry (pants vs skirt).
+        from app.services.sunburst_try_on_prompt import sex_flag_design_hints
+
+        sex_hints = sex_flag_design_hints(
+            data.get("croquis_sex") if isinstance(data.get("croquis_sex"), str) else None
+        )
+        if sex_hints:
+            hints = _normalize_design_hints(
+                merge_openai_design_hints(sex_hints, hints, max_hints=8)
+            )
         # #170/#172/#174/#180 — additive trouser/jumpsuit OR high-slit-dress hints from
         # frozen garment geometry. Apply for OpenAI and FASHN Max so Max cannot invent
         # pant legs when Studio geometry is an open-leg dress.

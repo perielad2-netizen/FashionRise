@@ -74,7 +74,7 @@ def _upload(client, tokens, consent_id, *, name="Pose A", raw: bytes | None = No
         f"{BASE}/photos",
         headers=_auth(tokens),
         files={"file": ("photo.png", data, content_type)},
-        data={"storage_consent_id": consent_id, "display_name": name},
+        data={"sex": "female", "storage_consent_id": consent_id, "display_name": name},
     )
 
 
@@ -143,7 +143,7 @@ def test_upload_without_consent_rejected(client, db_session, monkeypatch):
             f"{BASE}/photos",
             headers=_auth(tokens),
             files={"file": ("p.png", _png_bytes(), "image/png")},
-            data={"storage_consent_id": str(uuid.uuid4()), "display_name": "X"},
+            data={"sex": "female", "storage_consent_id": str(uuid.uuid4()), "display_name": "X"},
         )
         assert bad.status_code == 400
     finally:
@@ -487,6 +487,7 @@ def test_db_commit_failure_cleans_orphan_bytes(client, db_session, monkeypatch):
                     raw=_png_bytes(),
                     declared_content_type="image/png",
                     storage_consent_id=uuid.UUID(consent_id),
+                    sex="female",
                     display_name="Orphan",
                 )
                 raise AssertionError("expected commit failure")

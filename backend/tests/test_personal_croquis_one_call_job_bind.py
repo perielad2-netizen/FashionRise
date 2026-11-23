@@ -103,7 +103,7 @@ def _upload(client, tokens, monkeypatch, *, png: bytes, name: str):
         f"{BASE}/photos",
         headers=_auth(tokens),
         files={"file": ("photo.png", png, "image/png")},
-        data={"storage_consent_id": c.json()["id"], "display_name": name},
+        data={"sex": "female", "storage_consent_id": c.json()["id"], "display_name": name},
     )
     assert up.status_code == 201, up.text
     return up.json()

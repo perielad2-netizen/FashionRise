@@ -369,7 +369,7 @@ def test_share_grants_croquis_and_friend_can_try_on_person(client, db_session, m
         f"{croquis_base}/photos",
         headers=_auth(peri),
         files={"file": ("photo.png", _png_bytes(), "image/png")},
-        data={"storage_consent_id": storage.json()["id"], "display_name": "Shared model"},
+        data={"sex": "female", "storage_consent_id": storage.json()["id"], "display_name": "Shared model"},
     )
     assert up.status_code == 201, up.text
     croquis = up.json()
