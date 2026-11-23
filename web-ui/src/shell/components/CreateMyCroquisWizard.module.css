@@ -254,8 +254,7 @@
 }
 
 .primary:disabled,
-.secondary:disabled,
-.photoHit:disabled {
+.secondary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -272,7 +271,7 @@
 .primary:focus-visible,
 .secondary:focus-visible,
 .close:focus-visible,
-.photoHit:focus-visible {
+.photoEmptyHit:focus-visible {
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
 }
@@ -284,26 +283,59 @@
   opacity: 0.95;
 }
 
-.photoHit {
+/* Mobbin-style portrait upload card: clipped DIV frame + separate change action.
+   Do not put the <img> inside a <button> — Android WebView often ignores overflow:hidden there. */
+.photoCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  max-width: 16.5rem;
+  margin: 0 auto;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.photoFrame,
+.photoFrameEmpty {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: min(38vh, 15rem);
+  border-radius: 18px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #0b0d14;
+  border: 1px solid rgba(244, 114, 182, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.photoFrameEmpty {
+  border-style: dashed;
+  background:
+    linear-gradient(160deg, rgba(244, 114, 182, 0.1), transparent 42%),
+    #101018;
+}
+
+.photoEmptyHit {
   appearance: none;
   display: grid;
   place-items: center;
   width: 100%;
-  /* Fixed frame so tall portraits cannot grow past Change photo / CTA. */
-  height: min(36vh, 14rem);
-  max-height: min(36vh, 14rem);
-  min-height: 0;
+  height: 100%;
   margin: 0;
-  padding: 0.55rem;
-  border-radius: 16px;
-  border: 1px dashed rgba(244, 114, 182, 0.35);
-  background:
-    linear-gradient(160deg, rgba(244, 114, 182, 0.1), transparent 42%),
-    #101018;
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: pointer;
-  overflow: hidden;
-  box-sizing: border-box;
-  flex: 0 0 auto;
+  color: inherit;
+  font: inherit;
+}
+
+.photoEmptyHit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .photoEmpty {
@@ -315,16 +347,44 @@
 }
 
 .preview {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
   object-fit: contain;
   object-position: center center;
-  border-radius: 12px;
-  background: #f7f1ea;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #101018;
   display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.changePhoto {
+  appearance: none;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.changePhoto:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.changePhoto:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .file {
@@ -386,9 +446,13 @@
     border-bottom-right-radius: 16px;
   }
 
-  .photoHit {
-    height: min(26vh, 9.5rem);
-    max-height: min(26vh, 9.5rem);
+  .photoCard {
+    max-width: min(14.5rem, 72vw);
+  }
+
+  .photoFrame,
+  .photoFrameEmpty {
+    max-height: min(32vh, 12.5rem);
   }
 
   .body {

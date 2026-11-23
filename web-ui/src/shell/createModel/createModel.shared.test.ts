@@ -22,15 +22,22 @@ describe('Create Model canonical entry points', () => {
     expect(barrel.includes('CreateMyCroquisWizard')).toBe(true)
   })
 
-  it('upload preview frame clips with object-fit contain (no Change photo overlap)', () => {
+  it('upload preview uses a clipped DIV portrait card (not a button frame)', () => {
     const css = readFileSync(
       resolve(root, 'shell/components/CreateMyCroquisWizard.module.css'),
       'utf8',
     )
-    expect(css.includes('overflow: hidden')).toBe(true)
-    expect(css.includes('object-fit: contain')).toBe(true)
-    expect(css.includes('max-height: min(36vh, 14rem)') || css.includes('max-height: min(26vh, 9.5rem)')).toBe(
-      true,
+    const tsx = readFileSync(
+      resolve(root, 'shell/components/CreateMyCroquisWizard.tsx'),
+      'utf8',
     )
+    expect(css.includes('.photoFrame')).toBe(true)
+    expect(css.includes('overflow: hidden')).toBe(true)
+    expect(css.includes('aspect-ratio: 3 / 4')).toBe(true)
+    expect(css.includes('object-fit: contain')).toBe(true)
+    expect(tsx.includes('create-model-photo-frame')).toBe(true)
+    expect(tsx.includes('create-model-change-photo')).toBe(true)
+    // Android WebView: do not host the preview <img> inside a clipping <button>.
+    expect(tsx.includes('className={styles.photoHit}')).toBe(false)
   })
 })

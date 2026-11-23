@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## LIVE — Create Model photo preview card (2026-11-23 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Create Model preview looked like a phone and overlapped Change photo |
+| Root cause | Selected file was often a Try On Person **screenshot**; preview `<img>` lived inside a `<button>` — Android WebView does not reliably honor `overflow:hidden` on buttons |
+| Fix | Mobbin-style clipped **DIV** portrait card (`aspect-ratio 3/4`) + separate Change photo; copy steers users to camera photos not screenshots |
+| Tip | FE `/var/www/fashionrise/releases/PENDING-create-model-photo-card` · `/version.json` → `PENDING` |
+
 ## LIVE — Create Model unify + Try On / My Looks mobile (2026-11-23 Asia/Jerusalem)
 
 | Field | Value |

@@ -459,29 +459,52 @@ export function CreateMyCroquisWizard({
                 Select a fully clothed fashion pose photo, agree once, then upload and generate your
                 model.
               </p>
-              <p className={styles.hint}>Kidswear uses Studio templates — no child photos.</p>
+              <p className={styles.hint}>
+                Use a camera photo of the person — not an app screenshot. Kidswear uses Studio
+                templates — no child photos.
+              </p>
 
-              <button
-                type="button"
-                className={styles.photoHit}
-                onClick={() => inputRef.current?.click()}
-                disabled={busy}
-                aria-label={localFile ? 'Change photo' : 'Select photo'}
-              >
-                {localPreviewUrl ? (
-                  <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
-                ) : (
-                  <span className={styles.photoEmpty}>Tap to select a fully clothed pose photo</span>
-                )}
-              </button>
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() => inputRef.current?.click()}
-                disabled={busy}
-              >
-                {localFile ? 'Change photo' : 'Select photo'}
-              </button>
+              {/*
+                Preview lives in a DIV frame (not a <button>). Android WebView often fails to
+                clip overflow on buttons, so tall screenshots spilled over Change photo.
+                Pattern: Mobbin-style portrait card + separate change action.
+              */}
+              <div className={styles.photoCard} data-testid="create-model-photo-card">
+                <div
+                  className={localPreviewUrl ? styles.photoFrame : styles.photoFrameEmpty}
+                  data-testid="create-model-photo-frame"
+                >
+                  {localPreviewUrl ? (
+                    <img
+                      src={localPreviewUrl}
+                      alt="Selected pose photo preview"
+                      className={styles.preview}
+                      draggable={false}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.photoEmptyHit}
+                      onClick={() => inputRef.current?.click()}
+                      disabled={busy}
+                      aria-label="Select photo"
+                    >
+                      <span className={styles.photoEmpty}>
+                        Tap to select a fully clothed pose photo
+                      </span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className={styles.changePhoto}
+                  onClick={() => inputRef.current?.click()}
+                  disabled={busy}
+                  data-testid="create-model-change-photo"
+                >
+                  {localFile ? 'Change photo' : 'Select photo'}
+                </button>
+              </div>
               <input
                 ref={inputRef}
                 type="file"

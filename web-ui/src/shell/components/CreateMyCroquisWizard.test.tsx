@@ -212,6 +212,20 @@ describe('CreateMyCroquisWizard offline harness', () => {
     vi.clearAllMocks()
   })
 
+  it('clips the selected photo inside a portrait card above Change photo', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
+    const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(await screen.findByAltText(/Selected pose photo preview/i)).toBeTruthy()
+    const frame = screen.getByTestId('create-model-photo-frame')
+    const change = screen.getByTestId('create-model-change-photo')
+    expect(frame.contains(change)).toBe(false)
+    expect(screen.getByTestId('create-model-photo-card').contains(frame)).toBe(true)
+    expect(change).toHaveTextContent(/Change photo/i)
+  })
+
   it('keeps preview local until agreement; does not upload early', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
