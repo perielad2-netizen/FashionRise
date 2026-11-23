@@ -14,7 +14,7 @@
     calc(28px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px));
   color: var(--fr-text, #f5f2f0);
   overflow-x: hidden;
-  animation: profileRise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: profileRise 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .eyebrow {
@@ -574,53 +574,70 @@
   color: #fecdd3;
 }
 
-/* Edit Designer Card — full front page; Save in header (Mobbin edit-profile pattern) */
+/*
+ * Edit Profile — portaled full-screen page (Mobbin Savee / Character AI).
+ * Content-sized form: backdrop scrolls only when fields exceed the viewport.
+ * Never flex-grow an empty scroll region under short content.
+ */
 .sheetBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
-  display: flex;
-  flex-direction: column;
+  z-index: 220;
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 0;
-  background: #07080d;
+  background: #000;
+  color: #fff;
 }
 
 .sheet {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 100%;
-  max-height: none;
-  min-height: 0;
-  overflow: auto;
+  width: min(100%, 480px);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: max(10px, env(safe-area-inset-top)) 18px max(16px, env(safe-area-inset-bottom));
-  border-radius: 0;
-  background: linear-gradient(180deg, #14121a 0%, #0a0c12 55%, #07080d 100%);
-  border: 0;
-  color: #fff;
-  box-shadow: none;
+  gap: 18px;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    18px
+    max(20px, env(safe-area-inset-bottom));
   box-sizing: border-box;
+  /* Height follows content — do not stretch to fill the viewport. */
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+  background: #000;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .sheetHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+  margin: 0 -4px;
+  padding: 4px;
+  background: #000;
 }
 
 .sheetClose {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
+  min-height: 36px;
+  padding: 0 14px;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #1c1c1e;
   color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -638,20 +655,21 @@
   margin: 0;
   font-family: var(--fr-serif);
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: 650;
   text-align: center;
   line-height: 1.2;
+  color: #fff;
 }
 
 .sheetSave {
   min-height: 36px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--fr-pink, #d63384), #be185d);
   color: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -667,35 +685,20 @@
   outline-offset: 2px;
 }
 
-.sheetHint {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.editIdentity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.editIdentityMeta {
+.editPhotoBlock {
   display: grid;
-  gap: 2px;
-  min-width: 0;
+  justify-items: center;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .changePhotoLink {
-  justify-self: start;
-  margin-top: 4px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: #f9a8d4;
+  color: rgba(255, 255, 255, 0.62);
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -727,39 +730,40 @@
 
 .avatarEdit .avatar,
 .avatarEdit .avatarFallback {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   border-radius: 999px;
 }
 
 .avatarBadge {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 26px;
-  height: 26px;
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  border: 2px solid #0a0d14;
-  background: linear-gradient(135deg, var(--fr-pink, #d63384), #be185d);
-  color: #fff;
+  border: 2px solid #000;
+  background: #fff;
+  color: #111;
   pointer-events: none;
 }
 
 .editForm {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
   flex: 0 0 auto;
 }
 
 .editLabel {
   display: grid;
-  gap: 4px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
   min-width: 0;
 }
 
@@ -772,6 +776,7 @@
 
 .editCount {
   font-size: 11px;
+  font-weight: 500;
   color: rgba(255, 255, 255, 0.38);
 }
 
@@ -780,17 +785,18 @@
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  border: 0;
+  background: #1c1c1e;
   color: #fff;
   font: inherit;
-  padding: 10px 12px;
+  font-weight: 500;
+  padding: 14px 14px;
 }
 
 .editTextarea {
-  min-height: 72px;
-  resize: vertical;
+  min-height: 110px;
+  resize: none;
 }
 
 @keyframes profileRise {
@@ -800,7 +806,8 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    /* Must clear transform — a leftover transform traps position:fixed children. */
+    transform: none;
   }
 }
 
@@ -1020,11 +1027,6 @@
 }
 
 @media (min-width: 720px) {
-  .sheet {
-    max-width: 520px;
-    margin: 0 auto;
-  }
-
   .looksGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

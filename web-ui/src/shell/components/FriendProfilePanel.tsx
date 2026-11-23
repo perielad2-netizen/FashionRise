@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Camera, Heart, MessageCircle, Star, UserMinus, UserPlus, Users, X } from 'lucide-react'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
@@ -563,127 +564,125 @@ export function FriendProfilePanel({
         }}
       />
 
-      {cropFile ? (
-        <AvatarCropDialog
-          file={cropFile}
-          busy={editBusy}
-          onCancel={() => {
-            if (editBusy) return
-            setCropFile(null)
-          }}
-          onConfirm={(cropped) => void onAvatarCropConfirm(cropped)}
-        />
-      ) : null}
+      {cropFile && typeof document !== 'undefined'
+        ? createPortal(
+            <AvatarCropDialog
+              file={cropFile}
+              busy={editBusy}
+              onCancel={() => {
+                if (editBusy) return
+                setCropFile(null)
+              }}
+              onConfirm={(cropped) => void onAvatarCropConfirm(cropped)}
+            />,
+            document.body,
+          )
+        : null}
 
-      {isSelf && editing ? (
-        <div
-          className={`fr-keyboard-overlay ${styles.sheetBackdrop}`}
-          role="presentation"
-          data-testid="designer-profile-editor"
-        >
-          <form
-            className={styles.sheet}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={editTitleId}
-            onSubmit={(e) => {
-              e.preventDefault()
-              void saveProfile()
-            }}
-          >
-            <header className={styles.sheetHeader}>
-              <button
-                type="button"
-                className={styles.sheetClose}
-                disabled={editBusy}
-                aria-label="Close editor"
-                data-testid="designer-edit-cancel"
-                onClick={() => setEditing(false)}
+      {isSelf && editing && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={`fr-keyboard-overlay ${styles.sheetBackdrop}`}
+              role="presentation"
+              data-testid="designer-profile-editor"
+            >
+              <form
+                className={styles.sheet}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={editTitleId}
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveProfile()
+                }}
               >
-                <X size={18} aria-hidden />
-              </button>
-              <h2 id={editTitleId} className={styles.sheetTitle}>
-                Edit Designer Card
-              </h2>
-              <button
-                type="submit"
-                className={styles.sheetSave}
-                disabled={editBusy}
-                data-testid="designer-edit-save"
-              >
-                {editBusy ? 'Saving…' : 'Save'}
-              </button>
-            </header>
-            <p className={styles.sheetHint}>
-              Your photo and bio appear on your FashionRise profile and published looks.
-            </p>
-            <div className={styles.editIdentity}>
-              <button
-                type="button"
-                className={styles.avatarEdit}
-                data-testid="designer-avatar-preview"
-                aria-label="Change profile photo"
-                disabled={editBusy}
-                onClick={() => avatarInputRef.current?.click()}
-              >
-                {avatarNode}
-                <span className={styles.avatarBadge} aria-hidden>
-                  <Camera size={13} />
-                </span>
-              </button>
-              <div className={styles.editIdentityMeta}>
-                <strong>{displayName}</strong>
-                {friend.username ? <div className={styles.handle}>@{friend.username}</div> : null}
-                <button
-                  type="button"
-                  className={styles.changePhotoLink}
-                  disabled={editBusy}
-                  data-testid="designer-edit-avatar"
-                  onClick={() => avatarInputRef.current?.click()}
-                >
-                  Change photo
-                </button>
-              </div>
-            </div>
-            <div className={styles.editForm}>
-              <label className={styles.editLabel}>
-                Display name
-                <input
-                  className={styles.editInput}
-                  value={editName}
-                  maxLength={120}
-                  disabled={editBusy}
-                  data-testid="designer-edit-name"
-                  enterKeyHint="done"
-                  onChange={(e) => setEditName(e.target.value)}
-                  onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
-                />
-              </label>
-              <label className={styles.editLabel}>
-                <span className={styles.editLabelRow}>
-                  Bio
-                  <span className={styles.editCount}>{editBio.length}/2000</span>
-                </span>
-                <textarea
-                  className={styles.editTextarea}
-                  value={editBio}
-                  maxLength={2000}
-                  rows={3}
-                  disabled={editBusy}
-                  data-testid="designer-edit-bio"
-                  onChange={(e) => setEditBio(e.target.value)}
-                  onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
-                />
-              </label>
-              {editError ? (
-                <p className={styles.status} role="alert">
-                  {editError}
-                </p>
-              ) : null}
-            </div>
-          </form>
-        </div>
-      ) : null}
+                <header className={styles.sheetHeader}>
+                  <button
+                    type="button"
+                    className={styles.sheetClose}
+                    disabled={editBusy}
+                    data-testid="designer-edit-cancel"
+                    onClick={() => setEditing(false)}
+                  >
+                    Cancel
+                  </button>
+                  <h2 id={editTitleId} className={styles.sheetTitle}>
+                    Edit Profile
+                  </h2>
+                  <button
+                    type="submit"
+                    className={styles.sheetSave}
+                    disabled={editBusy}
+                    data-testid="designer-edit-save"
+                  >
+                    {editBusy ? 'Saving…' : 'Save'}
+                  </button>
+                </header>
+                <div className={styles.editPhotoBlock}>
+                  <button
+                    type="button"
+                    className={styles.avatarEdit}
+                    data-testid="designer-avatar-preview"
+                    aria-label="Change profile photo"
+                    disabled={editBusy}
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    {avatarNode}
+                    <span className={styles.avatarBadge} aria-hidden>
+                      <Camera size={14} />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.changePhotoLink}
+                    disabled={editBusy}
+                    data-testid="designer-edit-avatar"
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    Change photo
+                  </button>
+                </div>
+                <div className={styles.editForm}>
+                  <label className={styles.editLabel}>
+                    Display name
+                    <input
+                      className={styles.editInput}
+                      value={editName}
+                      maxLength={120}
+                      disabled={editBusy}
+                      data-testid="designer-edit-name"
+                      enterKeyHint="done"
+                      onChange={(e) => setEditName(e.target.value)}
+                      onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
+                    />
+                  </label>
+                  <label className={styles.editLabel}>
+                    <span className={styles.editLabelRow}>
+                      Bio
+                      <span className={styles.editCount}>{editBio.length}/2000</span>
+                    </span>
+                    <textarea
+                      className={styles.editTextarea}
+                      value={editBio}
+                      maxLength={2000}
+                      rows={4}
+                      disabled={editBusy}
+                      data-testid="designer-edit-bio"
+                      onChange={(e) => setEditBio(e.target.value)}
+                      onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
+                    />
+                  </label>
+                  {editError ? (
+                    <p className={styles.status} role="alert">
+                      {editError}
+                    </p>
+                  ) : null}
+                </div>
+              </form>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {previewLook ? (
         <PublishedLookLightbox
