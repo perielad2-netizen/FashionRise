@@ -37,6 +37,8 @@ describe('Create Model canonical entry points', () => {
     expect(css.includes('object-fit: contain')).toBe(true)
     expect(tsx.includes('create-model-photo-frame')).toBe(true)
     expect(tsx.includes('create-model-change-photo')).toBe(true)
+    expect(tsx.includes('create-model-pick-sheet')).toBe(true)
+    expect(tsx.includes('create-model-failure-alert-body')).toBe(true)
     // Android WebView: do not host the preview <img> inside a clipping <button>.
     expect(tsx.includes('className={styles.photoHit}')).toBe(false)
   })

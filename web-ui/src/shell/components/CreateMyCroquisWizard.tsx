@@ -12,7 +12,9 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Camera, ImagePlus, Images, Pencil } from 'lucide-react'
 import { ApiError } from '@/services/api/client'
+import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import {
   acceptPersonalCroquisVersion,
   acceptedVersionNumber,
@@ -68,6 +70,24 @@ function newIdempotencyKey(): string {
   return `croquis-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+const MODERATION_OWNER_MESSAGE =
+  "This photo couldn't be used to create a model. Please choose another fully clothed fashion pose with clear lighting — avoid screenshots, filters, or sensitive content. You were not charged for this attempt."
+
+const GENERIC_GENERATE_FAIL_MESSAGE =
+  "We couldn't create a model from this photo. Please try a different fully clothed fashion pose. You were not charged for this attempt."
+
+function ownerSafeGenerateFailureMessage(ver: PersonalCroquisVersionRead): string {
+  const code = (ver.failure_code || '').toLowerCase()
+  const raw = (ver.failure_message || '').trim()
+  if (code === 'moderation_blocked' || /moderation_blocked|safety system|openai/i.test(raw)) {
+    return MODERATION_OWNER_MESSAGE
+  }
+  if (raw && !/moderation_blocked|openai|BadRequestError|request_id=/i.test(raw)) {
+    return raw
+  }
+  return GENERIC_GENERATE_FAIL_MESSAGE
+}
+
 export function CreateMyCroquisWizard({
   open,
   onClose,
@@ -75,7 +95,6 @@ export function CreateMyCroquisWizard({
   onUseOfflineFixture,
   entryPoint = 'my-models',
 }: CreateMyCroquisWizardProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
   const noticesOk = useMemo(() => croquisNoticesAuthorized(), [])
   const adultsNotice = useMemo(() => approvedCroquisNoticeText('adults'), [])
   const storageNotice = useMemo(() => approvedCroquisNoticeText('storage'), [])
@@ -99,8 +118,26 @@ export function CreateMyCroquisWizard({
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
   const [spendOpen, setSpendOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [pickSheetOpen, setPickSheetOpen] = useState(false)
+  const [failureAlert, setFailureAlert] = useState<{ title: string; body: string } | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const { balance, unlimited, costs } = useAiStarsWallet()
   const croquisCost = costs.croquis
+
+  const openPhotoPicker = useCallback(() => {
+    setPickSheetOpen(true)
+  }, [])
+
+  const onPickFromGallery = useCallback(() => {
+    setPickSheetOpen(false)
+    galleryInputRef.current?.click()
+  }, [])
+
+  const onPickFromCamera = useCallback(() => {
+    setPickSheetOpen(false)
+    cameraInputRef.current?.click()
+  }, [])
 
   useEffect(() => {
     pendingVersionRef.current = pendingVersion
@@ -179,14 +216,17 @@ export function CreateMyCroquisWizard({
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy && !spendOpen) handleClose()
+      if (e.key === 'Escape' && !busy && !spendOpen && !pickSheetOpen && !failureAlert) {
+        handleClose()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, busy, spendOpen, handleClose])
+  }, [open, busy, spendOpen, pickSheetOpen, failureAlert, handleClose])
 
   const onPickLocal = useCallback((file: File) => {
     setError(null)
+    setFailureAlert(null)
     setLocalFile(file)
     setLocalPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
@@ -320,10 +360,17 @@ export function CreateMyCroquisWizard({
             return
           }
           if (ver.status === 'failed') {
-            setError(
-              ver.failure_message?.trim() ||
-                'Generation failed (no model image was produced). You may try again with Upload & Generate.',
-            )
+            const message = ownerSafeGenerateFailureMessage(ver)
+            const moderation =
+              (ver.failure_code || '').toLowerCase() === 'moderation_blocked' ||
+              /moderation_blocked|safety system/i.test(ver.failure_message || '')
+            // Popup is the primary UX — keep compose clean so the reason is not
+            // buried in a scrolled inline alert under Upload & Generate.
+            setError(null)
+            setFailureAlert({
+              title: moderation ? "Photo couldn't be used" : "Couldn't create this model",
+              body: message,
+            })
             setIdempotencyKey(newIdempotencyKey())
             setStep('compose')
             return
@@ -456,18 +503,17 @@ export function CreateMyCroquisWizard({
           <>
             <div className={styles.body}>
               <p className={styles.lead}>
-                Select a fully clothed fashion pose photo, agree once, then upload and generate your
+                Add a fully clothed fashion pose photo, confirm once, then generate your private
                 model.
               </p>
               <p className={styles.hint}>
-                Use a camera photo of the person — not an app screenshot. Kidswear uses Studio
-                templates — no child photos.
+                Prefer a clear camera photo of the person. Avoid app screenshots. Kidswear uses
+                Studio templates — no child photos.
               </p>
 
               {/*
-                Preview lives in a DIV frame (not a <button>). Android WebView often fails to
-                clip overflow on buttons, so tall screenshots spilled over Change photo.
-                Pattern: Mobbin-style portrait card + separate change action.
+                Mobbin OpenTable/Partiful pattern: portrait card (DIV clip — Android WebView
+                ignores overflow on <button>) + camera badge + bottom action sheet.
               */}
               <div className={styles.photoCard} data-testid="create-model-photo-card">
                 <div
@@ -475,22 +521,43 @@ export function CreateMyCroquisWizard({
                   data-testid="create-model-photo-frame"
                 >
                   {localPreviewUrl ? (
-                    <img
-                      src={localPreviewUrl}
-                      alt="Selected pose photo preview"
-                      className={styles.preview}
-                      draggable={false}
-                    />
+                    <>
+                      <img
+                        src={localPreviewUrl}
+                        alt="Selected pose photo preview"
+                        className={styles.preview}
+                        draggable={false}
+                      />
+                      <button
+                        type="button"
+                        className={styles.editChip}
+                        onClick={openPhotoPicker}
+                        disabled={busy}
+                        aria-label="Change photo"
+                        data-testid="create-model-edit-chip"
+                      >
+                        <Pencil size={14} aria-hidden />
+                        Change
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
                       className={styles.photoEmptyHit}
-                      onClick={() => inputRef.current?.click()}
+                      onClick={openPhotoPicker}
                       disabled={busy}
-                      aria-label="Select photo"
+                      aria-label="Add pose photo"
+                      data-testid="create-model-add-photo"
                     >
-                      <span className={styles.photoEmpty}>
-                        Tap to select a fully clothed pose photo
+                      <span className={styles.photoEmptyIcon} aria-hidden>
+                        <ImagePlus size={28} strokeWidth={1.75} />
+                      </span>
+                      <span className={styles.photoEmpty}>Add pose photo</span>
+                      <span className={styles.photoEmptySub}>
+                        Fully clothed · clear lighting · no screenshots
+                      </span>
+                      <span className={styles.cameraBadge} aria-hidden>
+                        <Camera size={16} strokeWidth={2} />
                       </span>
                     </button>
                   )}
@@ -498,18 +565,32 @@ export function CreateMyCroquisWizard({
                 <button
                   type="button"
                   className={styles.changePhoto}
-                  onClick={() => inputRef.current?.click()}
+                  onClick={openPhotoPicker}
                   disabled={busy}
                   data-testid="create-model-change-photo"
                 >
-                  {localFile ? 'Change photo' : 'Select photo'}
+                  {localFile ? 'Choose a different photo' : 'Choose photo'}
                 </button>
               </div>
               <input
-                ref={inputRef}
+                ref={galleryInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className={styles.file}
+                data-testid="create-model-gallery-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) onPickLocal(file)
+                  e.target.value = ''
+                }}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                className={styles.file}
+                data-testid="create-model-camera-input"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) onPickLocal(file)
@@ -579,7 +660,7 @@ export function CreateMyCroquisWizard({
                 }
               />
 
-              {error ? (
+              {error && !failureAlert ? (
                 <p className={styles.errorInline} role="alert">
                   {error}
                 </p>
@@ -609,11 +690,14 @@ export function CreateMyCroquisWizard({
 
         {step === 'generating' ? (
           <div className={styles.body}>
-            <p>Generating your model…</p>
-            <p className={styles.hint}>
-              Status: {pendingVersion?.status ?? 'queued'}. Fashion illustration can take up to a
-              few minutes — please keep this window open.
-            </p>
+            <div className={styles.generatingBlock} data-testid="create-model-generating">
+              <span className={styles.generatingPulse} aria-hidden />
+              <p className={styles.generatingTitle}>Creating your model</p>
+              <p className={styles.hint}>
+                This usually takes one to a few minutes. Keep this window open — you will see a
+                preview when it is ready.
+              </p>
+            </div>
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={handleClose}>
                 Cancel
@@ -677,6 +761,75 @@ export function CreateMyCroquisWizard({
       onOpenShop={() => setShopOpen(true)}
     />
     <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
+
+    {pickSheetOpen ? (
+      <div
+        className={styles.sheetScrim}
+        role="presentation"
+        data-testid="create-model-pick-sheet"
+        onClick={() => setPickSheetOpen(false)}
+      >
+        <div
+          className={styles.sheet}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-model-pick-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className={styles.sheetHandle} aria-hidden />
+          <h3 id="create-model-pick-title" className={styles.sheetTitle}>
+            Add pose photo
+          </h3>
+          <p className={styles.sheetHint}>
+            Use a real camera photo of a fully clothed fashion pose — not an app screenshot.
+          </p>
+          <button type="button" className={styles.sheetAction} onClick={onPickFromGallery}>
+            <span className={styles.sheetActionIcon} aria-hidden>
+              <Images size={18} />
+            </span>
+            Choose from gallery
+          </button>
+          <button type="button" className={styles.sheetAction} onClick={onPickFromCamera}>
+            <span className={styles.sheetActionIcon} aria-hidden>
+              <Camera size={18} />
+            </span>
+            Take a photo
+          </button>
+          <button
+            type="button"
+            className={styles.sheetCancel}
+            onClick={() => setPickSheetOpen(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ) : null}
+
+    {failureAlert ? (
+      <ConfirmDialog
+        title={failureAlert.title}
+        onEscape={() => setFailureAlert(null)}
+        actions={[
+          {
+            label: 'Try another photo',
+            variant: 'primary',
+            onClick: () => {
+              setFailureAlert(null)
+              setError(null)
+              openPhotoPicker()
+            },
+          },
+          {
+            label: 'Close',
+            variant: 'ghost',
+            onClick: () => setFailureAlert(null),
+          },
+        ]}
+      >
+        <p data-testid="create-model-failure-alert-body">{failureAlert.body}</p>
+      </ConfirmDialog>
+    ) : null}
     </>
   )
 

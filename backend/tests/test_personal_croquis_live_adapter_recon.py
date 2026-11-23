@@ -355,8 +355,11 @@ def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_
     body = poll.json()
     assert body["status"] == "failed"
     assert body.get("failure_code") == "moderation_blocked"
-    assert "safety system" in (body.get("failure_message") or "").lower()
-    assert "cannot override" in (body.get("failure_message") or "").lower()
+    msg = (body.get("failure_message") or "").lower()
+    assert "couldn't be used" in msg or "could not be used" in msg
+    assert "not charged" in msg
+    assert "moderation_blocked" not in msg
+    assert "openai" not in msg
     assert "moderation" not in captured
     assert captured.get("extra_body", {}).get("moderation") == "low"
     res = (

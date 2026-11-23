@@ -112,15 +112,15 @@ _RATE_IMAGE_OUT = 30.0
 
 
 # User-visible copy for definitive provider rejections (never bypass safety).
+# Keep plain language — no provider brand, no raw moderation_blocked codes.
 _MODERATION_USER_MESSAGE = (
-    "OpenAI's safety system rejected this photo for croquis generation "
-    "(moderation_blocked). FashionRise cannot override that provider decision. "
-    "Try a different fully clothed fashion pose photo with clear lighting and "
-    "no sensitive content. This attempt was not charged."
+    "This photo couldn't be used to create a model. Please choose another fully "
+    "clothed fashion pose with clear lighting — avoid screenshots, filters, or "
+    "sensitive content. You were not charged for this attempt."
 )
 _GENERIC_REJECT_USER_MESSAGE = (
-    "The image provider rejected this generate request and produced no croquis. "
-    "You may try a different photo. This attempt was not charged."
+    "We couldn't create a model from this photo. Please try a different fully "
+    "clothed fashion pose. You were not charged for this attempt."
 )
 
 

@@ -223,14 +223,14 @@ describe('CreateMyCroquisWizard offline harness', () => {
     const change = screen.getByTestId('create-model-change-photo')
     expect(frame.contains(change)).toBe(false)
     expect(screen.getByTestId('create-model-photo-card').contains(frame)).toBe(true)
-    expect(change).toHaveTextContent(/Change photo/i)
+    expect(change).toHaveTextContent(/Choose a different photo/i)
   })
 
   it('keeps preview local until agreement; does not upload early', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
 
-    expect(screen.getByText(/Select a fully clothed fashion pose photo/i)).toBeTruthy()
+    expect(screen.getByText(/Add a fully clothed fashion pose photo/i)).toBeTruthy()
     expect(screen.getByText(/Kidswear uses Studio templates/i)).toBeTruthy()
     expect(
       screen.getByText(
@@ -296,7 +296,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
     expect(screen.getByTestId('models-shell').contains(backdrop)).toBe(false)
   })
 
-  it('surfaces moderation_blocked without pinning or inventing a model', async () => {
+  it('surfaces moderation_blocked as a clear popup without pinning a model', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     getPersonalCroquisVersion.mockResolvedValue({
       id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
@@ -305,7 +305,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
       status: 'failed',
       failure_code: 'moderation_blocked',
       failure_message:
-        'The AI provider blocked this photo (moderation_blocked). FashionRise cannot override that provider decision. This attempt was not charged.',
+        "OpenAI's safety system rejected this photo for croquis generation (moderation_blocked).",
       generated_asset_id: null,
       geometry_profile: 'fit_contain_768x1024_v1',
       prompt_version: null,
@@ -323,9 +323,26 @@ describe('CreateMyCroquisWizard offline harness', () => {
     )
     await selectPhotoAndAgree()
     await approveUploadAndGenerate()
-    expect(await screen.findByRole('alert')).toHaveTextContent(/moderation_blocked|not charged/i)
+    expect(
+      await screen.findByRole('heading', { name: /Photo couldn't be used/i }),
+    ).toBeTruthy()
+    const body = await screen.findByTestId('create-model-failure-alert-body')
+    expect(body).toHaveTextContent(/couldn't be used to create a model/i)
+    expect(body).toHaveTextContent(/not charged/i)
+    expect(body).not.toHaveTextContent(/moderation_blocked|openai/i)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: /Try another photo/i })).toBeTruthy()
     expect(onPin).not.toHaveBeenCalled()
     expect(acceptPersonalCroquisVersion).not.toHaveBeenCalled()
+  })
+
+  it('opens a photo source sheet before the gallery picker', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
+    fireEvent.click(screen.getByTestId('create-model-add-photo'))
+    expect(await screen.findByTestId('create-model-pick-sheet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Choose from gallery/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Take a photo/i })).toBeTruthy()
   })
 
   it('surfaces upload-disabled 403 without inventing a generated pin', async () => {
