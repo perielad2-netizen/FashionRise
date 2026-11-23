@@ -406,8 +406,15 @@ describe('CreateMyCroquisWizard offline harness', () => {
       ),
     )
     await waitFor(() => expect(generatePersonalCroquisVersion).toHaveBeenCalled())
-    await waitFor(() => expect(screen.getByAltText(/Generated model preview/i)).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /Accept & use in Studio/i }))
+    const generated = await screen.findByAltText(/Generated model preview/i)
+    const frame = screen.getByTestId('create-model-result-frame')
+    expect(frame.contains(generated)).toBe(true)
+    expect(screen.getByTestId('create-model-preview-actions')).toBeTruthy()
+    const accept = screen.getByRole('button', { name: /Accept & use in Studio/i })
+    expect(accept).toBeTruthy()
+    // Regression: absolute fill preview covered Accept and clicks closed via backdrop.
+    expect(generated.className).not.toMatch(/preview(?!Actions)/)
+    fireEvent.click(accept)
     await waitFor(() => expect(acceptPersonalCroquisVersion).toHaveBeenCalled())
     expect(onPin).toHaveBeenCalledWith('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 1)
     expect(onClose).toHaveBeenCalled()

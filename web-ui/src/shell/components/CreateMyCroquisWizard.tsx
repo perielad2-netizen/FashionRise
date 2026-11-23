@@ -721,20 +721,47 @@ export function CreateMyCroquisWizard({
         ) : null}
 
         {step === 'preview' ? (
-          <div className={styles.body}>
-            <p>Preview your model. Accept pins it in Studio, or delete and try again.</p>
-            {previewUrl ? (
-              <img src={previewUrl} alt="Generated model preview" className={styles.preview} />
-            ) : null}
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} disabled={busy} onClick={() => void runReject()}>
-                Delete
-              </button>
-              <button type="button" className={styles.primary} disabled={busy} onClick={() => void runAccept()}>
-                Accept &amp; use in Studio
-              </button>
+          <>
+            <div className={styles.body}>
+              <p className={styles.lead}>
+                Preview your model. Accept pins it for Studio, or delete and try again.
+              </p>
+              <div className={styles.resultCard} data-testid="create-model-result-card">
+                <div className={styles.resultFrame} data-testid="create-model-result-frame">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt="Generated model preview"
+                      className={styles.resultPreview}
+                      draggable={false}
+                    />
+                  ) : (
+                    <p className={styles.busyHint}>Loading preview…</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+            <div className={styles.footer} data-testid="create-model-preview-actions">
+              <div className={styles.previewActions}>
+                <button
+                  type="button"
+                  className={styles.secondary}
+                  disabled={busy}
+                  onClick={() => void runReject()}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={busy || !previewUrl}
+                  onClick={() => void runAccept()}
+                >
+                  Accept &amp; use in Studio
+                </button>
+              </div>
+            </div>
+          </>
         ) : null}
 
         {error && step !== 'compose' ? (

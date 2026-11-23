@@ -41,5 +41,11 @@ describe('Create Model canonical entry points', () => {
     expect(tsx.includes('create-model-failure-alert-body')).toBe(true)
     // Android WebView: do not host the preview <img> inside a clipping <button>.
     expect(tsx.includes('className={styles.photoHit}')).toBe(false)
+    // Generated result must use a clipped result frame + sticky Accept footer
+    // (must not reuse absolute .preview outside .photoFrame — covers Accept).
+    expect(tsx.includes('create-model-result-frame')).toBe(true)
+    expect(tsx.includes('create-model-preview-actions')).toBe(true)
+    expect(tsx.includes('styles.resultPreview')).toBe(true)
+    expect(css.includes('.resultFrame')).toBe(true)
   })
 })
