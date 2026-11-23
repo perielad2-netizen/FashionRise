@@ -11,9 +11,10 @@
 | Root cause | `POST /api/v1/personal-croquis/photos` → **422** — BE required Form `sex` after male/female work; Capacitor Android build still omits `sex` (`Origin: https://localhost/`) |
 | Logs | 2026-11-23 **11:20:36 / 11:20:47 / 11:27:35 UTC** (≈13:20–13:27 IST) — adults/storage/upload consent **200**, photos **422** |
 | Fix | `sex` Form optional again (Try On still requires via picker/PATCH); clearer upload error mapping; Create Model dialog **portaled to `document.body`** (My Models `modelsRise` transform trapped `position:fixed`) |
-| Tip | Update after deploy — BE `/opt/fashionrise/src` + FE `/var/www/fashionrise/releases/<sha>-create-model-upload-hotfix` |
-| Native | Web/PWA fixed by FE deploy; **installed Android APK still needs store rebuild** for sex picker UI, but upload works without `sex` now |
-| PR | (fill after merge) |
+| Tip | BE `/opt/fashionrise/src` @ **`f071385f`** · FE `/var/www/fashionrise/releases/f071385f-create-model-upload-hotfix` · `/version.json` → `f071385f` |
+| Native | Installed Android APK upload works again without `sex`; sex picker UI needs a later store rebuild. Web/PWA gets portal + errors now. |
+| PR | [#491](https://github.com/perielad2-netizen/FashionRise/pull/491) |
+| Backup | BE `/root/backups/create-model-hotfix-*` · FE previous current pointer under `/root/backups/fe-current-before-f071385f-*` |
 
 ## LIVE — Share design approve before My Designs (2026-11-22 Asia/Jerusalem)
 
