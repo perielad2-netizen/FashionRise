@@ -85,6 +85,22 @@ describe('GlobalHeader Android layout (header overlap)', () => {
     expect(header).toHaveClass(styles.headerMenuOpen)
   })
 
+  it('closes the account menu on outside pointerdown', () => {
+    render(<GlobalHeader username="peri" onLogout={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('global-account-menu'))
+    expect(screen.getByTestId('global-account-menu-panel')).toBeInTheDocument()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByTestId('global-account-menu-panel')).not.toBeInTheDocument()
+  })
+
+  it('closes the account menu on Escape', () => {
+    render(<GlobalHeader username="peri" onLogout={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('global-account-menu'))
+    expect(screen.getByTestId('global-account-menu-panel')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('global-account-menu-panel')).not.toBeInTheDocument()
+  })
+
   it('opens My Profile from the header avatar and account menu', () => {
     const onOpenProfile = vi.fn()
     render(<GlobalHeader username="peri" onLogout={vi.fn()} onOpenProfile={onOpenProfile} />)

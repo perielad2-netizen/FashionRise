@@ -215,6 +215,24 @@ export function RunwayScreen({
   const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
   const [openOwnProfileEditing, setOpenOwnProfileEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close Account menu on outside tap / Escape — same pattern as WorkspaceHeader (V2-0001).
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDoc = (e: Event) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   useEffect(() => {
     if (!openOwnProfile || !viewerId) return
@@ -778,125 +796,126 @@ export function RunwayScreen({
           </h1>
           <div className={styles.chromeTop}>
             <div className={styles.chromeActions}>
-              <button
-                type="button"
-                className={styles.iconBtn}
-                aria-label="More"
-                aria-expanded={menuOpen}
-                data-testid="runway-more-menu"
-                onClick={() => setMenuOpen((v) => !v)}
-              >
-                <MoreHorizontal size={18} aria-hidden />
-              </button>
+              <div className={styles.menuWrap} ref={menuRef}>
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label="More"
+                  aria-expanded={menuOpen}
+                  data-testid="runway-more-menu"
+                  onClick={() => setMenuOpen((v) => !v)}
+                >
+                  <MoreHorizontal size={18} aria-hidden />
+                </button>
+                {menuOpen ? (
+                  <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
+                    <p className={styles.menuSectionLabel}>Account</p>
+                    {viewerId ? (
+                      <button
+                        type="button"
+                        className={styles.menuItem}
+                        role="menuitem"
+                        data-testid="runway-my-profile"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setOpenOwnProfileEditing(false)
+                          setViewingDesigner({
+                            user_id: viewerId,
+                            username: viewerUsername || undefined,
+                          })
+                        }}
+                      >
+                        <User size={14} aria-hidden />
+                        My Profile
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={styles.menuItem}
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onOpenLooks()
+                      }}
+                    >
+                      My Looks
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.menuItem}
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onOpenCreate()
+                      }}
+                    >
+                      <Sparkles size={14} aria-hidden />
+                      Start creating
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.menuItem}
+                      role="menuitem"
+                      data-testid="runway-tab-friends"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setTab('friends')
+                      }}
+                    >
+                      <Users size={14} aria-hidden />
+                      Manage friends
+                    </button>
+                    {tab === 'discover' || tab === 'feed' || tab === 'following' || tab === 'top' ? (
+                      <button
+                        type="button"
+                        className={styles.menuItem}
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          void load()
+                        }}
+                      >
+                        <RefreshCw size={14} aria-hidden />
+                        Refresh feed
+                      </button>
+                    ) : null}
+                    <div className={styles.menuPush}>
+                      <div className={styles.pushCopy}>
+                        <span className={styles.pushLabel}>
+                          {pushOn ? <Bell size={14} aria-hidden /> : <BellOff size={14} aria-hidden />}
+                          Push notifications
+                        </span>
+                        <span className={styles.pushHint}>
+                          {pushNotice ||
+                            (pushOn
+                              ? 'On — likes, scores, and comments'
+                              : pushLocked
+                                ? isNativeShell()
+                                  ? 'Unavailable until native push is enabled on the server'
+                                  : 'Unavailable until push is configured on the server'
+                                : isNativeShell()
+                                  ? 'Off — app notifications pending native push setup'
+                                  : 'Off until you turn it on (browser / PWA)')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        className={pushOn ? styles.pushToggleOn : styles.pushToggle}
+                        aria-checked={pushOn}
+                        aria-label="Push notifications"
+                        aria-disabled={pushLocked && !pushOn}
+                        disabled={pushBusy || (pushLocked && !pushOn)}
+                        data-testid="runway-push-toggle"
+                        onClick={() => void onTogglePush()}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </header>
-      ) : null}
-
-      {menuOpen ? (
-        <div className={styles.menuPanel} role="menu" aria-label="FashionRise menu">
-          <p className={styles.menuSectionLabel}>Account</p>
-          {viewerId ? (
-            <button
-              type="button"
-              className={styles.menuItem}
-              role="menuitem"
-              data-testid="runway-my-profile"
-              onClick={() => {
-                setMenuOpen(false)
-                setOpenOwnProfileEditing(false)
-                setViewingDesigner({
-                  user_id: viewerId,
-                  username: viewerUsername || undefined,
-                })
-              }}
-            >
-              <User size={14} aria-hidden />
-              My Profile
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={styles.menuItem}
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false)
-              onOpenLooks()
-            }}
-          >
-            My Looks
-          </button>
-          <button
-            type="button"
-            className={styles.menuItem}
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false)
-              onOpenCreate()
-            }}
-          >
-            <Sparkles size={14} aria-hidden />
-            Start creating
-          </button>
-          <button
-            type="button"
-            className={styles.menuItem}
-            role="menuitem"
-            data-testid="runway-tab-friends"
-            onClick={() => {
-              setMenuOpen(false)
-              setTab('friends')
-            }}
-          >
-            <Users size={14} aria-hidden />
-            Manage friends
-          </button>
-          {tab === 'discover' || tab === 'feed' || tab === 'following' || tab === 'top' ? (
-            <button
-              type="button"
-              className={styles.menuItem}
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false)
-                void load()
-              }}
-            >
-              <RefreshCw size={14} aria-hidden />
-              Refresh feed
-            </button>
-          ) : null}
-          <div className={styles.menuPush}>
-            <div className={styles.pushCopy}>
-              <span className={styles.pushLabel}>
-                {pushOn ? <Bell size={14} aria-hidden /> : <BellOff size={14} aria-hidden />}
-                Push notifications
-              </span>
-              <span className={styles.pushHint}>
-                {pushNotice ||
-                  (pushOn
-                    ? 'On — likes, scores, and comments'
-                    : pushLocked
-                      ? isNativeShell()
-                        ? 'Unavailable until native push is enabled on the server'
-                        : 'Unavailable until push is configured on the server'
-                      : isNativeShell()
-                        ? 'Off — app notifications pending native push setup'
-                        : 'Off until you turn it on (browser / PWA)')}
-              </span>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              className={pushOn ? styles.pushToggleOn : styles.pushToggle}
-              aria-checked={pushOn}
-              aria-label="Push notifications"
-              aria-disabled={pushLocked && !pushOn}
-              disabled={pushBusy || (pushLocked && !pushOn)}
-              data-testid="runway-push-toggle"
-              onClick={() => void onTogglePush()}
-            />
-          </div>
-        </div>
       ) : null}
 
       {/* Browse-sheet entry points for interaction tests only — not feed filters. */}
