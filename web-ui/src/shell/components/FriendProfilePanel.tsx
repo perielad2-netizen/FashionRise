@@ -581,15 +581,39 @@ export function FriendProfilePanel({
           role="presentation"
           data-testid="designer-profile-editor"
         >
-          <div
+          <form
             className={styles.sheet}
             role="dialog"
             aria-modal="true"
             aria-labelledby={editTitleId}
+            onSubmit={(e) => {
+              e.preventDefault()
+              void saveProfile()
+            }}
           >
-            <h2 id={editTitleId} className={styles.sheetTitle}>
-              Edit Designer Card
-            </h2>
+            <header className={styles.sheetHeader}>
+              <button
+                type="button"
+                className={styles.sheetClose}
+                disabled={editBusy}
+                aria-label="Close editor"
+                data-testid="designer-edit-cancel"
+                onClick={() => setEditing(false)}
+              >
+                <X size={18} aria-hidden />
+              </button>
+              <h2 id={editTitleId} className={styles.sheetTitle}>
+                Edit Designer Card
+              </h2>
+              <button
+                type="submit"
+                className={styles.sheetSave}
+                disabled={editBusy}
+                data-testid="designer-edit-save"
+              >
+                {editBusy ? 'Saving…' : 'Save'}
+              </button>
+            </header>
             <p className={styles.sheetHint}>
               Your photo and bio appear on your FashionRise profile and published looks.
             </p>
@@ -607,18 +631,21 @@ export function FriendProfilePanel({
                   <Camera size={13} />
                 </span>
               </button>
-              <div>
+              <div className={styles.editIdentityMeta}>
                 <strong>{displayName}</strong>
                 {friend.username ? <div className={styles.handle}>@{friend.username}</div> : null}
+                <button
+                  type="button"
+                  className={styles.changePhotoLink}
+                  disabled={editBusy}
+                  data-testid="designer-edit-avatar"
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  Change photo
+                </button>
               </div>
             </div>
-            <form
-              className={styles.editForm}
-              onSubmit={(e) => {
-                e.preventDefault()
-                void saveProfile()
-              }}
-            >
+            <div className={styles.editForm}>
               <label className={styles.editLabel}>
                 Display name
                 <input
@@ -633,48 +660,28 @@ export function FriendProfilePanel({
                 />
               </label>
               <label className={styles.editLabel}>
-                Bio
+                <span className={styles.editLabelRow}>
+                  Bio
+                  <span className={styles.editCount}>{editBio.length}/2000</span>
+                </span>
                 <textarea
                   className={styles.editTextarea}
                   value={editBio}
                   maxLength={2000}
-                  rows={4}
+                  rows={3}
                   disabled={editBusy}
                   data-testid="designer-edit-bio"
                   onChange={(e) => setEditBio(e.target.value)}
                   onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
                 />
               </label>
-              <div className={styles.sheetActions}>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  disabled={editBusy}
-                  onClick={() => avatarInputRef.current?.click()}
-                  data-testid="designer-edit-avatar"
-                >
-                  <Camera size={14} aria-hidden />
-                  Change photo
-                </button>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  disabled={editBusy}
-                  onClick={() => setEditing(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className={styles.primaryBtn} disabled={editBusy}>
-                  {editBusy ? 'Saving…' : 'Save'}
-                </button>
-              </div>
               {editError ? (
                 <p className={styles.status} role="alert">
                   {editError}
                 </p>
               ) : null}
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
       ) : null}
 

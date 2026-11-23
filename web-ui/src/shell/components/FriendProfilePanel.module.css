@@ -574,7 +574,7 @@
   color: #fecdd3;
 }
 
-/* Edit Designer Card — full front page (not a bottom sheet) */
+/* Edit Designer Card — full front page; Save in header (Mobbin edit-profile pattern) */
 .sheetBackdrop {
   position: fixed;
   inset: 0;
@@ -595,7 +595,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: max(16px, env(safe-area-inset-top)) 18px max(12px, env(safe-area-inset-bottom));
+  padding: max(10px, env(safe-area-inset-top)) 18px max(16px, env(safe-area-inset-bottom));
   border-radius: 0;
   background: linear-gradient(180deg, #14121a 0%, #0a0c12 55%, #07080d 100%);
   border: 0;
@@ -604,11 +604,67 @@
   box-sizing: border-box;
 }
 
+.sheetHeader {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sheetClose {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+}
+
+.sheetClose:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.sheetClose:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
 .sheetTitle {
   margin: 0;
   font-family: var(--fr-serif);
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.sheetSave {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--fr-pink, #d63384), #be185d);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sheetSave:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.sheetSave:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .sheetHint {
@@ -623,6 +679,35 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.editIdentityMeta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.changePhotoLink {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f9a8d4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.changePhotoLink:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.changePhotoLink:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .avatarEdit {
@@ -665,9 +750,9 @@
 .editForm {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 .editLabel {
@@ -676,6 +761,18 @@
   font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
   min-width: 0;
+}
+
+.editLabelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.editCount {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .editInput,
@@ -692,7 +789,7 @@
 }
 
 .editTextarea {
-  min-height: 88px;
+  min-height: 72px;
   resize: vertical;
 }
 
@@ -726,29 +823,6 @@
 
   .avatarBtn:active {
     transform: none;
-  }
-}
-.sheetActions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  min-width: 0;
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
-  padding-top: 14px;
-  padding-bottom: max(4px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(7, 8, 13, 0) 0%, #07080d 28%, #07080d 100%);
-}
-
-.sheetActions .primaryBtn,
-.sheetActions .ghostBtn {
-  width: 100%;
-}
-
-@media (min-width: 480px) {
-  .sheetActions {
-    grid-template-columns: 1fr 1fr auto;
   }
 }
 

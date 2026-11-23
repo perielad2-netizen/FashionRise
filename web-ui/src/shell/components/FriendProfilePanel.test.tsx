@@ -263,7 +263,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
     fireEvent.change(screen.getByTestId('designer-edit-bio'), {
       target: { value: 'Evening knits.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByTestId('designer-edit-save'))
     await waitFor(() =>
       expect(updateMyProfile).toHaveBeenCalledWith(
         expect.objectContaining({
