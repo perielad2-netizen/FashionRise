@@ -1220,8 +1220,9 @@ def enqueue_personal_try_on(
 
         sex_hints = sex_flag_design_hints(croquis_sex)
         if sex_hints:
+            # 2nd arg wins the hint budget — sex must outrank FE print/color noise.
             hints = _normalize_design_hints(
-                merge_openai_design_hints(sex_hints, hints, max_hints=8)
+                merge_openai_design_hints(hints, sex_hints, max_hints=8)
             )
 
     # Store garment as base64 in input (same pattern as sketch_polish) — immutable freeze.
@@ -1449,28 +1450,30 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        # Re-assert frozen My Model sex flag ahead of geometry (pants vs skirt).
+        # Sex flag + sex-aware geometry MUST outrank FE print noise and false dress/V hints.
+        # Job 2a646dc6: male shorts plate was labeled high_slit_dress + open_neckline; merge
+        # put those geometry strings first and dropped the male sex flag from the budget.
         from app.services.sunburst_try_on_prompt import sex_flag_design_hints
 
-        sex_hints = sex_flag_design_hints(
+        croquis_sex = (
             data.get("croquis_sex") if isinstance(data.get("croquis_sex"), str) else None
         )
-        if sex_hints:
-            hints = _normalize_design_hints(
-                merge_openai_design_hints(sex_hints, hints, max_hints=8)
-            )
-        # #170/#172/#174/#180 — additive trouser/jumpsuit OR high-slit-dress hints from
-        # frozen garment geometry. Apply for OpenAI and FASHN Max so Max cannot invent
-        # pant legs when Studio geometry is an open-leg dress.
-        # #182 — pale bridal / open neckline / bilateral sleeve hints (OpenAI + Max).
+        sex_hints = sex_flag_design_hints(croquis_sex)
+        priority_hints: list[str] = list(sex_hints)
+        # #170/#172/#174/#180/#182 — geometry is sex-aware (male never gets dress/cleavage).
         if provider_name in {TRY_ON_PROVIDER_OPENAI, TRY_ON_PROVIDER_FASHN_MAX}:
-            geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
-            upper_hints = openai_upper_design_hints(analyze_upper_garment_geometry(garment_png))
-            combined_geo = [*geo_hints, *upper_hints]
-            if combined_geo:
-                hints = _normalize_design_hints(
-                    merge_openai_design_hints(hints, combined_geo, max_hints=8)
-                )
+            geo_hints = openai_trouser_design_hints(
+                analyze_lower_garment_geometry(garment_png), sex=croquis_sex
+            )
+            upper_hints = openai_upper_design_hints(
+                analyze_upper_garment_geometry(garment_png), sex=croquis_sex
+            )
+            priority_hints.extend([*geo_hints, *upper_hints])
+        if priority_hints:
+            # merge_openai_design_hints(studio, geometry): geometry (2nd) wins the budget.
+            hints = _normalize_design_hints(
+                merge_openai_design_hints(hints, priority_hints, max_hints=8)
+            )
         generate_kwargs: dict[str, Any] = {
             "photo_png": photo_png,
             "garment_png": garment_png,

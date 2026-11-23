@@ -9,26 +9,27 @@ from __future__ import annotations
 
 # Model B — gpt-image-2.6-sunburst raw person+design path (owner A/B/C Arm B).
 MODEL_B_SUNBURST_MODEL = "gpt-image-2.6-sunburst"
-MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v3"
+MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v4"
 MODEL_B_SUNBURST_PATH = "openai_model_b_sunburst_raw"
-# Compare Arm B prompt + footwear + sex flag + garment-type fidelity.
-# v3: owner-declared male/female on My Model drives pants-vs-skirt disambiguation
-# (male shorts were still becoming slit skirts under v2 inference-only).
+# v4: owner sex flag outranks geometry. Job 2a646dc6 froze male + shorts but the
+# worker then injected "dress with high fashion slit" + "plunging V cleavage" from
+# false-positive plate geometry and those hints filled the 8-slot budget.
 MODEL_B_SUNBURST_PROMPT = (
     "Fit the exact garment design from image 2 onto the real person in image 1. "
     "Preserve the person's original face, hair, body, pose, and background. "
-    "When Studio design evidence names a person sex flag (male or female), treat that "
-    "flag as authoritative for presentation and for pants-versus-skirt decisions — "
-    "do not override it from clothing stereotypes. "
-    "Preserve the person's apparent sex and gender presentation from image 1 — "
-    "do not feminize or masculinize the person or the outfit. "
-    "Keep the garment's exact type, colors, silhouette, decorative details, and length "
-    "as drawn in image 2. "
-    "If image 2 shows shorts, cropped trousers, or any short hem ending above the knee, "
+    "PRIORITY: when Studio design evidence names a person sex flag (male or female), "
+    "that flag outranks silhouette guesses — never override it with dress/skirt/cleavage "
+    "stereotypes. "
+    "If the person sex flag is male: render masculine presentation; treat short or baggy "
+    "lower garments as shorts or pants — never a skirt, dress, gown, or fashion slit; "
+    "keep the drawn neckline — do not invent a plunging V or cleavage. "
+    "If the person sex flag is female: keep feminine presentation and follow image 2 "
+    "garment type (skirt/dress stays skirt/dress; shorts stay shorts). "
+    "Keep the garment's exact type, colors, silhouette, decorative details, neckline, "
+    "and length as drawn in image 2. "
+    "If image 2 shows separate top and bottom, keep both pieces — do not merge into one dress. "
+    "If image 2 shows shorts, cropped trousers, or any short hem ending above mid-calf, "
     "keep that short length — do not lengthen into a skirt, dress, gown, or high slit. "
-    "If the person sex flag is male and the lower garment is ambiguous, render shorts or "
-    "pants — never a skirt, dress, gown, or fashion slit. "
-    "If image 2 shows a skirt or dress and the person sex flag is female, keep that type. "
     "Make the clothing naturally photorealistic. Do not change anything else. "
     "If the fashion design shows shoes, heels, boots, or other footwear, replace "
     "the person's existing footwear with the matching design footwear, preserving "
@@ -42,17 +43,18 @@ MODEL_B_SUNBURST_FOOTWEAR_CLAUSE = (
     "preserve the original shoes."
 )
 MODEL_B_SUNBURST_SEX_CLAUSE = (
-    "When Studio design evidence names a person sex flag (male or female), treat that "
-    "flag as authoritative for presentation and for pants-versus-skirt decisions — "
-    "do not override it from clothing stereotypes."
+    "PRIORITY: when Studio design evidence names a person sex flag (male or female), "
+    "that flag outranks silhouette guesses — never override it with dress/skirt/cleavage "
+    "stereotypes."
 )
 MODEL_B_SUNBURST_SHORTS_CLAUSE = (
-    "If image 2 shows shorts, cropped trousers, or any short hem ending above the knee, "
+    "If image 2 shows shorts, cropped trousers, or any short hem ending above mid-calf, "
     "keep that short length — do not lengthen into a skirt, dress, gown, or high slit."
 )
 MODEL_B_SUNBURST_MALE_PANTS_CLAUSE = (
-    "If the person sex flag is male and the lower garment is ambiguous, render shorts or "
-    "pants — never a skirt, dress, gown, or fashion slit."
+    "If the person sex flag is male: render masculine presentation; treat short or baggy "
+    "lower garments as shorts or pants — never a skirt, dress, gown, or fashion slit; "
+    "keep the drawn neckline — do not invent a plunging V or cleavage."
 )
 
 
@@ -61,14 +63,13 @@ def sex_flag_design_hints(sex: str | None) -> list[str]:
     flag = (sex or "").strip().lower()
     if flag == "male":
         return [
-            "person sex flag: male — keep masculine presentation from image 1",
-            "lower garment: for this male model treat short or ambiguous bottoms as "
-            "shorts or pants — never a skirt, dress, gown, or high slit",
+            "person sex flag: male — PRIORITY over geometry; keep masculine presentation",
+            "lower garment: male shorts or baggy pants — NEVER a skirt, dress, gown, or slit",
+            "neckline: keep drawn closed/crew neck — do not invent plunging V or cleavage",
         ]
     if flag == "female":
         return [
-            "person sex flag: female — keep feminine presentation from image 1",
-            "lower garment: follow image 2 type — skirt or dress stays skirt/dress; "
-            "shorts stay shorts",
+            "person sex flag: female — PRIORITY over geometry; keep feminine presentation",
+            "lower garment: follow image 2 — skirt/dress stays skirt/dress; shorts stay shorts",
         ]
     return []

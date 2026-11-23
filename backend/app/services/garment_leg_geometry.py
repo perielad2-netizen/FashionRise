@@ -293,6 +293,13 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
             high_slit_dress = False
             trousers = True
 
+        # Baggy shorts / knee pants often show a crotch gap that looks like a fashion
+        # slit. Floor gowns with slits end near the ankles — short/mid hems are not gowns.
+        # Owner male letter-top + baggy denim shorts (job 2a646dc6): hem≈0.74 was labeled
+        # high_slit_dress and the worker overwrote Try On with "dress + slit" hints.
+        if high_slit_dress and hem < 0.80:
+            high_slit_dress = False
+
     jumpsuit = trousers and mid_connected and coverage >= 0.45 and y0 < int(0.45 * h)
     narrow = trousers and avg_w > 0 and avg_w <= 0.32
     wide = trousers and avg_w >= 0.33
@@ -376,10 +383,37 @@ def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]
     return hints
 
 
-def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
-    """Additive V2 hints for clear trouser OR high-slit dress geometry. Empty when ambiguous."""
+def openai_trouser_design_hints(
+    geometry: LowerGarmentGeometry,
+    *,
+    sex: str | None = None,
+) -> list[str]:
+    """Additive hints for trousers / shorts / high-slit dress. Sex flag outranks geometry."""
+    sex_n = (sex or "").strip().lower()
+
+    # Male My Model: never emit dress/slit/one-piece gown hints for short/baggy bottoms.
+    # Charcoal-matte plates of top+baggy shorts often look like one-piece coverage and a
+    # crotch gap looks like a fashion slit (job 2a646dc6).
+    if sex_n == "male" and not geometry.looks_like_trousers:
+        short_or_baggy_hem = (
+            geometry.hem_y_frac is not None
+            and 0.45 <= float(geometry.hem_y_frac) < 0.85
+            and int(geometry.opaque_pixels) >= 800
+        )
+        leg_gap = float(geometry.two_lobe_sample_ratio) >= 0.25
+        if (
+            geometry.looks_like_high_slit_dress
+            or (short_or_baggy_hem and (leg_gap or not looks_like_one_piece_full_coverage(geometry)))
+        ):
+            return [
+                "garment type: male shorts or baggy pants as drawn — NOT a dress, skirt, gown, or slit",
+                "keep separate left and right leg openings from image 2 — do not merge into a skirt",
+                "keep the short/baggy hem length from image 2 — do not lengthen into a dress or high slit",
+                "person sex flag: male — do not feminize the outfit into a dress",
+            ]
+
     if geometry.looks_like_high_slit_dress and not geometry.looks_like_trousers:
-        # Still remind the model to replace street bottoms under the dress panel.
+        # Female / unset — remind the model to replace street bottoms under the dress panel.
         return [
             "garment type: dress or gown with a high fashion slit — not trousers or a jumpsuit",
             "Preserve this as a dress with an intentional leg opening/slit. Maintain the "
@@ -400,13 +434,14 @@ def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
             not geometry.looks_like_high_slit_dress
             and not looks_like_one_piece_full_coverage(geometry)
             and geometry.hem_y_frac is not None
-            and 0.45 <= float(geometry.hem_y_frac) < 0.72
+            and 0.45 <= float(geometry.hem_y_frac) < 0.80
             and int(geometry.opaque_pixels) >= 800
             # hips-only shorts, gap under a top, or mid-body not connected
             and (
                 top_frac >= 0.35
                 or not geometry.mid_body_connected
                 or geometry.has_mid_vertical_gap
+                or sex_n == "male"
             )
         ):
             return [

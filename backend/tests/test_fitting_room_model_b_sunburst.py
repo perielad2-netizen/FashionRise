@@ -119,11 +119,14 @@ def test_model_b_prompt_includes_footwear_and_preserve_clause():
     assert "if no footwear is shown in the design, preserve the original shoes" in low
     assert "preserve the person's original face" in low
     assert "person sex flag" in low
+    assert "outranks silhouette" in low or "priority" in low
     assert "shorts" in low and "skirt" in low
-    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v3"
+    assert "cleavage" in low
+    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v4"
     male = " ".join(sex_flag_design_hints("male")).lower()
     assert "person sex flag: male" in male
-    assert "never a skirt" in male
+    assert "never a skirt" in male or "never a skirt" in male.replace("—", " ")
+    assert "cleavage" in male
     female = " ".join(sex_flag_design_hints("female")).lower()
     assert "person sex flag: female" in female
 

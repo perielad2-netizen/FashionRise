@@ -200,10 +200,15 @@ def prepare_openai_try_on_garment_visibility(png: bytes) -> tuple[bytes, dict[st
     return out.getvalue(), meta
 
 
-def openai_upper_design_hints(geometry: UpperGarmentGeometry) -> list[str]:
-    """Additive V2 hints for pale fabric / open neckline / two sleeves. Empty when N/A."""
+def openai_upper_design_hints(
+    geometry: UpperGarmentGeometry,
+    *,
+    sex: str | None = None,
+) -> list[str]:
+    """Additive hints for pale fabric / neckline / sleeves. Sex flag outranks geometry."""
     if geometry.opaque_pixels < 64:
         return []
+    sex_n = (sex or "").strip().lower()
     hints: list[str] = []
     if geometry.pale_dominant:
         hints.append(
@@ -213,8 +218,20 @@ def openai_upper_design_hints(geometry: UpperGarmentGeometry) -> list[str]:
             "image 2 may sit on a dark matte for readability; the matte is NOT clothing"
         )
     if geometry.open_neckline:
+        # Male letter-print crew tops false-positive as plunging V (job 2a646dc6) and the
+        # worker then ordered cleavage — override with closed-neck contract for male.
+        if sex_n == "male":
+            hints.append(
+                "neckline: keep the drawn closed/crew neckline — do not invent a plunging V or cleavage"
+            )
+        else:
+            hints.append(
+                "neckline: deep open / plunging V as drawn — keep cleavage opening; "
+                "do not fill or raise to a high neck"
+            )
+    elif sex_n == "male":
         hints.append(
-            "neckline: deep open / plunging V as drawn — keep cleavage opening; do not fill or raise to a high neck"
+            "neckline: keep the drawn neckline height from image 2 — do not deepen into cleavage"
         )
     if geometry.bilateral_sleeves:
         hints.append(
