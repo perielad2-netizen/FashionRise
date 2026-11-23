@@ -520,16 +520,16 @@ function LookDetailDialog({
               data-testid="look-publish-runway"
               title={
                 look.is_archived
-                  ? 'Unarchive before publishing to Runway'
+                  ? 'Unarchive before publishing to FashionRise'
                   : look.runway_item_id
-                    ? 'Remove from FashionRise Runway'
-                    : 'Publish to FashionRise Runway'
+                    ? 'Remove from FashionRise'
+                    : 'Publish to FashionRise'
               }
             >
               <span className={styles.actionIconGlyph} aria-hidden>
                 <Star size={18} strokeWidth={1.75} fill={look.runway_item_id ? 'currentColor' : 'none'} />
               </span>
-              <span>{look.runway_item_id ? 'On Runway' : 'Publish'}</span>
+              <span>{look.runway_item_id ? 'To FashionRise' : 'Publish'}</span>
             </button>
             <button
               type="button"
@@ -581,7 +581,7 @@ function LookDetailDialog({
       />
       {publishConfirmOpen ? (
         <ConfirmDialog
-          title="Publish to Runway"
+          title="Publish to FashionRise"
           busy={busy}
           scrollable
           onEscape={() => {

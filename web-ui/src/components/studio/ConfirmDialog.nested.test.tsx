@@ -1,6 +1,6 @@
 /**
  * Nested ConfirmDialog must not dismiss a parent overlay on checkbox / body taps
- * (My Looks → Publish to Runway consent).
+ * (My Looks → Publish to FashionRise consent).
  */
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -13,7 +13,7 @@ function NestedPublishFixture({ onParentClose }: { onParentClose: () => void }) 
     <div data-testid="parent-overlay" onClick={onParentClose}>
       <div onClick={(e) => e.stopPropagation()}>Look details</div>
       <ConfirmDialog
-        title="Publish to Runway"
+        title="Publish to FashionRise"
         scrollable
         onEscape={() => undefined}
         actions={[
