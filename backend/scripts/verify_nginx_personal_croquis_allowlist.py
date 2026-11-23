@@ -21,6 +21,7 @@ REQUIRED_SNIPPETS = (
     'location = /api/v1/personal-croquis/photos',
     'location = /api/v1/personal-croquis/attestations/adults',
     'location ~ "^/api/v1/personal-croquis/[0-9a-fA-F-]{36}/publish$"',
+    'location ~ "^/api/v1/personal-croquis/[0-9a-fA-F-]{36}/sex$"',
     'location ~ "^/api/v1/personal-croquis/[0-9a-fA-F-]{36}/versions/generate$"',
     'location /api/v1/personal-croquis/ { return 403; }',
     'client_max_body_size 25m',
@@ -38,6 +39,7 @@ def main() -> int:
     print("matrix_ok POST /api/v1/personal-croquis/consent/upload")
     print("matrix_ok POST /api/v1/personal-croquis/photos")
     print("matrix_ok POST|DELETE /api/v1/personal-croquis/{uuid}/publish")
+    print("matrix_ok PATCH /api/v1/personal-croquis/{uuid}/sex")
     print("VERIFY_NGINX_PERSONAL_CROQUIS_ALLOWLIST_OK")
     return 0
 

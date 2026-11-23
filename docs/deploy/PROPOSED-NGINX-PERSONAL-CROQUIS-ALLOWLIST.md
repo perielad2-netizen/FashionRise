@@ -70,6 +70,12 @@ Browser CORS preflight (`OPTIONS`) got nginx 403 HTML → fetch failed as a netw
         proxy_pass http://127.0.0.1:8010;
     }
 
+    # Try On Person male/female chooser for older Create Model rows without sex.
+    location ~ "^/api/v1/personal-croquis/[0-9a-fA-F-]{36}/sex$" {
+        limit_except PATCH OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/personal-croquis/[0-9a-fA-F-]{36}/versions/generate$" {
         limit_except POST OPTIONS { deny all; }
         proxy_pass http://127.0.0.1:8010;
@@ -98,6 +104,7 @@ Browser CORS preflight (`OPTIONS`) got nginx 403 HTML → fetch failed as a netw
 | `POST/OPTIONS …/consent/ai` | Proxied |
 | `POST/OPTIONS …/photos` | Proxied (body ≤ 25m) |
 | `POST/DELETE/OPTIONS …/{uuid}/publish` | Proxied (My Models) |
+| `PATCH/OPTIONS …/{uuid}/sex` | Proxied (Try On male/female chooser) |
 | Unknown `…/personal-croquis/…` suffix | 403 |
 
 Offline structural check: `backend/scripts/verify_nginx_personal_croquis_allowlist.py`.

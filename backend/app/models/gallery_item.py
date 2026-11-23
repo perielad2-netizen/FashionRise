@@ -61,7 +61,11 @@ class GalleryItem(Base):
 
     design: Mapped["GarmentDesign"] = relationship(back_populates="gallery_items")
     user: Mapped["User"] = relationship(back_populates="gallery_items")
-    ratings: Mapped[list["Rating"]] = relationship(back_populates="gallery_item")
+    # cascade required: without it SQLAlchemy nulls ratings.gallery_item_id on
+    # parent delete (IntegrityError) instead of removing rating rows.
+    ratings: Mapped[list["Rating"]] = relationship(
+        back_populates="gallery_item", cascade="all, delete-orphan"
+    )
     likes: Mapped[list["GalleryLike"]] = relationship(
         back_populates="gallery_item", cascade="all, delete-orphan"
     )

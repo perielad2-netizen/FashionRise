@@ -52,12 +52,13 @@ def competition_category_board(
 
 
 @router.get("/awards", response_model=list[CompetitionAwardRead])
-def competition_awards(
+def list_competition_awards(
     week_start: datetime | None = Query(default=None),
     group_index: int | None = Query(default=None),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ) -> list[CompetitionAwardRead]:
+    # Named list_* so it does not shadow `from app.services import competition_awards`.
     start = ensure_utc(week_start) if week_start is not None else None
     if start is not None:
         start = competition_week_start(start)

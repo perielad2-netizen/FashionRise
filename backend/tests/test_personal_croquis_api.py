@@ -500,6 +500,41 @@ def test_db_commit_failure_cleans_orphan_bytes(client, db_session, monkeypatch):
         _disable_upload(monkeypatch)
 
 
+def test_patch_sex_on_legacy_model_without_sex(client, db_session, monkeypatch):
+    """Try On male/female chooser for older Create Model rows that lack sex."""
+    _enable_upload(monkeypatch)
+    try:
+        tokens = register_with_invite(client, db_session, "cq_sex@example.com", "cq_sex")
+        consent_id = _attest_and_consent(client, tokens)
+        uploaded = client.post(
+            f"{BASE}/photos",
+            headers=_auth(tokens),
+            files={"file": ("photo.png", _png_bytes(), "image/png")},
+            data={"storage_consent_id": consent_id, "display_name": "Legacy no sex"},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        croquis_id = uploaded.json()["id"]
+        assert uploaded.json().get("sex") in (None, "")
+
+        patched = client.patch(
+            f"{BASE}/{croquis_id}/sex",
+            headers=_auth(tokens),
+            json={"sex": "male"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["sex"] == "male"
+
+        again = client.patch(
+            f"{BASE}/{croquis_id}/sex",
+            headers=_auth(tokens),
+            json={"sex": "female"},
+        )
+        assert again.status_code == 200, again.text
+        assert again.json()["sex"] == "female"
+    finally:
+        _disable_upload(monkeypatch)
+
+
 def test_fabric_regression_unaffected(client, db_session, monkeypatch):
     """Existing private fabric storage still works after croquis Stage A."""
     _disable_upload(monkeypatch)

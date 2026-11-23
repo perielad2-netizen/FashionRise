@@ -80,6 +80,48 @@ def test_publish_look_appears_on_runway_feed(client, db_session):
     assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
 
 
+def test_unpublish_look_succeeds_when_feed_item_has_ratings(client, db_session):
+    """StarOff / Remove from FashionRise must not 500 when the look was scored."""
+    from app.models.rating import Rating
+    from app.models.user import User
+    from app.services.friendship_service import ensure_accepted_friends
+
+    owner = register_with_invite(client, db_session, "runway_rate_o@example.com", "runwayRateO")
+    scorer = register_with_invite(client, db_session, "runway_rate_s@example.com", "runwayRateS")
+    owner_user = db_session.query(User).filter(User.email == "runway_rate_o@example.com").one()
+    scorer_user = db_session.query(User).filter(User.email == "runway_rate_s@example.com").one()
+    ensure_accepted_friends(db_session, owner_user, scorer_user)
+
+    me = client.get("/api/v1/auth/me", headers=_auth(owner)).json()
+    job = _add_job(db_session, user_id=uuid.UUID(me["id"]), image_url=_store_image(), summary="rated")
+    look_id = str(job.id)
+    published = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(owner),
+        json=runway_publish_body(),
+    )
+    assert published.status_code == 200, published.text
+    runway_id = published.json()["runway_item_id"]
+
+    rate = client.post(
+        "/api/v1/ratings",
+        headers=_auth(scorer),
+        json={"gallery_item_id": runway_id, "score": 9},
+    )
+    assert rate.status_code == 200, rate.text
+    assert (
+        db_session.query(Rating).filter(Rating.gallery_item_id == uuid.UUID(runway_id)).count() == 1
+    )
+
+    removed = client.delete(f"/api/v1/looks/{look_id}/publish", headers=_auth(owner))
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["runway_item_id"] is None
+    assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
+    assert (
+        db_session.query(Rating).filter(Rating.gallery_item_id == uuid.UUID(runway_id)).count() == 0
+    )
+
+
 def test_delete_look_removes_runway_publish_from_feed(client, db_session):
     """My Looks delete must not leave a black empty reel on FashionRise."""
     tokens = register_with_invite(client, db_session, "runway_del@example.com", "runway_del")
