@@ -185,7 +185,7 @@ def test_try_on_prompt_matches_fitting_room_model_b_sunburst():
         MODEL_B_SUNBURST_SHORTS_CLAUSE,
     )
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v3"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v4"
     active = build_try_on_prompt(None)
     assert active == MODEL_B_SUNBURST_PROMPT
     assert MODEL_B_SUNBURST_FOOTWEAR_CLAUSE in active
@@ -200,7 +200,9 @@ def test_try_on_prompt_matches_fitting_room_model_b_sunburst():
     assert "fashion illustration" not in active.lower()
     assert "footwear" in active.lower() or "shoes" in active.lower()
     assert "person sex flag" in active.lower()
-    assert "never a skirt" in active.lower() or "shorts or pants" in active.lower()
+    assert "priority" in active.lower() or "outranks" in active.lower()
+    assert "cleavage" in active.lower()
+    assert "shorts or pants" in active.lower() or "baggy" in active.lower()
     # V3 archive retained but not activated.
     assert "swimwear" in TRY_ON_PROMPT_V3.lower()
     assert "opaque" in TRY_ON_PROMPT_V3.lower()
@@ -252,7 +254,7 @@ def test_openai_try_on_route_independent_from_fashn_prompt_versions():
     from app.services.fashn_garment_realism import GARMENT_REALISM_PROMPT_VERSION
     from app.services.personal_try_on import FASHN_PROMPT_VERSION
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v3"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v4"
     assert TRY_ON_PROMPT_VERSION != GARMENT_REALISM_PROMPT_VERSION
     assert TRY_ON_PROMPT_VERSION != FASHN_PROMPT_VERSION
     assert FASHN_PROMPT_VERSION.startswith("fashn-")

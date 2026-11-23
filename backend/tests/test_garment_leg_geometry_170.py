@@ -175,12 +175,68 @@ def test_top_shorts_openai_hints_keep_short_hem():
     """Male My Model + shorts must not be re-prompted as a slit gown."""
     geo = analyze_lower_garment_geometry(_top_shorts_png())
     assert geo.looks_like_trousers is False
-    hints = openai_trouser_design_hints(geo)
+    hints = openai_trouser_design_hints(geo, sex="male")
     joined = " ".join(hints).lower()
-    assert "shorts" in joined or "short" in joined
-    assert "do not lengthen" in joined or "skirt" in joined
-    assert "sex" in joined or "presentation" in joined or "feminize" in joined
+    assert "shorts" in joined or "pants" in joined
+    assert "dress" in joined  # negation: NOT a dress
+    assert "not a dress" in joined or "never" in joined or "not" in joined
     assert "one-piece" not in joined
+    assert "high fashion slit" not in joined
+
+
+def test_male_sex_outranks_false_slit_dress_hints():
+    """Baggy shorts plates must not emit dress/slit gown contracts when sex=male."""
+    from app.services.garment_leg_geometry import LowerGarmentGeometry, merge_openai_design_hints
+    from app.services.garment_upper_geometry import UpperGarmentGeometry, openai_upper_design_hints
+    from app.services.sunburst_try_on_prompt import sex_flag_design_hints
+
+    # Shape matching job 2a646dc6 before the hem gate (slit dress false positive).
+    geo = LowerGarmentGeometry(
+        opaque_pixels=400000,
+        bbox=(600, 300, 1100, 1500),
+        coverage_y_span_frac=0.57,
+        hem_y_frac=0.74,
+        two_lobe_sample_ratio=0.47,
+        avg_leg_width_frac=0.35,
+        avg_gap_frac=0.12,
+        mid_body_connected=True,
+        has_mid_vertical_gap=False,
+        looks_like_trousers=False,
+        looks_like_jumpsuit=False,
+        looks_like_narrow_legs=False,
+        looks_like_wide_legs=False,
+        looks_like_high_slit_dress=True,
+    )
+    hints = openai_trouser_design_hints(geo, sex="male")
+    joined = " ".join(hints).lower()
+    assert "male shorts" in joined or "baggy pants" in joined
+    assert "high fashion slit" not in joined
+    assert "dress or gown" not in joined
+
+    upper = UpperGarmentGeometry(
+        opaque_pixels=400000,
+        bbox=(600, 300, 1100, 800),
+        mean_brightness=70.0,
+        pale_pixel_frac=0.0,
+        pale_dominant=False,
+        open_neckline=True,
+        neckline_gap_frac=0.28,
+        left_sleeve=True,
+        right_sleeve=True,
+        bilateral_sleeves=True,
+    )
+    uh = openai_upper_design_hints(upper, sex="male")
+    uj = " ".join(uh).lower()
+    assert "cleavage" in uj and "do not invent" in uj
+    assert "keep cleavage opening" not in uj
+
+    studio = ["indigo jeans print topology fill"] * 5
+    priority = [*sex_flag_design_hints("male"), *hints, *uh]
+    merged = merge_openai_design_hints(studio, priority, max_hints=8)
+    mj = " ".join(merged).lower()
+    assert merged[0].lower().startswith("person sex flag: male")
+    assert "high fashion slit" not in mj
+    assert "keep cleavage opening" not in mj
 
 
 def test_bikini_two_piece_unchanged():
@@ -253,7 +309,7 @@ def test_discarded_leg_component_fails_completeness():
 
 def test_openai_sunburst_prompt_unchanged_without_hints():
     prompt = build_try_on_prompt(None)
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v3"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v4"
     # Base Model B sunburst text; no trouser appendix when hints empty.
     assert "Studio design evidence" not in prompt
     with_hints = build_try_on_prompt(openai_trouser_design_hints(analyze_lower_garment_geometry(_narrow_jumpsuit_png())))

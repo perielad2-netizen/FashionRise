@@ -47,8 +47,8 @@ TRY_ON_JOB_TYPE = "personal_try_on"
 # V2.8: stockings/hosiery/gloves must be kept; fine fashion-knit (not intimate sheer).
 # Live OpenAI Try On shares Fitting Room Model B sunburst prompt + model
 # (see sunburst_try_on_prompt.py). V2.8 text retained for historical jobs / audits.
-# sunburst-v3: owner-declared male/female flag drives pants-vs-skirt decisions.
-TRY_ON_PROMPT_VERSION = "try-on-person-model-b-sunburst-v3"
+# sunburst-v4: sex flag outranks false-positive dress/cleavage geometry hints.
+TRY_ON_PROMPT_VERSION = "try-on-person-model-b-sunburst-v4"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
