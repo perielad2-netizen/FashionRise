@@ -83,7 +83,7 @@ def test_visibility_matte_composites_pale_garment():
 def test_try_on_prompt_matches_model_b_sunburst():
     from app.services.sunburst_try_on_prompt import MODEL_B_SUNBURST_PROMPT
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v1"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v2"
     prompt = build_try_on_prompt(None)
     assert prompt == MODEL_B_SUNBURST_PROMPT
     assert "photorealistic" in prompt.lower()

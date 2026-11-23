@@ -31,6 +31,7 @@ class LowerGarmentGeometry:
     avg_leg_width_frac: float  # mean run width / bbox width when two lobes
     avg_gap_frac: float
     mid_body_connected: bool
+    has_mid_vertical_gap: bool  # empty band between upper/lower panels (top+shorts)
     looks_like_trousers: bool
     looks_like_jumpsuit: bool
     looks_like_narrow_legs: bool
@@ -47,6 +48,7 @@ class LowerGarmentGeometry:
             "avg_leg_width_frac": round(self.avg_leg_width_frac, 4),
             "avg_gap_frac": round(self.avg_gap_frac, 4),
             "mid_body_connected": self.mid_body_connected,
+            "has_mid_vertical_gap": self.has_mid_vertical_gap,
             "looks_like_trousers": self.looks_like_trousers,
             "looks_like_jumpsuit": self.looks_like_jumpsuit,
             "looks_like_narrow_legs": self.looks_like_narrow_legs,
@@ -130,6 +132,7 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         avg_leg_width_frac=0.0,
         avg_gap_frac=0.0,
         mid_body_connected=False,
+        has_mid_vertical_gap=False,
         looks_like_trousers=False,
         looks_like_jumpsuit=False,
         looks_like_narrow_legs=False,
@@ -181,6 +184,18 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         if len(mid_runs) == 1:
             mid_connected = True
             break
+
+    # Empty horizontal band between upper and lower opaque panels (top + shorts).
+    gap_run = 0
+    max_gap = 0
+    for y in range(y0, y1 + 1):
+        if any(mask[y][x] for x in range(x0, x1 + 1)):
+            max_gap = max(max_gap, gap_run)
+            gap_run = 0
+        else:
+            gap_run += 1
+    max_gap = max(max_gap, gap_run)
+    has_mid_vertical_gap = max_gap >= max(4, int(0.06 * bh))
 
     # Trousers: persistent dual lobes across lower samples + meaningful gap + hem not high-cut.
     # High-cut swimsuits can show a crotch notch but rarely sustain two full columns.
@@ -291,6 +306,7 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         avg_leg_width_frac=float(avg_w),
         avg_gap_frac=float(avg_gap),
         mid_body_connected=bool(mid_connected),
+        has_mid_vertical_gap=bool(has_mid_vertical_gap),
         looks_like_trousers=bool(trousers),
         looks_like_jumpsuit=bool(jumpsuit),
         looks_like_narrow_legs=bool(narrow),
@@ -308,6 +324,9 @@ def looks_like_one_piece_full_coverage(geometry: LowerGarmentGeometry) -> bool:
     if geometry.looks_like_trousers:
         return False
     if not geometry.mid_body_connected:
+        return False
+    # Separate top + bottom panels are not a continuous one-piece.
+    if geometry.has_mid_vertical_gap:
         return False
     if geometry.opaque_pixels < 400:
         return False
@@ -374,6 +393,29 @@ def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
             *openai_one_piece_coverage_hints(geometry)[:1],
         ]
     if not geometry.looks_like_trousers:
+        # Short opaque bottoms (shorts) — not trousers, not a one-piece, not a dress.
+        # Owner male My Model + denim shorts → model invented a long slit skirt.
+        top_frac = float(geometry.hem_y_frac) - float(geometry.coverage_y_span_frac)
+        if (
+            not geometry.looks_like_high_slit_dress
+            and not looks_like_one_piece_full_coverage(geometry)
+            and geometry.hem_y_frac is not None
+            and 0.45 <= float(geometry.hem_y_frac) < 0.72
+            and int(geometry.opaque_pixels) >= 800
+            # hips-only shorts, gap under a top, or mid-body not connected
+            and (
+                top_frac >= 0.35
+                or not geometry.mid_body_connected
+                or geometry.has_mid_vertical_gap
+            )
+        ):
+            return [
+                "garment type: short bottoms / shorts as drawn — not a skirt, dress, or gown",
+                "keep the short hem length from image 2 — do not lengthen into a skirt, "
+                "dress, gown, or high fashion slit",
+                "preserve the person's apparent sex and gender presentation from image 1 — "
+                "do not feminize or masculinize the outfit",
+            ]
         # One-piece swimsuit / bodysuit / closed dress — coverage replacement only.
         return openai_one_piece_coverage_hints(geometry)
     hints: list[str] = []

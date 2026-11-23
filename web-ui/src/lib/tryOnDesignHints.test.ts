@@ -5,6 +5,7 @@ import {
   detectFootwearInk,
   detectOpenNecklineFromFills,
   detectSeparateTopBottom,
+  detectShortBottomHem,
   detectTrouserLegFills,
   liveArtworkYSpan,
   sanitizeFabricHintText,
@@ -417,6 +418,32 @@ describe('buildTryOnDesignHints', () => {
     expect(hints.some((h) => /gloves/i.test(h))).toBe(true)
     expect(hints.some((h) => /fine-knit/i.test(h))).toBe(true)
     expect(hints.some((h) => /see thr/i.test(h))).toBe(false)
+    expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(false)
+  })
+
+  it('emits short-bottom hem hint so shorts are not lengthened into a skirt', () => {
+    // Male croquis: letter top + knee shorts (owner regression → long slit skirt).
+    const fills: FillOp[] = [
+      {
+        id: 'top',
+        contour: [280, 100, 520, 100, 520, 380, 280, 380],
+        seedX: 400,
+        seedY: 240,
+        style: { kind: 'solid', color: '#1a2744' },
+      },
+      {
+        id: 'shorts',
+        contour: [300, 420, 500, 420, 500, 620, 300, 620],
+        seedX: 400,
+        seedY: 520,
+        style: { kind: 'solid', color: '#3b6ea5' },
+      },
+    ]
+    expect(detectSeparateTopBottom(fills)).toBe(true)
+    expect(detectShortBottomHem(fills)).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /short bottoms\/shorts/i.test(h))).toBe(true)
+    expect(hints.some((h) => /do not lengthen into a skirt/i.test(h))).toBe(true)
     expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(false)
   })
 })

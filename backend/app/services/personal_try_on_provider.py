@@ -45,9 +45,10 @@ TRY_ON_JOB_TYPE = "personal_try_on"
 # barefoot one-piece must not keep tall boots (owner red swimsuit kept beige boots).
 # V2.7: high-cut one-piece hem must not be lengthened into a dress (owner back try-on).
 # V2.8: stockings/hosiery/gloves must be kept; fine fashion-knit (not intimate sheer).
-# Live OpenAI Try On now shares Fitting Room Model B sunburst prompt + model
+# Live OpenAI Try On shares Fitting Room Model B sunburst prompt + model
 # (see sunburst_try_on_prompt.py). V2.8 text retained for historical jobs / audits.
-TRY_ON_PROMPT_VERSION = "try-on-person-model-b-sunburst-v1"
+# sunburst-v2: preserve male/female presentation; shorts must not become skirts.
+TRY_ON_PROMPT_VERSION = "try-on-person-model-b-sunburst-v2"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.

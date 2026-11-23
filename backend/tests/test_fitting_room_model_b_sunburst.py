@@ -102,13 +102,23 @@ def test_model_b_flag_defaults_false():
 
 
 def test_model_b_prompt_includes_footwear_and_preserve_clause():
+    from app.services.sunburst_try_on_prompt import (
+        MODEL_B_SUNBURST_SEX_CLAUSE,
+        MODEL_B_SUNBURST_SHORTS_CLAUSE,
+    )
+
     low = MODEL_B_SUNBURST_PROMPT.lower()
     assert "gpt-image" not in low  # prompt is garment instructions, not model id
     assert MODEL_B_SUNBURST_FOOTWEAR_CLAUSE in MODEL_B_SUNBURST_PROMPT
+    assert MODEL_B_SUNBURST_SEX_CLAUSE in MODEL_B_SUNBURST_PROMPT
+    assert MODEL_B_SUNBURST_SHORTS_CLAUSE in MODEL_B_SUNBURST_PROMPT
     assert "replace the person's existing footwear" in low
     assert "if no footwear is shown in the design, preserve the original shoes" in low
     assert "preserve the person's original face" in low
-    assert MODEL_B_SUNBURST_PROMPT_VERSION.startswith("fitting-room-model-b")
+    assert "apparent sex and gender presentation" in low
+    assert "do not feminize or masculinize" in low
+    assert "shorts" in low and "skirt" in low
+    assert MODEL_B_SUNBURST_PROMPT_VERSION == "fitting-room-model-b-sunburst-v2"
 
 
 def test_model_b_shared_helper_person_then_design_one_call(monkeypatch):
