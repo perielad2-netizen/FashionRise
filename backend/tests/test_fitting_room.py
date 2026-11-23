@@ -951,16 +951,16 @@ def test_look_detection_kill_switch(client, db_session, monkeypatch):
     assert job.input_data["look_detection"] is None
 
 
-def test_untagged_look_runs_materialize_then_openai_v28_with_color_lock(
+def test_untagged_look_runs_materialize_then_openai_sunburst_with_color_lock(
     client, db_session, monkeypatch
 ):
-    """Social look path matches model Try On Person: materialize → OpenAI V2.8."""
+    """Social look path matches model Try On Person: materialize → Model B sunburst."""
     import json
 
     import app.services.look_garment_normalize as lgn
     from app.models.user import User
     from app.services import fitting_room as fr
-    from app.services.personal_try_on_provider import TRY_ON_PROMPT_V2_8
+    from app.services.sunburst_try_on_prompt import MODEL_B_SUNBURST_PROMPT
     from tests.look_test_images import (
         look_plate_png,
         person_photo_png,
@@ -994,9 +994,9 @@ def test_untagged_look_runs_materialize_then_openai_v28_with_color_lock(
         }
 
     def _no_max(**_kwargs):
-        raise AssertionError("Max must not run when OpenAI V2.8 succeeds first")
+        raise AssertionError("Max must not run when OpenAI sunburst succeeds first")
 
-    class _V28Provider(MockTryOnProvider):
+    class _SunburstProvider(MockTryOnProvider):
         def generate(self, *, photo_png, garment_png, design_hints=None, prompt_override=None, **kwargs):
             calls.append("openai")
             assert garment_png == product_png
@@ -1004,12 +1004,12 @@ def test_untagged_look_runs_materialize_then_openai_v28_with_color_lock(
             self.last_garment_png = garment_png
             self.last_prompt_override = prompt_override
             prompt = prompt_override or ""
-            assert TRY_ON_PROMPT_V2_8[:80] in prompt
+            assert MODEL_B_SUNBURST_PROMPT[:80] in prompt
             assert "mannequin" in prompt.lower()
             assert "replace the person's original clothes" in prompt.lower()
             return raw_openai_png, {"actual_cost_cents": 4, "provider": "openai"}
 
-    openai_mock = _V28Provider()
+    openai_mock = _SunburstProvider()
     monkeypatch.setattr(fr, "_try_chatgpt_style_look_fit", lambda **_k: None)
     monkeypatch.setattr(lgn, "materialize_fashionrise_look", _fake_materialize)
     monkeypatch.setattr(fr, "_generate_look_try_on_via_max", _no_max)

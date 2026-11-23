@@ -1393,8 +1393,22 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, str) else "Try On Person validation failed."
         return _fail(detail)
-    except Exception:  # noqa: BLE001
-        return _fail("Try On Person could not load the frozen photo or garment.")
+    except Exception as exc:  # noqa: BLE001
+        # Production jobs 4aa72964 / 7875708b failed here with no traceback — log the
+        # real cause and keep an operator summary on the job for support.
+        logger.exception(
+            "Try On Person frozen asset load failed job_id=%s croquis_id=%s source_asset_id=%s",
+            job.id,
+            data.get("croquis_id"),
+            data.get("source_asset_id"),
+        )
+        op = f"{type(exc).__name__}: {exc}"[:400]
+        return _fail(
+            "Try On Person could not load the frozen photo or garment.",
+            error_code="FROZEN_ASSET_LOAD_FAILED",
+            operator_detail=op,
+            result_extra={"operator_summary": op},
+        )
 
     provider_name = _normalize_provider(
         str(data.get("provider") or TRY_ON_PROVIDER_OPENAI), strict=False

@@ -42,7 +42,16 @@ from app.services.personal_try_on_provider import (
     ProviderOutcomeUnknownError,
     get_try_on_provider,
 )
+from app.services.sunburst_try_on_prompt import (
+    MODEL_B_SUNBURST_FOOTWEAR_CLAUSE,
+    MODEL_B_SUNBURST_MODEL,
+    MODEL_B_SUNBURST_PATH,
+    MODEL_B_SUNBURST_PROMPT,
+    MODEL_B_SUNBURST_PROMPT_VERSION,
+)
 from app.storage.local import LocalStorageBackend
+
+# Re-export Model B sunburst constants for existing importers/tests.
 
 logger = logging.getLogger(__name__)
 
@@ -77,28 +86,6 @@ CONFLICTING_CATEGORY_SETS: tuple[frozenset[str], ...] = (
 MAX_OUTFIT_PIECES = 1
 # Designer reward when another user successfully tries on their published Social look.
 FITTING_ROOM_DESIGNER_TRYON_STARS = 2
-
-# Model B — gpt-image-2.6-sunburst raw person+design path (owner A/B/C Arm B).
-MODEL_B_SUNBURST_MODEL = "gpt-image-2.6-sunburst"
-MODEL_B_SUNBURST_PROMPT_VERSION = "fitting-room-model-b-sunburst-v1"
-MODEL_B_SUNBURST_PATH = "openai_model_b_sunburst_raw"
-# Compare Arm B prompt + one footwear clause (prompt-only; no second generation).
-MODEL_B_SUNBURST_PROMPT = (
-    "Fit the exact garment design from image 2 onto the real person in image 1. "
-    "Preserve the person's original face, hair, body, pose, and background. "
-    "Keep the garment's exact colors, silhouette, decorative details, and length. "
-    "Make the clothing naturally photorealistic. Do not change anything else. "
-    "If the fashion design shows shoes, heels, boots, or other footwear, replace "
-    "the person's existing footwear with the matching design footwear, preserving "
-    "its style, color, and proportions. If no footwear is shown in the design, "
-    "preserve the original shoes."
-)
-MODEL_B_SUNBURST_FOOTWEAR_CLAUSE = (
-    "If the fashion design shows shoes, heels, boots, or other footwear, replace "
-    "the person's existing footwear with the matching design footwear, preserving "
-    "its style, color, and proportions. If no footwear is shown in the design, "
-    "preserve the original shoes."
-)
 
 
 def maybe_credit_designer_tryon_stars(db: Session, job: AIJob) -> bool:
@@ -2136,8 +2123,8 @@ def _fitting_room_openai_prompt(data: dict[str, Any], hints: list[str]) -> str |
         if len(evidence) >= 6:
             break
     if data.get("look_normalized"):
-        # Match model Try On Person: same OpenAI V2.8 contract, with look-only hints
-        # so opaque panels replace street clothes (the paid Fitting Room failure mode).
+        # Match model Try On Person: same Model B sunburst contract, with look-only
+        # hints so opaque panels replace street clothes (paid Fitting Room failure mode).
         from app.services.personal_try_on_provider import build_try_on_prompt
 
         look_hints: list[str] = list(evidence)
