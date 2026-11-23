@@ -462,6 +462,25 @@ export function detectHighCutOnePieceHem(fills: FillOp[], designHeight = 1024): 
   return u.maxY < designHeight * 0.72
 }
 
+/**
+ * Short bottom hem (shorts / crop trousers ending above mid-thigh).
+ * Used so Try On Person does not lengthen shorts into a skirt/dress.
+ */
+export function detectShortBottomHem(fills: FillOp[], designHeight = 1024): boolean {
+  const body = apparelBodyFills(fills, designHeight)
+  const lower: InkBounds[] = []
+  for (const fill of body) {
+    const b = fillBounds(fill)
+    if (!b) continue
+    const cy = (b.minY + b.maxY) / 2
+    if (cy >= designHeight * 0.47) lower.push(b)
+  }
+  const bot = unionBounds(lower)
+  if (!bot) return false
+  // Hem ends above ~mid-thigh / upper calf — clearly not a midi/maxi skirt.
+  return bot.maxY < designHeight * 0.72 && bot.minY >= designHeight * 0.4
+}
+
 /** Build optional try-on design hints from the frozen front artwork. */
 export function buildTryOnDesignHints(args: {
   strokes: Stroke[]
@@ -508,6 +527,13 @@ export function buildTryOnDesignHints(args: {
       priority,
       'replace photo clothing on torso and hips with the drawn top and bottom; do not leave jeans under the design',
     )
+    if (detectShortBottomHem(fills)) {
+      // Owner male My Model: letter top + denim shorts → Try On invented a long slit skirt.
+      pushUnique(
+        priority,
+        'hem: short bottoms/shorts as drawn — keep short length; do not lengthen into a skirt, dress, or high slit',
+      )
+    }
   } else if (detectOnePieceFullCoverage(fills)) {
     // Continuous one-piece (swimsuit / bodysuit / dress) — do not leave photo jeans under it.
     // Two priority slots only so bridal neckline/sleeve/pale + color hints still fit.

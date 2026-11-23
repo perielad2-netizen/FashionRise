@@ -171,6 +171,18 @@ def test_top_shorts_two_piece_still_preps():
     assert [p.category for p in prep.pieces] == ["tops", "bottoms"]
 
 
+def test_top_shorts_openai_hints_keep_short_hem():
+    """Male My Model + shorts must not be re-prompted as a slit gown."""
+    geo = analyze_lower_garment_geometry(_top_shorts_png())
+    assert geo.looks_like_trousers is False
+    hints = openai_trouser_design_hints(geo)
+    joined = " ".join(hints).lower()
+    assert "shorts" in joined or "short" in joined
+    assert "do not lengthen" in joined or "skirt" in joined
+    assert "sex" in joined or "presentation" in joined or "feminize" in joined
+    assert "one-piece" not in joined
+
+
 def test_bikini_two_piece_unchanged():
     img = _transparent(220, 440)
     draw = ImageDraw.Draw(img)
@@ -241,7 +253,7 @@ def test_discarded_leg_component_fails_completeness():
 
 def test_openai_sunburst_prompt_unchanged_without_hints():
     prompt = build_try_on_prompt(None)
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v1"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-model-b-sunburst-v2"
     # Base Model B sunburst text; no trouser appendix when hints empty.
     assert "Studio design evidence" not in prompt
     with_hints = build_try_on_prompt(openai_trouser_design_hints(analyze_lower_garment_geometry(_narrow_jumpsuit_png())))
