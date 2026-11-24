@@ -31,23 +31,33 @@ describe('ImmersiveToolbar', () => {
     const onTool = vi.fn()
     const onExit = vi.fn()
     const onFitWidth = vi.fn()
+    const onCenter = vi.fn()
+    const onOpenMaterials = vi.fn()
     render(
       <ImmersiveToolbar
         {...baseProps}
         onTool={onTool}
         onFitWidth={onFitWidth}
+        onCenter={onCenter}
+        onOpenMaterials={onOpenMaterials}
         onExit={onExit}
       />,
     )
 
     expect(screen.getByRole('toolbar', { name: 'Immersive drawing toolbar' })).toBeTruthy()
     expect(screen.getByText('125%')).toBeTruthy()
+    expect(screen.getByTestId('immersive-view-dock')).toBeTruthy()
+    expect(screen.getByTestId('immersive-action-dock')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Export PNG/i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Rectangular eraser' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
     expect(onTool).toHaveBeenCalledWith('pan')
     fireEvent.click(screen.getByRole('button', { name: 'Fit width' }))
     expect(onFitWidth).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Center' }))
+    expect(onCenter).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Materials' }))
+    expect(onOpenMaterials).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Exit immersive drawing' }))
     expect(onExit).toHaveBeenCalled()
   })

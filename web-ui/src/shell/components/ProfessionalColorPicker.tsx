@@ -10,6 +10,7 @@ import {
   rgbToHex,
   type Hsv,
 } from '@/lib/colorPicker'
+import { useModalPortalRoot } from '@/lib/modalPortalRoot'
 import styles from './ProfessionalColorPicker.module.css'
 
 type Props = {
@@ -61,6 +62,7 @@ function draftFromHsv(hsv: Hsv, previousHue = 0): Draft {
 
 export function ProfessionalColorPicker({ open, initialColor, onApply, onCancel }: Props) {
   const titleId = useId()
+  const portalRoot = useModalPortalRoot()
   const dialogRef = useRef<HTMLDivElement>(null)
   const svRef = useRef<HTMLDivElement>(null)
   const hueRef = useRef<HTMLDivElement>(null)
@@ -364,5 +366,5 @@ export function ProfessionalColorPicker({ open, initialColor, onApply, onCancel 
     </div>
   )
 
-  return createPortal(content, document.body)
+  return createPortal(content, portalRoot)
 }

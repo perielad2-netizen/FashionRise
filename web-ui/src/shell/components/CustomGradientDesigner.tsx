@@ -6,6 +6,7 @@ import {
   normalizeGradientAngle,
   type GradientFillStyle,
 } from '@/lib/fills'
+import { useModalPortalRoot } from '@/lib/modalPortalRoot'
 import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
 import styles from './CustomGradientDesigner.module.css'
 
@@ -34,6 +35,7 @@ const FOCUSABLE =
 export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Props) {
   const titleId = useId()
   const angleId = useId()
+  const portalRoot = useModalPortalRoot()
   const dialogRef = useRef<HTMLDivElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const [c0, setC0] = useState('#D63384')
@@ -253,6 +255,6 @@ export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Pro
         onCancel={() => setPicking(null)}
       />
     </div>,
-    document.body,
+    portalRoot,
   )
 }
