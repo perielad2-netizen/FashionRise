@@ -3,7 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — #493 social-preserve + keyboard first-tap live
+**Last updated:** 2026-11-24 Asia/Jerusalem — immersive full-canvas color + Mobbin toolbar (PR)
+
+## WIP — Immersive full-canvas color + toolbar (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Full-page: Choose any color / brush color untappable; zoom/Center/Materials/Save looked like bare text |
+| Root cause | `ProfessionalColorPicker` (and related modals) portaled to `document.body` — outside native Fullscreen host, so FS paints nothing / no hits |
+| Fix | `modalPortalRoot()` / `useModalPortalRoot()` → portal into `fullscreenElement` (incl. webkit); ImmersiveToolbar view/action docks as Mobbin-style chips (Freeform/Canva/Posh) |
+| Branch | `cursor/web-immersive-toolbar-color-77c6` |
 
 ## LIVE — Social preserve + keyboard first-tap (2026-11-24 Asia/Jerusalem)
 

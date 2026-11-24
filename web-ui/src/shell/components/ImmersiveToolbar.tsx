@@ -1,13 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import {
+  BookmarkPlus,
   ChevronDown,
   ChevronUp,
+  Crosshair,
   Hand,
   Maximize2,
   Minimize2,
+  Palette,
   Redo2,
+  Scan,
   Trash2,
   Undo2,
+  Users,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
@@ -229,8 +234,9 @@ export function ImmersiveToolbar({
         </div>
       </div>
 
-      <div className={`${styles.row} ${styles.rowSecondary}`}>
-        <div className={styles.cluster} role="group" aria-label="Zoom">
+      {/* View dock — Freeform / Craft style segmented chips (not bare text). */}
+      <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
+        <div className={styles.zoomTrack} role="group" aria-label="Zoom">
           <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
             <ZoomOut size={18} strokeWidth={1.75} />
           </ToolBtn>
@@ -240,32 +246,61 @@ export function ImmersiveToolbar({
           <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
             <ZoomIn size={18} strokeWidth={1.75} />
           </ToolBtn>
-          <button type="button" className={styles.textBtn} onClick={onFitPage}>
-            Fit page
+        </div>
+        <div className={styles.segmentTrack} role="group" aria-label="Fit presets">
+          <button type="button" className={styles.chip} onClick={onFitPage} aria-label="Fit page">
+            <Scan size={15} strokeWidth={2} aria-hidden />
+            <span>Fit page</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onFitWidth}>
-            Fit width
+          <button type="button" className={styles.chip} onClick={onFitWidth} aria-label="Fit width">
+            <Maximize2 size={15} strokeWidth={2} aria-hidden />
+            <span>Fit width</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onHundred}>
-            100%
+          <button type="button" className={styles.chip} onClick={onHundred} aria-label="100%">
+            <span className={styles.chipMono}>100%</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onCenter}>
-            Center
+          <button type="button" className={styles.chip} onClick={onCenter} aria-label="Center">
+            <Crosshair size={15} strokeWidth={2} aria-hidden />
+            <span>Center</span>
           </button>
         </div>
+      </div>
 
-        <div className={styles.cluster} role="group" aria-label="Studio actions">
-          <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
-            {brushLabel}
+      {/* Action dock — Canva / Posh style icon+label tiles. */}
+      <div className={`${styles.row} ${styles.rowActions}`} data-testid="immersive-action-dock">
+        <div className={styles.actionTrack} role="group" aria-label="Studio actions">
+          <button
+            type="button"
+            className={styles.actionChip}
+            onClick={onOpenBrush}
+            aria-label="Brush settings"
+          >
+            <span className={styles.actionIcon} aria-hidden>
+              <PenToolIcon size={16} />
+            </span>
+            <span className={styles.actionLabel}>{brushLabel}</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
-            Materials
+          <button type="button" className={styles.actionChip} onClick={onOpenMaterials}>
+            <span className={styles.actionIcon} aria-hidden>
+              <Palette size={16} strokeWidth={2} />
+            </span>
+            <span className={styles.actionLabel}>Materials</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onOpenModels}>
-            Models
+          <button type="button" className={styles.actionChip} onClick={onOpenModels}>
+            <span className={styles.actionIcon} aria-hidden>
+              <Users size={16} strokeWidth={2} />
+            </span>
+            <span className={styles.actionLabel}>Models</span>
           </button>
-          <button type="button" className={styles.textBtn} onClick={onSave}>
-            {saveLabel}
+          <button
+            type="button"
+            className={`${styles.actionChip} ${styles.actionChipPrimary}`}
+            onClick={onSave}
+          >
+            <span className={styles.actionIcon} aria-hidden>
+              <BookmarkPlus size={16} strokeWidth={2} />
+            </span>
+            <span className={styles.actionLabel}>{saveLabel}</span>
           </button>
         </div>
       </div>

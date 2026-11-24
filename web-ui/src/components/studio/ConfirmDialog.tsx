@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { useModalPortalRoot } from '@/lib/modalPortalRoot'
 import styles from './ConfirmDialog.module.css'
 
 type Action = {
@@ -32,6 +33,7 @@ export function ConfirmDialog({
   scrollable = false,
 }: Props) {
   const titleId = useId()
+  const portalRoot = useModalPortalRoot()
   const dialogRef = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
 
@@ -151,7 +153,7 @@ export function ConfirmDialog({
   )
 
   if (typeof document === 'undefined') return node
-  return createPortal(node, document.body)
+  return createPortal(node, portalRoot)
 }
 
 export { styles as confirmDialogStyles }

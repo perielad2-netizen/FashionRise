@@ -11,8 +11,8 @@
   max-width: none;
   width: auto;
   box-sizing: border-box;
-  padding: 7px;
-  border-radius: 18px;
+  padding: 8px;
+  border-radius: 20px;
   background:
     linear-gradient(165deg, rgba(28, 18, 28, 0.96), rgba(10, 12, 20, 0.94));
   border: 1px solid rgba(244, 114, 182, 0.26);
@@ -27,7 +27,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   width: 100%;
 }
@@ -36,8 +36,13 @@
   justify-content: space-between;
 }
 
-.rowSecondary {
+.rowView {
   justify-content: flex-start;
+  gap: 8px;
+}
+
+.rowActions {
+  justify-content: stretch;
 }
 
 .rowKinds {
@@ -190,7 +195,6 @@
   filter: drop-shadow(0 0 6px rgba(255, 209, 230, 0.55));
 }
 
-.textBtn,
 .exitBtn {
   min-height: 44px;
   min-width: 44px;
@@ -198,43 +202,191 @@
   flex: 0 0 auto;
   border: 0;
   border-radius: 12px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
   cursor: pointer;
   white-space: nowrap;
-}
-
-.textBtn:hover,
-.exitBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.exitBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background: rgba(214, 51, 132, 0.28);
   color: #ffd6e8;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 232, 0.22);
+}
+
+.exitBtn:hover {
+  background: rgba(214, 51, 132, 0.4);
+}
+
+/* —— View dock (zoom + fit presets) — Freeform / Craft segmented chips —— */
+.zoomTrack {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .zoomReadout {
   min-width: 48px;
+  padding: 0 4px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.88);
+  color: #ffd6e8;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 750;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
-/* Narrow phones: keep two compact rows, slightly denser labels. */
+.segmentTrack {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chip {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(18, 14, 22, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.18);
+}
+
+.chip:hover {
+  background: rgba(214, 51, 132, 0.22);
+  color: #ffd6e8;
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.35);
+}
+
+.chip:active {
+  transform: scale(0.97);
+}
+
+.chipMono {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+/* —— Action dock — Canva / Posh icon+label tiles —— */
+.actionTrack {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.actionChip {
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(18, 14, 22, 0.78);
+  color: rgba(255, 255, 255, 0.94);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.16);
+  min-width: 0;
+}
+
+.actionChip:hover {
+  background: rgba(214, 51, 132, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.34);
+}
+
+.actionChip:active {
+  transform: scale(0.97);
+}
+
+.actionChipPrimary {
+  background: linear-gradient(155deg, rgba(214, 51, 132, 0.38), rgba(120, 40, 90, 0.45));
+  color: #ffe4f0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 214, 232, 0.28),
+    0 6px 16px rgba(214, 51, 132, 0.22);
+}
+
+.actionChipPrimary:hover {
+  background: linear-gradient(155deg, rgba(214, 51, 132, 0.5), rgba(140, 48, 100, 0.55));
+}
+
+.actionIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(244, 114, 182, 0.16);
+  color: #ffd6e8;
+  flex: 0 0 auto;
+}
+
+.actionChipPrimary .actionIcon {
+  background: rgba(255, 214, 232, 0.22);
+}
+
+.actionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Narrow phones: denser chips, keep 4-col action grid. */
 @media (max-width: 420px) {
-  .textBtn {
+  .chip {
     padding: 0 8px;
     font-size: 11px;
+    min-height: 38px;
+  }
+
+  .actionChip {
+    min-height: 48px;
+    padding: 5px 4px;
+  }
+
+  .actionLabel {
+    font-size: 10px;
+  }
+
+  .actionIcon {
+    width: 26px;
+    height: 26px;
   }
 }
 
@@ -242,12 +394,11 @@
 @media (max-height: 700px) {
   .bar {
     gap: 4px;
-    padding: 4px;
+    padding: 5px;
   }
 
   .btn,
   .btnActive,
-  .textBtn,
   .exitBtn,
   .minimizeBtn,
   .expandBtn {
@@ -258,6 +409,14 @@
   .btn,
   .btnActive {
     width: 40px;
+  }
+
+  .chip {
+    min-height: 36px;
+  }
+
+  .actionChip {
+    min-height: 44px;
   }
 
   .barMinimized .btn,
