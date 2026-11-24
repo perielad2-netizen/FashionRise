@@ -3,16 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — immersive full-canvas color + Mobbin toolbar (PR)
+**Last updated:** 2026-11-24 Asia/Jerusalem — immersive toolbar + color picker LIVE
 
-## WIP — Immersive full-canvas color + toolbar (2026-11-24 Asia/Jerusalem)
+## LIVE — Immersive full-canvas color + Mobbin toolbar (2026-11-24 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | Symptom | Full-page: Choose any color / brush color untappable; zoom/Center/Materials/Save looked like bare text |
-| Root cause | `ProfessionalColorPicker` (and related modals) portaled to `document.body` — outside native Fullscreen host, so FS paints nothing / no hits |
-| Fix | `modalPortalRoot()` / `useModalPortalRoot()` → portal into `fullscreenElement` (incl. webkit); ImmersiveToolbar view/action docks as Mobbin-style chips (Freeform/Canva/Posh) |
-| Branch | `cursor/web-immersive-toolbar-color-77c6` |
+| Root cause | Color picker portaled to `document.body` outside native Fullscreen host |
+| Fix | `useModalPortalRoot()` → fullscreen element; ImmersiveToolbar view/action chip docks |
+| Merged | [#494](https://github.com/perielad2-netizen/FashionRise/pull/494) → `main` @ **`b187d9be`** |
+| Tip | FE `/var/www/fashionrise/releases/b187d9be-immersive-toolbar-color` · `/version.json` → **`b187d9be`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1637cf0b-social-preserve-kbd /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## LIVE — Social preserve + keyboard first-tap (2026-11-24 Asia/Jerusalem)
 
