@@ -66,10 +66,18 @@ function heroToneClass(userId: string): string {
   return styles.heroToneA
 }
 
+/** Map API reputation_tier slugs to human labels (slug "icon" must never show as bare "ICON"). */
+const TIER_LABELS: Record<string, string> = {
+  newcomer: 'Newcomer',
+  rising: 'Rising',
+  established: 'Established',
+  icon: 'Top designer',
+}
+
 function tierLabel(tier: string | null | undefined): string | null {
-  const t = (tier || '').trim()
+  const t = (tier || '').trim().toLowerCase()
   if (!t) return null
-  return t.replace(/_/g, ' ')
+  return TIER_LABELS[t] || t.replace(/_/g, ' ')
 }
 
 /**
@@ -398,7 +406,11 @@ export function FriendProfilePanel({
                 </p>
               ) : null}
               {tier ? (
-                <span className={styles.tierBadge} data-testid="designer-tier-badge">
+                <span
+                  className={styles.tierBadge}
+                  data-testid="designer-tier-badge"
+                  aria-label={`Reputation tier: ${tier}`}
+                >
                   {tier}
                 </span>
               ) : null}

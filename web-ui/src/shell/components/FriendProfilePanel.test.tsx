@@ -138,6 +138,36 @@ describe('FriendProfilePanel (premium designer card)', () => {
     expect(screen.queryByTestId('friend-profile-back')).not.toBeInTheDocument()
   })
 
+  it('humanizes reputation_tier slug "icon" so Bio is not mistaken for ICON', async () => {
+    getPublicProfile.mockResolvedValue({
+      id: 'p1',
+      user_id: 'friend-1',
+      display_name: 'Yaniv',
+      bio: 'Highly professional designer 10 years of XP',
+      avatar_url: null,
+      cover_url: null,
+      style_tags: [],
+      designs_count: 1,
+      published_count: 1,
+      followers_count: 3,
+      likes_received_count: 10,
+      rating_average: 9,
+      rating_count: 5,
+      reputation_score: 90,
+      reputation_tier: 'icon',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    render(<FriendProfilePanel friend={friend} />)
+    const badge = await screen.findByTestId('designer-tier-badge')
+    expect(badge).toHaveTextContent(/top designer/i)
+    expect(badge).not.toHaveTextContent(/^icon$/i)
+    expect(screen.getByTestId('friend-profile-bio')).toHaveTextContent(
+      /Highly professional designer 10 years of XP/i,
+    )
+    expect(screen.getByTestId('friend-profile-bio-wrap')).toHaveTextContent(/^Bio/i)
+  })
+
   it('follows a designer from the profile', async () => {
     followCreator.mockResolvedValue(undefined)
     render(<FriendProfilePanel friend={friend} />)
