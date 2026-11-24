@@ -1026,7 +1026,7 @@ export function RunwayScreen({
                 : tab === 'following'
                   ? 'Follow designers from their FashionRise profiles to fill this feed.'
                   : tab === 'feed'
-                    ? 'Publish a look or add friends to fill this feed.'
+                    ? 'Add friends to see a designer card with each friend’s best look.'
                     : 'Publish a look from My Looks — new designs get a fair chance here.'
             }
             actions={
@@ -1169,7 +1169,7 @@ function RunwayBrowseSheet({
       ? 'Looks from designers you follow — scroll down to see more.'
       : isDiscover
         ? 'Fair Discover — seven-day looks, fresh exposure, many creators — scroll for more.'
-        : 'Only your looks and your friends’ published looks — scroll down to see more.'
+        : 'One designer card per friend — their best look by likes and rating.'
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1243,7 +1243,7 @@ function RunwayBrowseSheet({
                     ? 'Follow designers from their FashionRise profiles to fill this feed.'
                     : isDiscover
                       ? 'Publish a look from My Looks — new designs get a fair chance for seven days.'
-                      : 'Publish a look from My Looks, or add friends so their FashionRise posts show up here.'
+                      : 'Add friends so their best FashionRise looks show up here as designer cards.'
               }
               actions={
                 <>
