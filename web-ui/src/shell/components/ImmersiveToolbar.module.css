@@ -33,12 +33,14 @@
 }
 
 .rowPrimary {
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .rowView {
   justify-content: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .rowActions {
@@ -69,6 +71,22 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.rowView .exitCluster {
+  margin-left: auto;
+}
+
+.rowView .minimizeBtn,
+.rowView .exitBtn {
+  min-height: 40px;
+  height: 40px;
+  padding: 0 10px;
+}
+
+.rowView .zoomTrack,
+.rowView .segmentTrack {
+  flex: 0 1 auto;
 }
 
 /* Compact sketch strip — exactly two rows: tools (+ clear) then Max/Exit.
