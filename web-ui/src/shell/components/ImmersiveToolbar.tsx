@@ -209,37 +209,37 @@ export function ImmersiveToolbar({
         </div>
       </div>
 
-      {/* One view row: zoom + fit chips + Minimize/Exit (saves a toolbar band). */}
+      {/* Single nowrap band: zoom · fit · Min/Exit (must not wrap under each other). */}
       <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
-        <div className={styles.zoomTrack} role="group" aria-label="Zoom">
-          <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
-            <ZoomOut size={18} strokeWidth={1.75} />
-          </ToolBtn>
-          <span className={styles.zoomReadout} aria-live="polite">
-            {zoomPercent}%
-          </span>
-          <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
-            <ZoomIn size={18} strokeWidth={1.75} />
-          </ToolBtn>
-        </div>
-        <div className={styles.segmentTrack} role="group" aria-label="Fit presets">
+        <div className={styles.viewStrip} role="group" aria-label="View and exit">
+          <div className={styles.zoomTrack} role="group" aria-label="Zoom">
+            <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
+              <ZoomOut size={16} strokeWidth={1.75} />
+            </ToolBtn>
+            <span className={styles.zoomReadout} aria-live="polite">
+              {zoomPercent}%
+            </span>
+            <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
+              <ZoomIn size={16} strokeWidth={1.75} />
+            </ToolBtn>
+          </div>
+          <span className={styles.viewDivider} aria-hidden />
           <button type="button" className={styles.chip} onClick={onFitPage} aria-label="Fit page">
-            <Scan size={15} strokeWidth={2} aria-hidden />
-            <span>Fit page</span>
+            <Scan size={14} strokeWidth={2} aria-hidden />
+            <span className={styles.chipLabel}>Page</span>
           </button>
           <button type="button" className={styles.chip} onClick={onFitWidth} aria-label="Fit width">
-            <Maximize2 size={15} strokeWidth={2} aria-hidden />
-            <span>Fit width</span>
+            <Maximize2 size={14} strokeWidth={2} aria-hidden />
+            <span className={styles.chipLabel}>Width</span>
           </button>
           <button type="button" className={styles.chip} onClick={onHundred} aria-label="100%">
             <span className={styles.chipMono}>100%</span>
           </button>
           <button type="button" className={styles.chip} onClick={onCenter} aria-label="Center">
-            <Crosshair size={15} strokeWidth={2} aria-hidden />
-            <span>Center</span>
+            <Crosshair size={14} strokeWidth={2} aria-hidden />
+            <span className={styles.chipLabel}>Center</span>
           </button>
-        </div>
-        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
+          <span className={styles.viewDivider} aria-hidden />
           <button
             type="button"
             className={styles.minimizeBtn}
@@ -250,7 +250,6 @@ export function ImmersiveToolbar({
             title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo, clear"
           >
             <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
-            <span className={styles.btnText}>Min</span>
           </button>
           <button
             type="button"
@@ -259,7 +258,7 @@ export function ImmersiveToolbar({
             aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
             data-testid="immersive-exit"
           >
-            {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+            {nativeFullscreen ? <Minimize2 size={15} aria-hidden /> : <Maximize2 size={15} aria-hidden />}
             <span>Exit</span>
           </button>
         </div>
