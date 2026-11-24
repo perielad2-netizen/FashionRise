@@ -62,17 +62,30 @@ describe('ImmersiveToolbar', () => {
     expect(onExit).toHaveBeenCalled()
   })
 
-  it('puts Min/Exit on the sketch tools row; view row is zoom+fit only', () => {
+  it('shows every tool + Min/Exit in one equal grid dock (no clip / no scroll)', () => {
     render(<ImmersiveToolbar {...baseProps} />)
-    const bar = screen.getByTestId('immersive-toolbar')
+    const toolsDock = screen.getByTestId('immersive-tools-dock')
     const viewDock = screen.getByTestId('immersive-view-dock')
     const minimize = screen.getByTestId('immersive-toolbar-minimize')
     const exit = screen.getByTestId('immersive-exit')
     expect(minimize.getAttribute('aria-label')).toBe('Minimize sketch toolbar')
+    // All sketch chrome lives in the tools dock — nothing clipped out of view.
+    for (const name of [
+      'Pencil',
+      'Eraser',
+      'Fill',
+      'Eyedropper',
+      'Hand pan',
+      'Undo',
+      'Redo',
+      'Clear canvas',
+    ]) {
+      expect(toolsDock.contains(screen.getByRole('button', { name }))).toBe(true)
+    }
+    expect(toolsDock.contains(minimize)).toBe(true)
+    expect(toolsDock.contains(exit)).toBe(true)
     expect(viewDock.contains(minimize)).toBe(false)
     expect(viewDock.contains(exit)).toBe(false)
-    expect(bar.contains(minimize)).toBe(true)
-    expect(bar.contains(exit)).toBe(true)
     expect(viewDock.contains(screen.getByRole('button', { name: 'Fit page' }))).toBe(true)
     expect(viewDock.contains(screen.getByRole('button', { name: 'Fit width' }))).toBe(true)
     expect(viewDock.contains(screen.getByRole('button', { name: 'Center' }))).toBe(true)

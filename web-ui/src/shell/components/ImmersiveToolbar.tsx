@@ -110,35 +110,33 @@ export function ImmersiveToolbar({
         data-testid="immersive-toolbar"
         data-minimized="true"
       >
-        {/* Row 1: drawing tools including Clear canvas */}
         <div className={`${styles.row} ${styles.rowPrimary}`}>
-          <div className={styles.cluster} role="group" aria-label="Drawing tools">
+          <div className={`${styles.dock} ${styles.toolsDockMini}`} role="group" aria-label="Drawing tools">
             <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-              <PenToolIcon size={20} glow={tool === 'draw'} />
+              <PenToolIcon size={18} glow={tool === 'draw'} />
             </ToolBtn>
             <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-              <EraserToolIcon size={20} glow={tool === 'erase'} />
+              <EraserToolIcon size={18} glow={tool === 'erase'} />
             </ToolBtn>
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-              <FillToolIcon size={20} glow={tool === 'fill'} />
+              <FillToolIcon size={18} glow={tool === 'fill'} />
             </ToolBtn>
             <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
-              <Hand size={18} strokeWidth={1.75} />
+              <Hand size={16} strokeWidth={1.75} />
             </ToolBtn>
             <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
-              <Undo2 size={18} strokeWidth={1.75} />
+              <Undo2 size={16} strokeWidth={1.75} />
             </ToolBtn>
             <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
-              <Redo2 size={18} strokeWidth={1.75} />
+              <Redo2 size={16} strokeWidth={1.75} />
             </ToolBtn>
             <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
-              <Trash2 size={18} strokeWidth={1.75} />
+              <Trash2 size={16} strokeWidth={1.75} />
             </ToolBtn>
           </div>
         </div>
-        {/* Row 2: maximize + exit only */}
         <div className={`${styles.row} ${styles.rowMinimizedChrome}`}>
-          <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Expand toolbar">
+          <div className={styles.exitCluster} role="group" aria-label="Expand toolbar">
             <button
               type="button"
               className={styles.expandBtn}
@@ -180,9 +178,18 @@ export function ImmersiveToolbar({
           <BrushKindStrip compact brushKind={brushKind} onBrushKind={onBrushKind} />
         </div>
       ) : null}
-      {/* Sketch bar — tools + Min/Exit (Craft/Notes: chrome lives with tools, not a scroll strip). */}
+
+      {/*
+        Freeform / Notes / Journal (Mobbin): one equal-cell dock.
+        Every tool + Min + Exit shares width — never overflow:hidden / never scroll.
+      */}
       <div className={`${styles.row} ${styles.rowPrimary}`}>
-        <div className={`${styles.cluster} ${styles.toolsCluster}`} role="group" aria-label="Drawing tools">
+        <div
+          className={`${styles.dock} ${styles.toolsDock}`}
+          role="group"
+          aria-label="Drawing tools"
+          data-testid="immersive-tools-dock"
+        >
           <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
             <PenToolIcon size={18} glow={tool === 'draw'} />
           </ToolBtn>
@@ -207,69 +214,60 @@ export function ImmersiveToolbar({
           <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
             <Trash2 size={16} strokeWidth={1.75} />
           </ToolBtn>
-        </div>
-        <div className={styles.exitCluster} role="group" aria-label="Toolbar layout">
           <button
             type="button"
-            className={styles.minimizeBtn}
+            className={styles.chromeBtn}
             onClick={() => setMinimized(true)}
             aria-label="Minimize sketch toolbar"
             aria-expanded={true}
             data-testid="immersive-toolbar-minimize"
             title="Minimize toolbar"
           >
-            <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
+            <ChevronDown size={17} strokeWidth={2.25} aria-hidden />
           </button>
           <button
             type="button"
-            className={styles.exitBtn}
+            className={`${styles.chromeBtn} ${styles.chromeBtnExit}`}
             onClick={onExit}
             aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
             data-testid="immersive-exit"
+            title="Exit"
           >
             {nativeFullscreen ? <Minimize2 size={15} aria-hidden /> : <Maximize2 size={15} aria-hidden />}
           </button>
         </div>
       </div>
 
-      {/* View bar — zoom + icon-only fit chips; no horizontal scroll. */}
+      {/* View dock — same equal-cell pattern as Freeform utility strip. */}
       <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
-        <div className={styles.viewStrip} role="group" aria-label="Zoom and fit">
-          <div className={styles.zoomTrack} role="group" aria-label="Zoom">
-            <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
-              <ZoomOut size={16} strokeWidth={1.75} />
-            </ToolBtn>
-            <span className={styles.zoomReadout} aria-live="polite">
-              {zoomPercent}%
-            </span>
-            <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
-              <ZoomIn size={16} strokeWidth={1.75} />
-            </ToolBtn>
-          </div>
-          <button type="button" className={styles.chipIcon} onClick={onFitPage} aria-label="Fit page" title="Fit page">
+        <div className={`${styles.dock} ${styles.viewDock}`} role="group" aria-label="Zoom and fit">
+          <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
+            <ZoomOut size={15} strokeWidth={1.75} />
+          </ToolBtn>
+          <span className={styles.zoomReadout} aria-live="polite">
+            {zoomPercent}%
+          </span>
+          <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
+            <ZoomIn size={15} strokeWidth={1.75} />
+          </ToolBtn>
+          <button type="button" className={styles.fitBtn} onClick={onFitPage} aria-label="Fit page" title="Fit page">
             <Scan size={15} strokeWidth={2} aria-hidden />
           </button>
-          <button type="button" className={styles.chipIcon} onClick={onFitWidth} aria-label="Fit width" title="Fit width">
+          <button type="button" className={styles.fitBtn} onClick={onFitWidth} aria-label="Fit width" title="Fit width">
             <Maximize2 size={15} strokeWidth={2} aria-hidden />
           </button>
-          <button type="button" className={styles.chipIcon} onClick={onHundred} aria-label="100%" title="100%">
+          <button type="button" className={styles.fitBtn} onClick={onHundred} aria-label="100%" title="100%">
             <span className={styles.chipMono}>1:1</span>
           </button>
-          <button type="button" className={styles.chipIcon} onClick={onCenter} aria-label="Center" title="Center">
+          <button type="button" className={styles.fitBtn} onClick={onCenter} aria-label="Center" title="Center">
             <Crosshair size={15} strokeWidth={2} aria-hidden />
           </button>
         </div>
       </div>
 
-      {/* Action dock — Canva / Posh style icon+label tiles. */}
       <div className={`${styles.row} ${styles.rowActions}`} data-testid="immersive-action-dock">
         <div className={styles.actionTrack} role="group" aria-label="Studio actions">
-          <button
-            type="button"
-            className={styles.actionChip}
-            onClick={onOpenBrush}
-            aria-label="Brush settings"
-          >
+          <button type="button" className={styles.actionChip} onClick={onOpenBrush} aria-label="Brush settings">
             <span className={styles.actionIcon} aria-hidden>
               <PenToolIcon size={16} />
             </span>
@@ -287,11 +285,7 @@ export function ImmersiveToolbar({
             </span>
             <span className={styles.actionLabel}>Models</span>
           </button>
-          <button
-            type="button"
-            className={`${styles.actionChip} ${styles.actionChipPrimary}`}
-            onClick={onSave}
-          >
+          <button type="button" className={`${styles.actionChip} ${styles.actionChipPrimary}`} onClick={onSave}>
             <span className={styles.actionIcon} aria-hidden>
               <BookmarkPlus size={16} strokeWidth={2} />
             </span>
