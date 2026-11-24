@@ -207,34 +207,9 @@ export function ImmersiveToolbar({
             <Trash2 size={18} strokeWidth={1.75} />
           </ToolBtn>
         </div>
-
-        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
-          <button
-            type="button"
-            className={styles.minimizeBtn}
-            onClick={() => setMinimized(true)}
-            aria-label="Minimize sketch toolbar"
-            aria-expanded={true}
-            data-testid="immersive-toolbar-minimize"
-            title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo, clear"
-          >
-            <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
-            <span className={styles.btnText}>Minimize</span>
-          </button>
-          <button
-            type="button"
-            className={styles.exitBtn}
-            onClick={onExit}
-            aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
-            data-testid="immersive-exit"
-          >
-            {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
-            <span>Exit</span>
-          </button>
-        </div>
       </div>
 
-      {/* View dock — Freeform / Craft style segmented chips (not bare text). */}
+      {/* One view row: zoom + fit chips + Minimize/Exit (saves a toolbar band). */}
       <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
         <div className={styles.zoomTrack} role="group" aria-label="Zoom">
           <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
@@ -262,6 +237,30 @@ export function ImmersiveToolbar({
           <button type="button" className={styles.chip} onClick={onCenter} aria-label="Center">
             <Crosshair size={15} strokeWidth={2} aria-hidden />
             <span>Center</span>
+          </button>
+        </div>
+        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
+          <button
+            type="button"
+            className={styles.minimizeBtn}
+            onClick={() => setMinimized(true)}
+            aria-label="Minimize sketch toolbar"
+            aria-expanded={true}
+            data-testid="immersive-toolbar-minimize"
+            title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo, clear"
+          >
+            <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
+            <span className={styles.btnText}>Min</span>
+          </button>
+          <button
+            type="button"
+            className={styles.exitBtn}
+            onClick={onExit}
+            aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
+            data-testid="immersive-exit"
+          >
+            {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+            <span>Exit</span>
           </button>
         </div>
       </div>
