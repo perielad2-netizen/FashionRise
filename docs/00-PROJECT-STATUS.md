@@ -5,6 +5,15 @@
 
 **Last updated:** 2026-11-24 Asia/Jerusalem — Friends circle designer cards LIVE
 
+## LIVE — Friends circle designer cards (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Friends circle: **no self** · **one best look per friend** (likes→rating→recency) · designer-card UI |
+| Tip | BE `gallery_service.py` on `/opt/fashionrise/src/backend` · FE `/var/www/fashionrise/releases/10b10cc2-friends-circle-best` · `/version.json` → **`10b10cc2`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/bc7f350f-immersive-tools-grid /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE | restore `gallery_service.py.bak.pre-circle-best` · `systemctl restart fashionrise-api` |
+
 ## LIVE — Immersive Freeform tools grid (2026-11-24 Asia/Jerusalem)
 
 | Field | Value |
