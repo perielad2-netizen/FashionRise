@@ -66,10 +66,18 @@ function heroToneClass(userId: string): string {
   return styles.heroToneA
 }
 
+/** Map API reputation_tier slugs to human labels (slug "icon" must never show as bare "ICON"). */
+const TIER_LABELS: Record<string, string> = {
+  newcomer: 'Newcomer',
+  rising: 'Rising',
+  established: 'Established',
+  icon: 'Top designer',
+}
+
 function tierLabel(tier: string | null | undefined): string | null {
-  const t = (tier || '').trim()
+  const t = (tier || '').trim().toLowerCase()
   if (!t) return null
-  return t.replace(/_/g, ' ')
+  return TIER_LABELS[t] || t.replace(/_/g, ' ')
 }
 
 /**
@@ -398,7 +406,11 @@ export function FriendProfilePanel({
                 </p>
               ) : null}
               {tier ? (
-                <span className={styles.tierBadge} data-testid="designer-tier-badge">
+                <span
+                  className={styles.tierBadge}
+                  data-testid="designer-tier-badge"
+                  aria-label={`Reputation tier: ${tier}`}
+                >
                   {tier}
                 </span>
               ) : null}
@@ -406,9 +418,12 @@ export function FriendProfilePanel({
           </div>
 
           {tagline ? (
-            <p className={styles.tagline} data-testid="friend-profile-bio">
-              {tagline}
-            </p>
+            <div className={styles.bioBlockShort} data-testid="friend-profile-bio-wrap">
+              <p className={styles.bioHeading}>Bio</p>
+              <p className={styles.tagline} data-testid="friend-profile-bio">
+                {tagline}
+              </p>
+            </div>
           ) : null}
 
           {state.status === 'ready' ? (
@@ -508,9 +523,10 @@ export function FriendProfilePanel({
       ) : null}
 
       {state.status === 'ready' && longBio ? (
-        <p className={styles.bioBlock} data-testid="friend-profile-bio-long">
-          {longBio}
-        </p>
+        <div className={styles.bioBlock} data-testid="friend-profile-bio-long-wrap">
+          <p className={styles.bioHeading}>Bio</p>
+          <p data-testid="friend-profile-bio-long">{longBio}</p>
+        </div>
       ) : null}
 
       {state.status === 'ready' ? (
@@ -628,8 +644,8 @@ export function FriendProfilePanel({
                     onClick={() => avatarInputRef.current?.click()}
                   >
                     {avatarNode}
-                    <span className={styles.avatarBadge} aria-hidden>
-                      <Camera size={14} />
+                    <span className={styles.avatarBadge} aria-hidden="true">
+                      <Camera size={14} aria-hidden="true" focusable="false" />
                     </span>
                   </button>
                   <button
@@ -656,18 +672,21 @@ export function FriendProfilePanel({
                       onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
                     />
                   </label>
-                  <label className={styles.editLabel}>
+                  <label className={styles.editLabel} htmlFor="designer-edit-bio-field">
                     <span className={styles.editLabelRow}>
-                      Bio
+                      <span data-testid="designer-edit-bio-label">Bio</span>
                       <span className={styles.editCount}>{editBio.length}/2000</span>
                     </span>
                     <textarea
+                      id="designer-edit-bio-field"
                       className={styles.editTextarea}
                       value={editBio}
                       maxLength={2000}
                       rows={4}
                       disabled={editBusy}
+                      placeholder="Tell other designers about your style…"
                       data-testid="designer-edit-bio"
+                      aria-label="Bio"
                       onChange={(e) => setEditBio(e.target.value)}
                       onFocus={(e) => onAndroidEditableFocus(e.currentTarget)}
                     />

@@ -77,7 +77,12 @@ def test_publish_look_appears_on_runway_feed(client, db_session):
     removed = client.delete(f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens))
     assert removed.status_code == 200, removed.text
     assert removed.json()["runway_item_id"] is None
-    assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
+    hidden = db_session.get(GalleryItem, uuid.UUID(runway_id))
+    assert hidden is not None
+    assert hidden.visibility == "private"
+    feed_after = client.get("/api/v1/gallery?sort=newest", headers=_auth(tokens))
+    assert feed_after.status_code == 200
+    assert all(row["id"] != runway_id for row in feed_after.json())
 
 
 def test_unpublish_look_succeeds_when_feed_item_has_ratings(client, db_session):
@@ -116,10 +121,109 @@ def test_unpublish_look_succeeds_when_feed_item_has_ratings(client, db_session):
     removed = client.delete(f"/api/v1/looks/{look_id}/publish", headers=_auth(owner))
     assert removed.status_code == 200, removed.text
     assert removed.json()["runway_item_id"] is None
-    assert db_session.get(GalleryItem, uuid.UUID(runway_id)) is None
+    hidden = db_session.get(GalleryItem, uuid.UUID(runway_id))
+    assert hidden is not None
+    assert hidden.visibility == "private"
+    # Ratings stay attached so republish restores social proof.
     assert (
-        db_session.query(Rating).filter(Rating.gallery_item_id == uuid.UUID(runway_id)).count() == 0
+        db_session.query(Rating).filter(Rating.gallery_item_id == uuid.UUID(runway_id)).count() == 1
     )
+
+
+def test_republish_preserves_likes_comments_and_ratings(client, db_session):
+    """Unpublish + publish must keep the same gallery id and social counters."""
+    from app.models.gallery_comment import GalleryComment
+    from app.models.gallery_like import GalleryLike
+    from app.models.rating import Rating
+    from app.models.user import User
+    from app.services.friendship_service import ensure_accepted_friends
+
+    owner = register_with_invite(client, db_session, "runway_keep_o@example.com", "runwayKeepO")
+    friend = register_with_invite(client, db_session, "runway_keep_f@example.com", "runwayKeepF")
+    owner_user = db_session.query(User).filter(User.email == "runway_keep_o@example.com").one()
+    friend_user = db_session.query(User).filter(User.email == "runway_keep_f@example.com").one()
+    ensure_accepted_friends(db_session, owner_user, friend_user)
+
+    me = client.get("/api/v1/auth/me", headers=_auth(owner)).json()
+    job = _add_job(db_session, user_id=uuid.UUID(me["id"]), image_url=_store_image(), summary="keep")
+    look_id = str(job.id)
+    published = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(owner),
+        json=runway_publish_body(),
+    )
+    assert published.status_code == 200, published.text
+    runway_id = published.json()["runway_item_id"]
+
+    assert client.post(
+        f"/api/v1/gallery/{runway_id}/like", headers=_auth(friend)
+    ).status_code == 204
+    assert client.post(
+        "/api/v1/ratings",
+        headers=_auth(friend),
+        json={"gallery_item_id": runway_id, "score": 8},
+    ).status_code in (200, 201)
+    assert client.post(
+        f"/api/v1/gallery/{runway_id}/comments",
+        headers=_auth(friend),
+        json={"body": "Love this silhouette"},
+    ).status_code == 201
+
+    item = db_session.get(GalleryItem, uuid.UUID(runway_id))
+    assert item is not None
+    likes_before = item.likes_count
+    ratings_before = item.rating_count
+    assert likes_before >= 1
+    assert ratings_before >= 1
+    assert (
+        db_session.query(GalleryComment)
+        .filter(GalleryComment.gallery_item_id == uuid.UUID(runway_id))
+        .count()
+        == 1
+    )
+
+    removed = client.delete(f"/api/v1/looks/{look_id}/publish", headers=_auth(owner))
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["runway_item_id"] is None
+
+    again = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(owner),
+        json=runway_publish_body(),
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["runway_item_id"] == runway_id
+
+    db_session.expire_all()
+    restored = db_session.get(GalleryItem, uuid.UUID(runway_id))
+    assert restored is not None
+    assert restored.visibility == "public"
+    assert restored.likes_count == likes_before
+    assert restored.rating_count == ratings_before
+    assert (
+        db_session.query(GalleryLike)
+        .filter(GalleryLike.gallery_item_id == uuid.UUID(runway_id))
+        .count()
+        >= 1
+    )
+    assert (
+        db_session.query(Rating)
+        .filter(Rating.gallery_item_id == uuid.UUID(runway_id))
+        .count()
+        == 1
+    )
+    assert (
+        db_session.query(GalleryComment)
+        .filter(GalleryComment.gallery_item_id == uuid.UUID(runway_id))
+        .count()
+        == 1
+    )
+
+    feed = client.get("/api/v1/gallery?sort=newest", headers=_auth(friend))
+    assert feed.status_code == 200
+    row = next(r for r in feed.json() if r["id"] == runway_id)
+    assert row["likes_count"] == likes_before
+    assert row.get("rating_count", row.get("ratings_count", ratings_before)) >= 1
 
 
 def test_delete_look_removes_runway_publish_from_feed(client, db_session):

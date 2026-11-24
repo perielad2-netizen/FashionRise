@@ -2627,7 +2627,8 @@ function RunwayCard({
           ]}
         >
           <p data-testid="runway-unpublish-confirm-body">
-            This look will leave the FashionRise feed. You can publish it again later from My Looks.
+            This look will leave the FashionRise feed. Likes, comments, and ratings stay with it —
+            publish again from My Looks to bring them back.
           </p>
           {actionError ? (
             <p className={styles.cardError} role="alert">

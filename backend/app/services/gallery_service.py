@@ -278,12 +278,22 @@ def publish_look(
 
 
 def unpublish_look(db: Session, user: User, look_id: uuid.UUID) -> None:
+    """Hide a look from FashionRise Social without wiping likes/comments/ratings.
+
+    Soft-unpublish sets visibility=private so republish can restore the same
+    gallery_items row (and its social counters). Hard-delete still happens when
+    the look itself is deleted.
+    """
     item = db.scalar(
         select(GalleryItem).where(GalleryItem.look_id == look_id, GalleryItem.user_id == user.id)
     )
     if item is None:
         raise NotFoundError("Look is not on the Runway")
-    db.delete(item)
+    # Already off Social (e.g. double-tap Remove) — treat as success.
+    if item.visibility != "public":
+        return
+    item.visibility = "private"
+    db.add(item)
     db.commit()
 
 
