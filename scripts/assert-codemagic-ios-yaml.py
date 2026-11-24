@@ -96,9 +96,10 @@ def assert_unique_build_number_policy(raw: str, wf: dict) -> None:
         if "triggering" in wf:
             raise AssertionError("manual builds only — no triggering block")
         xcode_ver = (wf.get("environment") or {}).get("xcode")
-        # Float 27.0 or string "27.0" — iOS 27 SDK (ITMS-90725 / Apr 2027).
-        if xcode_ver not in (27.0, "27.0", 27) and str(xcode_ver) not in {"27.0", "27"}:
-            raise AssertionError(f"xcode must be 27.0 (got {xcode_ver!r})")
+        # Cap 7 lacks UIScene — Xcode 27 SDK crashes on iOS 27 at launch. Pin 26.5
+        # until Capacitor ≥8.5 + SceneDelegate (ITMS-90725 deadline Apr 2027).
+        if xcode_ver not in (26.5, "26.5") and str(xcode_ver) not in {"26.5"}:
+            raise AssertionError(f"xcode must be 26.5 until Cap UIScene (got {xcode_ver!r})")
 
 
 def assert_ipad_screenshots_workflow_present(raw: str) -> None:
