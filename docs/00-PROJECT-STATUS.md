@@ -3,7 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — immersive compact bar LIVE
+**Last updated:** 2026-11-24 Asia/Jerusalem — immersive Freeform tools grid LIVE
+
+## LIVE — Immersive Freeform tools grid (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Equal-cell tools dock (8 tools + Min + Exit) — **no clip / no scroll** (Mobbin Freeform/Notes) |
+| Tip | FE `/var/www/fashionrise/releases/bc7f350f-immersive-tools-grid` · `/version.json` → **`bc7f350f`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/51879af6-immersive-compact-bar /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## LIVE — Immersive compact sketch + view (2026-11-24 Asia/Jerusalem)
 
