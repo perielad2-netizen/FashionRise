@@ -426,23 +426,50 @@ def _accepted_friend_ids(db: Session, viewer_id: uuid.UUID) -> list[uuid.UUID]:
     return out
 
 
+def pick_first_look_per_user(rows: list[GalleryItem]) -> list[GalleryItem]:
+    """Keep the first look seen for each designer (caller must quality-sort first)."""
+    seen: set[uuid.UUID] = set()
+    best: list[GalleryItem] = []
+    for row in rows:
+        if row.user_id in seen:
+            continue
+        seen.add(row.user_id)
+        best.append(row)
+    return best
+
+
 def list_circle_feed(
     db: Session, *, viewer: User, limit: int = 50, offset: int = 0
 ) -> list[GalleryItem]:
-    """Friends + own published looks only — default Runway home feed."""
+    """Friends circle: one best look per accepted friend (never the viewer).
+
+    Ranking matches Worldwide (likes → rating → recency). Pagination is over
+    designers, not every published look — keeps the board light.
+    """
     friend_ids = _accepted_friend_ids(db, viewer.id)
-    allowed = [viewer.id, *friend_ids]
+    if not friend_ids:
+        return []
+    # Bound candidates so a prolific friend cannot explode memory; quality sort
+    # first means the first row per user_id is their best look.
+    candidate_cap = max(200, min(2000, len(friend_ids) * 40))
     q = (
         _public_gallery_base()
         .where(
-            GalleryItem.user_id.in_(allowed),
+            GalleryItem.user_id.in_(friend_ids),
             GalleryItem.id.notin_(_reported_by_viewer_subq(viewer.id)),
         )
-        .order_by(GalleryItem.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        .order_by(
+            GalleryItem.likes_count.desc(),
+            GalleryItem.rating_average.desc().nulls_last(),
+            GalleryItem.rating_count.desc(),
+            GalleryItem.created_at.desc(),
+        )
+        .limit(candidate_cap)
     )
-    return list(db.scalars(q).all())
+    best = pick_first_look_per_user(list(db.scalars(q).all()))
+    start = max(0, int(offset or 0))
+    end = start + max(1, int(limit or 50))
+    return best[start:end]
 
 
 def list_top_worldwide(

@@ -219,7 +219,7 @@ export function RunwayBoardScreen() {
       : scope === 'worldwide'
         ? 'Most liked public looks worldwide — pick Top 10, 20, or 50.'
         : scope === 'friends'
-          ? 'Published looks from your friends circle.'
+          ? 'One designer card per friend — their best look by likes and rating.'
           : 'Looks from designers you follow.'
 
   function selectCategory(id: string) {
@@ -422,7 +422,7 @@ function RankingsPanel({
         {scope === 'worldwide'
           ? 'No Top rankings yet. Publish a look from My Looks to appear here.'
           : scope === 'friends'
-            ? 'Your friends circle is quiet. Add friends from FashionRise, or publish a look.'
+            ? 'Your friends circle is quiet. Add friends from FashionRise to see their best looks here.'
             : 'No follows yet. Follow designers on FashionRise profiles.'}
       </p>
     )
@@ -430,7 +430,13 @@ function RankingsPanel({
   return (
     <ol className={styles.rankList} aria-label={boardTitle}>
       {state.items.map((item, index) => (
-        <RankRow key={item.id} item={item} rank={index + 1} showRank={scope === 'worldwide'} />
+        <RankRow
+          key={item.id}
+          item={item}
+          rank={index + 1}
+          showRank={scope === 'worldwide'}
+          designerCard={scope === 'friends'}
+        />
       ))}
     </ol>
   )
@@ -659,10 +665,13 @@ function RankRow({
   item,
   rank,
   showRank,
+  designerCard = false,
 }: {
   item: GalleryItem
   rank: number
   showRank: boolean
+  /** Friends circle: lead with designer, show best look as supporting line. */
+  designerCard?: boolean
 }) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
@@ -670,8 +679,10 @@ function RankRow({
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
   const lead = showRank && rank === 1
-  const title = item.title?.trim() || 'Untitled look'
+  const lookTitle = item.title?.trim() || 'Untitled look'
   const designer = item.username?.trim() ? `@${item.username.trim()}` : 'Designer'
+  const title = designerCard ? designer : lookTitle
+  const subtitle = designerCard ? `Best look · ${lookTitle}` : designer
   const metal = showRank ? podiumClass(rank) : ''
   const [following, setFollowing] = useState(false)
   const [followKnown, setFollowKnown] = useState(false)
@@ -741,7 +752,7 @@ function RankRow({
       </div>
       <div className={styles.rankBody}>
         <p className={styles.rankTitle}>{title}</p>
-        <p className={styles.rankDesigner}>{designer}</p>
+        <p className={styles.rankDesigner}>{subtitle}</p>
         <div className={styles.rankStats}>
           <span>
             Likes <strong>{formatCount(item.likes_count ?? 0)}</strong>
