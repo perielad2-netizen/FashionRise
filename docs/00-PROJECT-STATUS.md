@@ -3,7 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — Friends circle designer cards LIVE
+**Last updated:** 2026-11-24 Asia/Jerusalem — iOS profile + keyboard LIVE (FE)
+
+## LIVE — iOS profile card + keyboard chat (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | TF: designer profile clipped to empty banner; chat/comment composer under soft keyboard (iOS only) |
+| Fix | Profile panel `flex: 0 0 auto` (no nested scrollport); native iOS Capacitor keyboard height → `--fr-visible-height` |
+| Merged | [#498](https://github.com/perielad2-netizen/FashionRise/pull/498) → `main` @ **`f8d73dc9`** / merge **`41f097b2`** |
+| Tip | FE `/var/www/fashionrise/releases/f8d73dc9-ios-profile-kbd` · `/version.json` → **`f8d73dc9`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/10b10cc2-friends-circle-best /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| TestFlight | Needs new Codemagic **FashionRise iOS** IPA on `main` (Capacitor freezes `dist/` at build) — Xcode **26.5** |
 
 ## LIVE — Friends circle designer cards (2026-11-24 Asia/Jerusalem)
 
