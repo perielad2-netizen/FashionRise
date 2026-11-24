@@ -15,8 +15,9 @@
 | Affected | Runway chat **Post**; designer look **Send**; Look rename; Report **Send**; Find friends **Search** (submit); Save design / Contact / auth submits (submit); Techpack Save/Done/Continue; fabric Save / AI prompt actions (`data-fr-kbd-safe`) |
 | Feedback | Comment Post shows **Posting…** / busy disable; Send shows **Sending…**; existing Save/error paths unchanged — failures still surface alerts, never silent success |
 | Tests | Vitest: `androidKeyboardInput` (pointerdown preventDefault + guards), `useVisibleViewport` installs guards, `RunwayScreen` comment Post while focused (single submit) |
-| Tip | FE `/var/www/fashionrise/releases/<sha>-mobile-kbd-first-tap` · `/version.json` → deployed SHA below after tip |
+| Tip | FE `/var/www/fashionrise/releases/d9d692ac-mobile-kbd-first-tap` · `/version.json` → **`d9d692ac`** |
 | Native | Web/PWA + Capacitor WebView pick up the shared guard after FE deploy; no native package rebuild required |
+| SHA | **`d9d692ac`** on `main` |
 
 ## LIVE — Create Model photo preview card (2026-11-23 Asia/Jerusalem)
 
