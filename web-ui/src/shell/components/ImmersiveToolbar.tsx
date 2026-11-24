@@ -180,66 +180,35 @@ export function ImmersiveToolbar({
           <BrushKindStrip compact brushKind={brushKind} onBrushKind={onBrushKind} />
         </div>
       ) : null}
+      {/* Sketch bar — tools + Min/Exit (Craft/Notes: chrome lives with tools, not a scroll strip). */}
       <div className={`${styles.row} ${styles.rowPrimary}`}>
-        <div className={styles.cluster} role="group" aria-label="Drawing tools">
+        <div className={`${styles.cluster} ${styles.toolsCluster}`} role="group" aria-label="Drawing tools">
           <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-            <PenToolIcon size={20} glow={tool === 'draw'} />
+            <PenToolIcon size={18} glow={tool === 'draw'} />
           </ToolBtn>
           <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-            <EraserToolIcon size={20} glow={tool === 'erase'} />
+            <EraserToolIcon size={18} glow={tool === 'erase'} />
           </ToolBtn>
           <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-            <FillToolIcon size={20} glow={tool === 'fill'} />
+            <FillToolIcon size={18} glow={tool === 'fill'} />
           </ToolBtn>
           <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
-            <EyedropperToolIcon size={20} glow={tool === 'eyedropper'} />
+            <EyedropperToolIcon size={18} glow={tool === 'eyedropper'} />
           </ToolBtn>
           <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
-            <Hand size={18} strokeWidth={1.75} />
+            <Hand size={16} strokeWidth={1.75} />
           </ToolBtn>
           <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
-            <Undo2 size={18} strokeWidth={1.75} />
+            <Undo2 size={16} strokeWidth={1.75} />
           </ToolBtn>
           <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
-            <Redo2 size={18} strokeWidth={1.75} />
+            <Redo2 size={16} strokeWidth={1.75} />
           </ToolBtn>
           <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
-            <Trash2 size={18} strokeWidth={1.75} />
+            <Trash2 size={16} strokeWidth={1.75} />
           </ToolBtn>
         </div>
-      </div>
-
-      {/* Single nowrap band: zoom · fit · Min/Exit (must not wrap under each other). */}
-      <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
-        <div className={styles.viewStrip} role="group" aria-label="View and exit">
-          <div className={styles.zoomTrack} role="group" aria-label="Zoom">
-            <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
-              <ZoomOut size={16} strokeWidth={1.75} />
-            </ToolBtn>
-            <span className={styles.zoomReadout} aria-live="polite">
-              {zoomPercent}%
-            </span>
-            <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
-              <ZoomIn size={16} strokeWidth={1.75} />
-            </ToolBtn>
-          </div>
-          <span className={styles.viewDivider} aria-hidden />
-          <button type="button" className={styles.chip} onClick={onFitPage} aria-label="Fit page">
-            <Scan size={14} strokeWidth={2} aria-hidden />
-            <span className={styles.chipLabel}>Page</span>
-          </button>
-          <button type="button" className={styles.chip} onClick={onFitWidth} aria-label="Fit width">
-            <Maximize2 size={14} strokeWidth={2} aria-hidden />
-            <span className={styles.chipLabel}>Width</span>
-          </button>
-          <button type="button" className={styles.chip} onClick={onHundred} aria-label="100%">
-            <span className={styles.chipMono}>100%</span>
-          </button>
-          <button type="button" className={styles.chip} onClick={onCenter} aria-label="Center">
-            <Crosshair size={14} strokeWidth={2} aria-hidden />
-            <span className={styles.chipLabel}>Center</span>
-          </button>
-          <span className={styles.viewDivider} aria-hidden />
+        <div className={styles.exitCluster} role="group" aria-label="Toolbar layout">
           <button
             type="button"
             className={styles.minimizeBtn}
@@ -247,7 +216,7 @@ export function ImmersiveToolbar({
             aria-label="Minimize sketch toolbar"
             aria-expanded={true}
             data-testid="immersive-toolbar-minimize"
-            title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo, clear"
+            title="Minimize toolbar"
           >
             <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
           </button>
@@ -259,7 +228,35 @@ export function ImmersiveToolbar({
             data-testid="immersive-exit"
           >
             {nativeFullscreen ? <Minimize2 size={15} aria-hidden /> : <Maximize2 size={15} aria-hidden />}
-            <span>Exit</span>
+          </button>
+        </div>
+      </div>
+
+      {/* View bar — zoom + icon-only fit chips; no horizontal scroll. */}
+      <div className={`${styles.row} ${styles.rowView}`} data-testid="immersive-view-dock">
+        <div className={styles.viewStrip} role="group" aria-label="Zoom and fit">
+          <div className={styles.zoomTrack} role="group" aria-label="Zoom">
+            <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
+              <ZoomOut size={16} strokeWidth={1.75} />
+            </ToolBtn>
+            <span className={styles.zoomReadout} aria-live="polite">
+              {zoomPercent}%
+            </span>
+            <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
+              <ZoomIn size={16} strokeWidth={1.75} />
+            </ToolBtn>
+          </div>
+          <button type="button" className={styles.chipIcon} onClick={onFitPage} aria-label="Fit page" title="Fit page">
+            <Scan size={15} strokeWidth={2} aria-hidden />
+          </button>
+          <button type="button" className={styles.chipIcon} onClick={onFitWidth} aria-label="Fit width" title="Fit width">
+            <Maximize2 size={15} strokeWidth={2} aria-hidden />
+          </button>
+          <button type="button" className={styles.chipIcon} onClick={onHundred} aria-label="100%" title="100%">
+            <span className={styles.chipMono}>1:1</span>
+          </button>
+          <button type="button" className={styles.chipIcon} onClick={onCenter} aria-label="Center" title="Center">
+            <Crosshair size={15} strokeWidth={2} aria-hidden />
           </button>
         </div>
       </div>
