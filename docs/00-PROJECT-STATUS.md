@@ -3,7 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — immersive view row LIVE
+**Last updated:** 2026-11-24 Asia/Jerusalem — immersive view nowrap LIVE
+
+## LIVE — Immersive view strip nowrap (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Zoom + Page/Width/100%/Center + Min/Exit forced onto **one** nowrap strip (no under-fit wrapping) |
+| Merged | [#496](https://github.com/perielad2-netizen/FashionRise/pull/496) → `main` @ **`ec783b78`** |
+| Tip | FE `/var/www/fashionrise/releases/ec783b78-immersive-view-nowrap` · `/version.json` → **`ec783b78`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/3c5f3f65-immersive-view-row /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## LIVE — Immersive zoom/fit + Min/Exit one row (2026-11-24 Asia/Jerusalem)
 
