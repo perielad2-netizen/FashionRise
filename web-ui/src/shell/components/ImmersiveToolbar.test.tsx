@@ -62,18 +62,20 @@ describe('ImmersiveToolbar', () => {
     expect(onExit).toHaveBeenCalled()
   })
 
-  it('keeps zoom, fit chips, Minimize, and Exit on the same view row', () => {
+  it('keeps zoom, fit chips, Minimize, and Exit in one nowrap view strip', () => {
     render(<ImmersiveToolbar {...baseProps} />)
     const viewDock = screen.getByTestId('immersive-view-dock')
     const minimize = screen.getByTestId('immersive-toolbar-minimize')
     const exit = screen.getByTestId('immersive-exit')
     expect(minimize.getAttribute('aria-label')).toBe('Minimize sketch toolbar')
-    expect(screen.getByText('Min')).toBeTruthy()
     expect(viewDock.contains(minimize)).toBe(true)
     expect(viewDock.contains(exit)).toBe(true)
     expect(viewDock.contains(screen.getByRole('button', { name: 'Fit page' }))).toBe(true)
+    expect(viewDock.contains(screen.getByRole('button', { name: 'Fit width' }))).toBe(true)
     expect(viewDock.contains(screen.getByRole('button', { name: 'Center' }))).toBe(true)
     expect(viewDock.textContent).toContain('125%')
+    // One strip child — zoom/fit/exit must not be separate wrapped rows.
+    expect(viewDock.children).toHaveLength(1)
   })
 
   it('exposes Clear canvas on the primary immersive toolbar (no More menu)', () => {

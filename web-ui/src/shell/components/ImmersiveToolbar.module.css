@@ -37,10 +37,41 @@
 }
 
 .rowView {
-  justify-content: flex-start;
+  justify-content: stretch;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+/* One physical row — never stack zoom / fit / Min / Exit. */
+.viewStrip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 3px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.viewStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.viewDivider {
+  width: 1px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .rowActions {
@@ -73,20 +104,53 @@
   gap: 4px;
 }
 
-.rowView .exitCluster {
-  margin-left: auto;
-}
-
 .rowView .minimizeBtn,
 .rowView .exitBtn {
-  min-height: 40px;
-  height: 40px;
-  padding: 0 10px;
+  min-height: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  flex: 0 0 auto;
 }
 
-.rowView .zoomTrack,
-.rowView .segmentTrack {
-  flex: 0 1 auto;
+.rowView .minimizeBtn {
+  width: 36px;
+  padding: 0;
+}
+
+.rowView .zoomTrack {
+  flex: 0 0 auto;
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rowView .zoomTrack .btn,
+.rowView .zoomTrack .btnActive {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+}
+
+.rowView .zoomReadout {
+  min-width: 40px;
+  font-size: 11px;
+}
+
+.rowView .chip {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 7px;
+  gap: 3px;
+  font-size: 11px;
+  border-radius: 9px;
+  flex: 0 0 auto;
+}
+
+.chipLabel {
+  font-weight: 650;
 }
 
 /* Compact sketch strip — exactly two rows: tools (+ clear) then Max/Exit.
