@@ -3,7 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — immersive view nowrap LIVE
+**Last updated:** 2026-11-24 Asia/Jerusalem — immersive compact bar LIVE
+
+## LIVE — Immersive compact sketch + view (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Change | Min/Exit on sketch tools row; view = zoom + icon-only fit (**no scroll**) |
+| Tip | FE `/var/www/fashionrise/releases/51879af6-immersive-compact-bar` · `/version.json` → **`51879af6`** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/ec783b78-immersive-view-nowrap /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## LIVE — Immersive view strip nowrap (2026-11-24 Asia/Jerusalem)
 
