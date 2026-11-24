@@ -115,6 +115,7 @@ export function StageSheet({
               type="button"
               className={styles.ghostBtn}
               disabled={busy}
+              data-fr-kbd-safe="1"
               onClick={() => void onSave()}
             >
               {busy ? 'Saving…' : 'Save'}
@@ -125,6 +126,7 @@ export function StageSheet({
               type="button"
               className={styles.primaryBtn}
               disabled={busy}
+              data-fr-kbd-safe="1"
               onClick={() => void onContinue()}
             >
               {busy ? 'Working…' : continueLabel}

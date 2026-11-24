@@ -392,6 +392,7 @@ function LookDetailDialog({
               type="button"
               className={styles.ghostBtn}
               disabled={busy || !title.trim() || title.trim() === look.title}
+              data-fr-kbd-safe="1"
               onClick={() => void patch({ title: title.trim() })}
             >
               Rename

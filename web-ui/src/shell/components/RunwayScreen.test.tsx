@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { installKeyboardSafeActionGuards } from '@/lib/androidKeyboardInput'
 import {
   RunwayScreen,
   __followStatusCacheTestUtils,
@@ -790,13 +791,26 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(likeGalleryComment).toHaveBeenCalledWith('c1'))
     expect(await within(dialog).findByRole('button', { name: /Unlike comment/i })).toBeInTheDocument()
 
-    fireEvent.change(within(dialog).getByLabelText(/Add a comment/i), {
-      target: { value: 'The hem is perfect' },
-    })
-    fireEvent.click(within(dialog).getByRole('button', { name: /^Post$/i }))
-    await waitFor(() =>
-      expect(postGalleryComment).toHaveBeenCalledWith('circle-1', 'The hem is perfect'),
-    )
+    const disposeKbdSafe = installKeyboardSafeActionGuards()
+    try {
+      const commentInput = within(dialog).getByLabelText(/Add a comment/i)
+      fireEvent.change(commentInput, {
+        target: { value: 'The hem is perfect' },
+      })
+      commentInput.focus()
+      expect(document.activeElement).toBe(commentInput)
+      // Mobile soft-keyboard: first pointerdown on Post must not blur-only; click still posts.
+      const postBtn = within(dialog).getByRole('button', { name: /^Post$/i })
+      fireEvent.pointerDown(postBtn, { button: 0, pointerType: 'touch' })
+      expect(document.activeElement).toBe(commentInput)
+      fireEvent.click(postBtn)
+      await waitFor(() =>
+        expect(postGalleryComment).toHaveBeenCalledWith('circle-1', 'The hem is perfect'),
+      )
+      expect(postGalleryComment).toHaveBeenCalledTimes(1)
+    } finally {
+      disposeKbdSafe()
+    }
     expect(await within(dialog).findByText('The hem is perfect')).toBeInTheDocument()
     expect(within(dialog).getByText('@viewer')).toBeInTheDocument()
     // Own comment has no like button

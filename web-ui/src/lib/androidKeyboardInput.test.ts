@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  findKeyboardSafeAction,
   installGlobalEditableFocusGuards,
+  installKeyboardSafeActionGuards,
   isEditableElement,
   isTextEditableElement,
   markKeyboardOverlayHost,
   onAndroidEditableFocus,
+  preventKeyboardStealOnPointerDown,
   scrollEditableIntoView,
   shouldIgnoreOverlayDismiss,
 } from '@/lib/androidKeyboardInput'
@@ -115,5 +118,81 @@ describe('androidKeyboardInput', () => {
     document.body.appendChild(area)
     area.focus()
     expect(shouldIgnoreOverlayDismiss()).toBe(true)
+  })
+
+  it('finds submit and data-fr-kbd-safe actions but skips disabled', () => {
+    const form = document.createElement('form')
+    const submit = document.createElement('button')
+    submit.type = 'submit'
+    submit.textContent = 'Post'
+    const send = document.createElement('button')
+    send.type = 'button'
+    send.setAttribute('data-fr-kbd-safe', '1')
+    send.textContent = 'Send'
+    const disabled = document.createElement('button')
+    disabled.type = 'submit'
+    disabled.disabled = true
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.textContent = 'Cancel'
+    form.append(submit, send, disabled, cancel)
+    document.body.appendChild(form)
+
+    expect(findKeyboardSafeAction(submit)).toBe(submit)
+    expect(findKeyboardSafeAction(send)).toBe(send)
+    expect(findKeyboardSafeAction(disabled)).toBeNull()
+    expect(findKeyboardSafeAction(cancel)).toBeNull()
+  })
+
+  it('prevents keyboard steal on first pointerdown while a text field is focused', () => {
+    const form = document.createElement('form')
+    const input = document.createElement('input')
+    input.type = 'text'
+    const post = document.createElement('button')
+    post.type = 'submit'
+    post.textContent = 'Post'
+    form.append(input, post)
+    document.body.appendChild(form)
+    input.focus()
+    expect(document.activeElement).toBe(input)
+
+    const event = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+    Object.defineProperty(event, 'target', { value: post })
+    const prevented = preventKeyboardStealOnPointerDown(event)
+    expect(prevented).toBe(true)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('does not intercept when no text field is focused', () => {
+    const post = document.createElement('button')
+    post.type = 'submit'
+    document.body.appendChild(post)
+    const event = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+    Object.defineProperty(event, 'target', { value: post })
+    expect(preventKeyboardStealOnPointerDown(event)).toBe(false)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('installKeyboardSafeActionGuards keeps focus on the field for submit pointerdown', () => {
+    const dispose = installKeyboardSafeActionGuards()
+    const form = document.createElement('form')
+    const input = document.createElement('input')
+    const post = document.createElement('button')
+    post.type = 'submit'
+    form.append(input, post)
+    document.body.appendChild(form)
+    input.focus()
+
+    const event = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+      pointerType: 'touch',
+    })
+    post.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(input)
+    dispose()
   })
 })

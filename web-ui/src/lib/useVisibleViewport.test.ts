@@ -97,4 +97,28 @@ describe('useVisibleViewport', () => {
     expect(document.documentElement.style.getPropertyValue('--fr-visible-height')).toBe('740px')
     expect(document.documentElement.getAttribute('data-fr-keyboard')).toBeNull()
   })
+
+  it('installs keyboard-safe action guards so Post keeps field focus on first tap', () => {
+    const { unmount } = renderHook(() => useVisibleViewport())
+    const form = document.createElement('form')
+    const input = document.createElement('input')
+    const post = document.createElement('button')
+    post.type = 'submit'
+    form.append(input, post)
+    document.body.appendChild(form)
+    input.focus()
+
+    const event = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+      pointerType: 'touch',
+    })
+    post.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(input)
+    unmount()
+    form.remove()
+  })
 })

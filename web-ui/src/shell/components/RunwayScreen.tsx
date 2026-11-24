@@ -60,7 +60,10 @@ import {
   type FriendSearchHit,
   type Friendship,
 } from '@/services/friendsApi'
-import { onAndroidEditableFocus } from '@/lib/androidKeyboardInput'
+import {
+  onAndroidEditableFocus,
+  shouldIgnoreOverlayDismiss,
+} from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { isNativeShell } from '@/services/native/platform'
@@ -2639,6 +2642,8 @@ function RunwayCard({
               className={`fr-keyboard-overlay ${styles.chatScrim}`}
               role="presentation"
               onClick={(event) => {
+                // Soft keyboard / focus reflow must not eat the first Post tap as a scrim dismiss.
+                if (shouldIgnoreOverlayDismiss()) return
                 if (event.target === event.currentTarget) closeComments()
               }}
             >
@@ -2751,8 +2756,9 @@ function RunwayCard({
                     type="submit"
                     className={styles.commentSend}
                     disabled={busy === 'comment' || !draft.trim()}
+                    aria-busy={busy === 'comment'}
                   >
-                    Post
+                    {busy === 'comment' ? 'Posting…' : 'Post'}
                   </button>
                 </form>
                 {actionError ? (

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 
 import {
   installGlobalEditableFocusGuards,
+  installKeyboardSafeActionGuards,
   isEditableElement,
 } from '@/lib/androidKeyboardInput'
 
@@ -75,6 +76,7 @@ export function useVisibleViewport(enabled = true): void {
 
     sync()
     const disposeFocusGuards = installGlobalEditableFocusGuards()
+    const disposeKbdSafeActions = installKeyboardSafeActionGuards()
     vv?.addEventListener('resize', sync)
     vv?.addEventListener('scroll', sync)
     window.addEventListener('resize', sync)
@@ -85,6 +87,7 @@ export function useVisibleViewport(enabled = true): void {
 
     return () => {
       disposeFocusGuards()
+      disposeKbdSafeActions()
       vv?.removeEventListener('resize', sync)
       vv?.removeEventListener('scroll', sync)
       window.removeEventListener('resize', sync)

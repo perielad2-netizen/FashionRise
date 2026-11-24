@@ -6,6 +6,12 @@
  * add-user, profile edit, chat, contact form, etc.). Prefer docking + nearest
  * scroll, not center — and apply it to EVERY text field via a global focusin
  * guard (not only hand-wired inputs).
+ *
+ * Soft-keyboard first-tap bug: while a text field is focused, the first tap on
+ * Post / Send / Save / Submit often only blurs the field (keyboard closes) and
+ * the click is lost after the viewport resizes. Capture-phase pointerdown on
+ * action controls calls preventDefault so the field stays focused and the click
+ * (or form submit) lands on the first tap.
  */
 
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -20,6 +26,9 @@ const NON_TEXT_INPUT_TYPES = new Set([
   'image',
   'hidden',
 ])
+
+/** Explicit opt-in for type=button actions (Send, Rename, Send report, …). */
+export const FR_KBD_SAFE_ATTR = 'data-fr-kbd-safe'
 
 export function isEditableElement(el: EventTarget | null): el is HTMLElement {
   if (!el || !(el instanceof Element)) return false
@@ -42,7 +51,9 @@ export function isTextEditableElement(el: EventTarget | null): el is HTMLElement
 /** Scroll a field into view without creating a black band above the keyboard. */
 export function scrollEditableIntoView(el: HTMLElement | null | undefined): void {
   if (!el) return
-  el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+  if (typeof el.scrollIntoView === 'function') {
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+  }
   // Re-assert focus without another scroll jump (Samsung / Chromium / WKWebView).
   if (document.activeElement === el && 'focus' in el) {
     try {
@@ -116,6 +127,36 @@ function handleGlobalFocusIn(event: FocusEvent): void {
 }
 
 /**
+ * Action controls that must receive the first tap while the soft keyboard is open.
+ * type=submit is automatic; type=button needs data-fr-kbd-safe="1".
+ */
+export function findKeyboardSafeAction(el: EventTarget | null): HTMLElement | null {
+  if (!el || !(el instanceof Element)) return null
+  const hit = el.closest(
+    `button[type="submit"], input[type="submit"], [${FR_KBD_SAFE_ATTR}="1"]`,
+  )
+  if (!hit || !(hit instanceof HTMLElement)) return null
+  if (hit.hasAttribute('disabled') || hit.getAttribute('aria-disabled') === 'true') return null
+  return hit
+}
+
+/**
+ * While a text field is focused, preventDefault on pointerdown for Post/Send/Save
+ * so the field does not blur before click — first tap submits instead of only
+ * closing the keyboard.
+ */
+export function preventKeyboardStealOnPointerDown(event: PointerEvent | MouseEvent): boolean {
+  if ('button' in event && event.button !== 0) return false
+  if (!isTextEditableElement(document.activeElement)) return false
+  const action = findKeyboardSafeAction(event.target)
+  if (!action) return false
+  // Never block pointerdown on the editable itself.
+  if (action === document.activeElement || action.contains(document.activeElement)) return false
+  event.preventDefault()
+  return true
+}
+
+/**
  * Install for the whole SPA — every text input gets preventScroll + overlay host
  * marking without per-screen wiring. Pair with the returned disposer (e.g. from
  * useVisibleViewport cleanup).
@@ -125,5 +166,20 @@ export function installGlobalEditableFocusGuards(): () => void {
   document.addEventListener('focusin', handleGlobalFocusIn, true)
   return () => {
     document.removeEventListener('focusin', handleGlobalFocusIn, true)
+  }
+}
+
+/**
+ * Install once for the SPA: first tap on submit / data-fr-kbd-safe actions works
+ * while the soft keyboard is open (Android + iOS WebViews and mobile Chrome).
+ */
+export function installKeyboardSafeActionGuards(): () => void {
+  if (typeof document === 'undefined') return () => undefined
+  const onPointerDown = (event: PointerEvent) => {
+    preventKeyboardStealOnPointerDown(event)
+  }
+  document.addEventListener('pointerdown', onPointerDown, true)
+  return () => {
+    document.removeEventListener('pointerdown', onPointerDown, true)
   }
 }

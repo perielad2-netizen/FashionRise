@@ -3,6 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+**Last updated:** 2026-11-24 Asia/Jerusalem — mobile keyboard first-tap Post/Send/Save
+
+## LIVE — Mobile keyboard first-tap actions (2026-11-24 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Comment **Post** (and similar) on mobile: first tap only closes the keyboard; user must tap again and thinks the comment already posted |
+| Root cause | Soft-keyboard open → first pointer on the action blurs the focused field → viewport/keyboard collapse → the `click` is lost or never lands on the button. Same class of bug for any action beside a focused text field. |
+| Shared fix | Capture-phase `installKeyboardSafeActionGuards()` (via `useVisibleViewport`): `preventDefault` on `pointerdown` for `button[type=submit]` / `input[type=submit]` / `[data-fr-kbd-safe=1]` while a text field is focused, so focus stays and the first click/submit runs. Chat scrim also uses `shouldIgnoreOverlayDismiss()`. |
+| Affected | Runway chat **Post**; designer look **Send**; Look rename; Report **Send**; Find friends **Search** (submit); Save design / Contact / auth submits (submit); Techpack Save/Done/Continue; fabric Save / AI prompt actions (`data-fr-kbd-safe`) |
+| Feedback | Comment Post shows **Posting…** / busy disable; Send shows **Sending…**; existing Save/error paths unchanged — failures still surface alerts, never silent success |
+| Tests | Vitest: `androidKeyboardInput` (pointerdown preventDefault + guards), `useVisibleViewport` installs guards, `RunwayScreen` comment Post while focused (single submit) |
+| Tip | FE `/var/www/fashionrise/releases/<sha>-mobile-kbd-first-tap` · `/version.json` → deployed SHA below after tip |
+| Native | Web/PWA + Capacitor WebView pick up the shared guard after FE deploy; no native package rebuild required |
+
 ## LIVE — Create Model photo preview card (2026-11-23 Asia/Jerusalem)
 
 | Field | Value |

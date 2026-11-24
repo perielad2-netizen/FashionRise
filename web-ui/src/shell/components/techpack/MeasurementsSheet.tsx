@@ -394,6 +394,7 @@ export function MeasurementsSheet({
                   type="button"
                   className={styles.primaryBtn}
                   disabled={busy}
+                  data-fr-kbd-safe="1"
                   onClick={() => void onSaveAndDone()}
                 >
                   {busy ? 'Saving…' : 'Done'}
@@ -403,6 +404,7 @@ export function MeasurementsSheet({
                   type="button"
                   className={styles.primaryBtn}
                   disabled={busy}
+                  data-fr-kbd-safe="1"
                   onClick={() => void onSaveAndDone()}
                 >
                   {busy ? 'Saving…' : 'Save & Done'}

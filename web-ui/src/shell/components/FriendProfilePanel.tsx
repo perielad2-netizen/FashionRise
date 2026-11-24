@@ -1104,9 +1104,10 @@ function PublishedLookLightbox({
                 type="button"
                 className={styles.primaryBtn}
                 disabled={busy === 'comment' || !draft.trim()}
+                data-fr-kbd-safe="1"
                 onClick={() => void onSendComment()}
               >
-                Send
+                {busy === 'comment' ? 'Sending…' : 'Send'}
               </button>
             </div>
           ) : null}

@@ -347,6 +347,7 @@ export function MeasurementProfileCard({ selectedId, onSelect, disabled = false 
               type="button"
               className={styles.primaryBtn}
               disabled={busy}
+              data-fr-kbd-safe="1"
               onClick={() => void save()}
             >
               {busy ? 'Saving…' : 'Save measurements'}

@@ -320,6 +320,7 @@ export function ReportLookSheet({ item, open, onClose, onReported }: Props) {
               className={styles.reportSendBtn}
               disabled={!canSend}
               data-testid="report-send"
+              data-fr-kbd-safe="1"
               onClick={() => void sendReport()}
             >
               <Send size={16} aria-hidden />

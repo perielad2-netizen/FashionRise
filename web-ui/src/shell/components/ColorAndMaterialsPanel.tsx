@@ -663,6 +663,7 @@ export function ColorAndMaterialsPanel({
               <button
                 type="button"
                 className={styles.uploadPrimary}
+                data-fr-kbd-safe="1"
                 onClick={() => void confirmUpload()}
                 disabled={!pendingFile || uploading}
               >
@@ -747,6 +748,7 @@ export function ColorAndMaterialsPanel({
               <button
                 type="button"
                 className={styles.uploadPrimary}
+                data-fr-kbd-safe="1"
                 onClick={() => setSpendOpen(true)}
                 disabled={aiBusy || !aiPrompt.trim()}
               >
