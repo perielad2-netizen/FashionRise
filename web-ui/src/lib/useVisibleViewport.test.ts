@@ -1,12 +1,38 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useVisibleViewport } from '@/lib/useVisibleViewport'
+
+const keyboardHandlers = new Map<string, Set<(info?: { keyboardHeight: number }) => void>>()
+
+vi.mock('@/services/native/platform', () => ({
+  isNativeShell: vi.fn(() => false),
+  nativePlatform: vi.fn(() => 'web' as const),
+}))
+
+vi.mock('@capacitor/keyboard', () => ({
+  Keyboard: {
+    addListener: vi.fn(async (event: string, cb: (info?: { keyboardHeight: number }) => void) => {
+      if (!keyboardHandlers.has(event)) keyboardHandlers.set(event, new Set())
+      keyboardHandlers.get(event)!.add(cb)
+      return {
+        remove: () => {
+          keyboardHandlers.get(event)?.delete(cb)
+        },
+      }
+    }),
+  },
+}))
+
+import { isNativeShell, nativePlatform } from '@/services/native/platform'
 
 describe('useVisibleViewport', () => {
   const listeners = new Map<string, Set<() => void>>()
 
   beforeEach(() => {
     listeners.clear()
+    keyboardHandlers.clear()
+    vi.mocked(isNativeShell).mockReturnValue(false)
+    vi.mocked(nativePlatform).mockReturnValue('web')
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
     const vv = {
       height: 740,
@@ -31,6 +57,7 @@ describe('useVisibleViewport', () => {
     document.documentElement.style.removeProperty('--fr-vv-offset-top')
     document.documentElement.style.removeProperty('--fr-browser-chrome-bottom')
     document.documentElement.classList.remove('fr-native-ios')
+    document.documentElement.classList.remove('fr-native-android')
     document.documentElement.removeAttribute('data-fr-keyboard')
     vi.restoreAllMocks()
   })
@@ -120,5 +147,49 @@ describe('useVisibleViewport', () => {
     expect(document.activeElement).toBe(input)
     unmount()
     form.remove()
+  })
+
+  it('on native iOS uses Capacitor keyboard height when visualViewport does not shrink', async () => {
+    vi.mocked(isNativeShell).mockReturnValue(true)
+    vi.mocked(nativePlatform).mockReturnValue('ios')
+    document.documentElement.classList.add('fr-native-ios')
+    // Simulate iOS resize:none — vv stays full height while keyboard covers bottom.
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 800 })
+
+    renderHook(() => useVisibleViewport())
+    await waitFor(() => {
+      expect(keyboardHandlers.get('keyboardWillShow')?.size).toBeGreaterThan(0)
+    })
+
+    await act(async () => {
+      for (const cb of keyboardHandlers.get('keyboardWillShow') || []) {
+        cb({ keyboardHeight: 336 })
+      }
+    })
+
+    expect(document.documentElement.style.getPropertyValue('--fr-visible-height')).toBe('464px')
+    expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('800px')
+    expect(document.documentElement.getAttribute('data-fr-keyboard')).toBe('1')
+
+    await act(async () => {
+      for (const cb of keyboardHandlers.get('keyboardWillHide') || []) {
+        cb()
+      }
+    })
+    expect(document.documentElement.style.getPropertyValue('--fr-visible-height')).toBe('800px')
+    expect(document.documentElement.getAttribute('data-fr-keyboard')).toBeNull()
+  })
+
+  it('does not subscribe to Capacitor Keyboard on Android (vv path unchanged)', async () => {
+    vi.mocked(isNativeShell).mockReturnValue(true)
+    vi.mocked(nativePlatform).mockReturnValue('android')
+    document.documentElement.classList.add('fr-native-android')
+    renderHook(() => useVisibleViewport())
+    // Give microtasks a tick — listeners are only registered for iOS.
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(keyboardHandlers.size).toBe(0)
   })
 })

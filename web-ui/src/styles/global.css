@@ -137,3 +137,12 @@ html.fr-native-shell[data-fr-keyboard='1'] .fr-keyboard-overlay {
   height: var(--fr-visible-height, 100dvh);
   max-height: var(--fr-visible-height, 100dvh);
 }
+
+/*
+ * iOS: home indicator inset is covered by the soft keyboard — drop the large
+ * bottom safe-area pad on keyboard overlays so the composer sits just above keys.
+ * Android/web keep their own padding (vv + chrome already account for it).
+ */
+html.fr-native-ios[data-fr-keyboard='1'] .fr-keyboard-overlay {
+  padding-bottom: 10px;
+}

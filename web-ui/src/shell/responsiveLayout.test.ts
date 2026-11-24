@@ -146,5 +146,9 @@ describe('My Models Mobbin + croquis contain contracts', () => {
     expect(profileCss).toMatch(/\.lookDialogImage,\s*\n\.lookDialogPlaceholder \{[^}]*object-fit: contain/s)
     expect(rule(runwayCss, '.immersiveImg')).toContain('object-fit: contain')
     expect(rule(runwayCss, '.immersiveImg')).not.toContain('object-fit: cover')
+    // iOS: panel must not flex-shrink inside .profileScreen or the designer card clips.
+    expect(rule(profileCss, '.panel')).toContain('flex: 0 0 auto')
+    expect(rule(profileCss, '.panel')).toContain('overflow: visible')
+    expect(rule(runwayCss, '.profileScreen')).toContain('overflow-y: auto')
   })
 })
