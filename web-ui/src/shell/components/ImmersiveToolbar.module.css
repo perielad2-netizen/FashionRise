@@ -1,4 +1,4 @@
-/* Always span the safe viewport — never center with transform (clips on narrow tablets). */
+/* Freeform / Notes / Journal (Mobbin): floating dock, equal cells, never clip. */
 .bar {
   position: absolute;
   left: max(8px, env(safe-area-inset-left, 0px));
@@ -7,12 +7,12 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   max-width: none;
   width: auto;
   box-sizing: border-box;
-  padding: 8px;
-  border-radius: 20px;
+  padding: 7px;
+  border-radius: 22px;
   background:
     linear-gradient(165deg, rgba(28, 18, 28, 0.96), rgba(10, 12, 20, 0.94));
   border: 1px solid rgba(244, 114, 182, 0.26);
@@ -25,158 +25,150 @@
 
 .row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   width: 100%;
 }
 
-.rowPrimary {
-  justify-content: space-between;
-  flex-wrap: nowrap;
-  gap: 4px;
-  align-items: center;
-}
-
-.rowView {
-  justify-content: stretch;
-  align-items: center;
-  gap: 0;
-  flex-wrap: nowrap;
-  min-width: 0;
-}
-
-/* Zoom + fit only — no Min/Exit, no overflow scroll. */
-.viewStrip {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-  padding: 3px 4px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  overflow: hidden;
-}
-
-.viewDivider {
-  display: none;
-}
-
+.rowPrimary,
+.rowView,
 .rowActions {
   justify-content: stretch;
 }
 
 .rowKinds {
   justify-content: flex-start;
-  padding: 2px 4px 0;
+  padding: 0 2px;
 }
 
-.cluster {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
+/* Shared glass dock shell */
+.dock {
+  width: 100%;
   min-width: 0;
-  padding: 2px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  overflow: visible;
 }
 
-.toolsCluster {
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-  min-width: 0;
+/*
+  Tools dock — 10 equal columns (8 tools + Min + Exit).
+  Cells shrink together; icons never clipped / never scrolled.
+*/
+.toolsDock {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 2px;
-  overflow: hidden;
+  align-items: stretch;
 }
 
-.toolsCluster .btn,
-.toolsCluster .btnActive {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
+.toolsDockMini {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  width: auto;
+  min-width: min(100%, 320px);
 }
 
-.exitCluster {
-  flex: 0 0 auto;
-  margin-left: 0;
-  background: transparent;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.viewDock {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  align-items: stretch;
 }
 
-.rowPrimary .minimizeBtn,
-.rowPrimary .exitBtn {
-  width: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  flex: 0 0 auto;
-}
-
-.rowView .zoomTrack {
-  flex: 0 0 auto;
-  gap: 0;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.rowView .zoomTrack .btn,
-.rowView .zoomTrack .btnActive {
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
-}
-
-.rowView .zoomReadout {
-  min-width: 36px;
-  font-size: 11px;
-}
-
-.chipIcon {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(18, 14, 22, 0.72);
-  color: rgba(255, 255, 255, 0.92);
-  cursor: pointer;
+.btn,
+.btnActive,
+.chromeBtn,
+.fitBtn {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  max-height: 44px;
+  min-height: 32px;
+  height: auto;
+  box-sizing: border-box;
   display: grid;
   place-items: center;
-  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.18);
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  padding: 0;
 }
 
-.chipIcon:hover {
-  background: rgba(214, 51, 132, 0.22);
+.btn:hover,
+.fitBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btnActive {
+  background: linear-gradient(145deg, rgba(214, 51, 132, 0.42), rgba(244, 114, 182, 0.22));
+  color: #ffd0e6;
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.35),
+    0 0 14px rgba(214, 51, 132, 0.35);
+}
+
+.btnActive svg {
+  filter: drop-shadow(0 0 5px rgba(255, 209, 230, 0.5));
+}
+
+.chromeBtn {
+  background: rgba(214, 51, 132, 0.26);
   color: #ffd6e8;
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 232, 0.2);
 }
 
-.chipIcon .chipMono {
-  font-size: 11px;
+.chromeBtn:hover,
+.chromeBtnExit:hover {
+  background: rgba(214, 51, 132, 0.4);
+}
+
+.chromeBtnExit {
+  background: rgba(214, 51, 132, 0.34);
+}
+
+.fitBtn {
+  background: rgba(18, 14, 22, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.16);
+}
+
+.zoomReadout {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  max-height: 44px;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #ffd6e8;
+  font-size: clamp(9px, 2.8vw, 12px);
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  border-radius: 11px;
+  background: rgba(18, 14, 22, 0.4);
 }
 
-.chipLabel {
-  font-weight: 650;
+.chipMono {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  font-size: clamp(9px, 2.6vw, 11px);
 }
 
-/* Compact sketch strip — exactly two rows: tools (+ clear) then Max/Exit.
-   Center with left/right + margin auto (avoid transform clip on tablets). */
+/* Minimized floating pill */
 .barMinimized {
   left: max(8px, env(safe-area-inset-left, 0px));
   right: max(8px, env(safe-area-inset-right, 0px));
@@ -184,40 +176,32 @@
   max-width: calc(100% - 16px);
   margin-left: auto;
   margin-right: auto;
-  padding: 4px;
+  padding: 5px;
   gap: 4px;
-  border-radius: 14px;
+  border-radius: 16px;
 }
 
-.barMinimized .rowPrimary {
-  justify-content: center;
-  gap: 4px;
-  flex-wrap: nowrap;
-}
-
+.barMinimized .rowPrimary,
 .barMinimized .rowMinimizedChrome {
   justify-content: center;
-  flex-wrap: nowrap;
 }
 
-.barMinimized .cluster {
-  background: transparent;
-  flex-wrap: nowrap;
-}
-
-.barMinimized .exitCluster {
-  margin-left: 0;
+.exitCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .minimizeBtn,
-.expandBtn {
-  min-height: 44px;
-  min-width: 44px;
+.expandBtn,
+.exitBtn {
+  min-height: 40px;
+  min-width: 40px;
   padding: 0 12px;
   flex: 0 0 auto;
   border: 0;
   border-radius: 12px;
-  /* Match Exit prominence so Minimize is not missed on narrow tablets. */
   background: rgba(214, 51, 132, 0.28);
   color: #ffd6e8;
   font-size: 12px;
@@ -233,184 +217,46 @@
 }
 
 .minimizeBtn:hover,
-.expandBtn:hover {
+.expandBtn:hover,
+.exitBtn:hover {
   background: rgba(214, 51, 132, 0.4);
-}
-
-.expandBtn {
-  padding: 0 10px;
 }
 
 .btnText {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
-/* Keep Minimize / Max / Exit labels readable; never hide the control itself. */
 @media (max-width: 360px) {
-  .minimizeBtn .btnText,
   .expandBtn .btnText,
   .barMinimized .exitBtn span {
     display: none;
   }
 
-  .minimizeBtn,
   .expandBtn,
   .barMinimized .exitBtn {
-    width: 44px;
+    width: 40px;
     padding: 0;
-    justify-content: center;
   }
 }
 
-.btn,
-.btnActive {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-}
-
-.btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.btnActive {
-  background: linear-gradient(145deg, rgba(214, 51, 132, 0.42), rgba(244, 114, 182, 0.22));
-  color: #ffd0e6;
-  box-shadow:
-    0 0 0 1px rgba(244, 114, 182, 0.35),
-    0 0 18px rgba(214, 51, 132, 0.4);
-}
-
-.btnActive svg {
-  filter: drop-shadow(0 0 6px rgba(255, 209, 230, 0.55));
-}
-
-.exitBtn {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 10px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(214, 51, 132, 0.28);
-  color: #ffd6e8;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 0 0 1px rgba(255, 214, 232, 0.22);
-}
-
-.exitBtn:hover {
-  background: rgba(214, 51, 132, 0.4);
-}
-
-/* —— View dock (zoom + fit presets) — Freeform / Craft segmented chips —— */
-.zoomTrack {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-
-.zoomReadout {
-  min-width: 48px;
-  padding: 0 4px;
-  text-align: center;
-  color: #ffd6e8;
-  font-size: 12px;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
-.segmentTrack {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.chip {
-  min-height: 40px;
-  min-width: 44px;
-  padding: 0 10px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 11px;
-  background: rgba(18, 14, 22, 0.72);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.18);
-}
-
-.chip:hover {
-  background: rgba(214, 51, 132, 0.22);
-  color: #ffd6e8;
-  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.35);
-}
-
-.chip:active {
-  transform: scale(0.97);
-}
-
-.chipMono {
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-}
-
-/* —— Action dock — Canva / Posh icon+label tiles —— */
+/* Action dock — Canva-style 4 tiles */
 .actionTrack {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
   width: 100%;
-  padding: 4px;
-  border-radius: 16px;
+  padding: 3px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .actionChip {
-  min-height: 52px;
-  padding: 6px 8px;
+  min-height: 48px;
+  padding: 5px 6px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(18, 14, 22, 0.78);
   color: rgba(255, 255, 255, 0.94);
   cursor: pointer;
@@ -418,14 +264,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.16);
   min-width: 0;
 }
 
 .actionChip:hover {
   background: rgba(214, 51, 132, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.34);
 }
 
 .actionChip:active {
@@ -440,13 +285,9 @@
     0 6px 16px rgba(214, 51, 132, 0.22);
 }
 
-.actionChipPrimary:hover {
-  background: linear-gradient(155deg, rgba(214, 51, 132, 0.5), rgba(140, 48, 100, 0.55));
-}
-
 .actionIcon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -460,7 +301,7 @@
 }
 
 .actionLabel {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.15;
@@ -471,61 +312,24 @@
   white-space: nowrap;
 }
 
-/* Narrow phones: denser chips, keep 4-col action grid. */
 @media (max-width: 420px) {
-  .chip {
-    padding: 0 8px;
-    font-size: 11px;
-    min-height: 38px;
-  }
-
   .actionChip {
-    min-height: 48px;
-    padding: 5px 4px;
+    min-height: 44px;
+    padding: 4px 3px;
   }
 
   .actionLabel {
-    font-size: 10px;
-  }
-
-  .actionIcon {
-    width: 26px;
-    height: 26px;
+    font-size: 9px;
   }
 }
 
-/* Short viewports: keep toolbar but reduce vertical footprint. */
 @media (max-height: 700px) {
   .bar {
     gap: 4px;
     padding: 5px;
   }
 
-  .btn,
-  .btnActive,
-  .exitBtn,
-  .minimizeBtn,
-  .expandBtn {
-    min-height: 40px;
-    height: 40px;
-  }
-
-  .btn,
-  .btnActive {
-    width: 40px;
-  }
-
-  .chip {
-    min-height: 36px;
-  }
-
   .actionChip {
-    min-height: 44px;
-  }
-
-  .barMinimized .btn,
-  .barMinimized .btnActive {
-    width: 40px;
-    height: 40px;
+    min-height: 42px;
   }
 }
