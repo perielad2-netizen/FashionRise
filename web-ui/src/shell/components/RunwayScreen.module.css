@@ -2591,6 +2591,8 @@
 }
 
 .profileScreen {
+  /* Sole vertical scrollport for designer profiles — child panel must not shrink. */
+  display: block;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
