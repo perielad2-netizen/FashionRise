@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-24 Asia/Jerusalem — immersive Freeform tools grid LIVE
+**Last updated:** 2026-11-24 Asia/Jerusalem — Friends circle designer cards LIVE
 
 ## LIVE — Immersive Freeform tools grid (2026-11-24 Asia/Jerusalem)
 
