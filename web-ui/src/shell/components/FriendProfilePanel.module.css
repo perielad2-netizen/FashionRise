@@ -195,6 +195,24 @@
   text-transform: uppercase;
 }
 
+.bioHeading {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-style: normal;
+}
+
+.bioBlockShort {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: 36ch;
+}
+
 .tagline {
   margin: 0;
   max-width: 36ch;
@@ -456,6 +474,12 @@
   color: rgba(245, 242, 240, 0.86);
   min-width: 0;
   box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+}
+
+.bioBlock .bioHeading {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .collection {
@@ -765,6 +789,9 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.78);
   min-width: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-style: normal;
+  letter-spacing: normal;
 }
 
 .editLabelRow {

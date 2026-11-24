@@ -122,6 +122,7 @@ describe('FriendProfilePanel (premium designer card)', () => {
 
     expect(await screen.findByTestId('friend-profile-name')).toHaveTextContent('Yaniv')
     expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
+    expect(screen.getByTestId('friend-profile-bio-wrap')).toHaveTextContent(/^Bio/i)
     expect(screen.getByTestId('friend-profile-bio')).toHaveTextContent(/Public runway creator/i)
     expect(screen.getByTestId('friend-published-count')).toHaveTextContent('1')
     expect(screen.getByTestId('designer-followers')).toHaveTextContent('3')

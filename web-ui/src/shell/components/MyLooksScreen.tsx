@@ -302,7 +302,17 @@ function LookDetailDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className={styles.dialogHead}>
-          <div>
+          <button
+            type="button"
+            className={styles.backToLooksBtn}
+            aria-label="Back to My Looks"
+            data-testid="look-detail-back"
+            onClick={onClose}
+          >
+            <ArrowLeft size={18} aria-hidden />
+            <span>My Looks</span>
+          </button>
+          <div className={styles.dialogHeadCopy}>
             <h2 id={titleId} className={styles.dialogTitle}>
               {look.title}
             </h2>

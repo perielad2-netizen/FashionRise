@@ -148,6 +148,8 @@ describe('MyLooksScreen', () => {
     expect(within(dialog).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Delete Dual runway' })).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Done' })).toBeNull()
+    expect(within(dialog).getByTestId('look-detail-back')).toHaveTextContent(/My Looks/i)
+    expect(within(dialog).getByRole('button', { name: 'Back to My Looks' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Close look details' })).toBeInTheDocument()
   })
 
