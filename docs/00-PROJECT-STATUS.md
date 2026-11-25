@@ -3,41 +3,62 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Admin #503 (`05e93b26`) + #504 (`6abc0d10`) merged; not deployed
+**Last updated:** 2026-11-26 00:20 Asia/Jerusalem — Admin 2.0 #503+#504 **LIVE** on production (`78771a0b`, Alembic **044**); financial grants still fail-closed
 
-## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## LIVE — Admin 2.0 + ADD-ONLY Stars grants joint deploy (#503+#504) (2026-11-25/26 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **MERGED to `main`** — production tip deploy + Alembic **043/044** still **pending authorization** |
-| Merged SHA | **`6abc0d10`** (merge of tip `896eb1f6` / integration fix `2ffc478a`) |
+| Status | **LIVE** — analytics Admin 2.0 + grant ledger schema + nginx allowlist. **Stars grants NOT operational** (financial allowlist empty) |
+| Approved tip | **`78771a0b`** (`78771a0b3e86dce4999f26fa014334fdc1197929`) — #503 `05e93b26` + #504 `6abc0d10` + docs tip #507 only |
+| Deployed FE SHA | **`78771a0b`** |
+| Deployed BE SHA | **`78771a0b`** (`/opt/fashionrise/src` detached HEAD; `backend/REVISION`) |
+| FE release | `/var/www/fashionrise/releases/78771a0b-admin20-503-504` · symlink `current` |
+| Previous FE | `/var/www/fashionrise/releases/e0ee7bed-web-stars-restriction` (**preserved**) |
+| Public `/version.json` | `{"app":"78771a0b","sha":"78771a0b","builtAt":"2026-11-25T22:17:29.622Z"}` |
+| Alembic | **042 → 043 → 044** applied; head **`044`** |
+| Migration effects | All **69** accounts remain **`UNCLASSIFIED`**; **0** classification events; **0** grant ledger rows; wallet checksum **`69\|3000509`** unchanged vs pre-migrate |
+| DB backup | `/var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/fashionrise_beta.dump` · **211 MB** · `pg_restore -l` **425** TOC lines · pre checksum `users-stars-checksum-pre.txt` |
+| Preserve bundle | Same dir — nginx sites-available copy, prior BE tree tarball, `.env` (root-only), `ROLLBACK.sh`, FE prior path |
+| Nginx | Admin allowlist expanded (overview, reports, metrics dictionary, customers, customer detail, classification + dry-run + options, grants config/history, per-user grants, idempotency). **Deny fallback is plain prefix** `location /api/v1/admin/ { return 403; }` (**not** `^~`). Regex locations **quoted** so `{36}` quantifiers parse. Authorization forwarded. Methods limited per route. |
+| Cloudflare | Origin pull (AOP) unchanged; edge probes: allowlisted admin paths → **401** unauth; unknown `/api/v1/admin/*` → **403**; no unrestricted admin prefix. No CF WAF rule changes required for this allowlist. |
+| Health | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` **active**; `/health` **ok**; Alembic current **044** |
+| Financial auth | **`ADMIN_STARS_GRANT_ACTOR_IDS` unset/empty** — fail-closed. Admin JWT grant POST → **403** Financial admin required. Ordinary customer → **403** Admin access required. Unauth → **401**. |
+| Admin API smoke (minted short-lived `is_admin` JWT; no browser session UI) | Overview `customers`/`all` **200** (unavailable markers present); customers `customers` **0** items (all unclassified); customers `all` **69**; pagination **200**; detail **200** UNCLASSIFIED; reports/dictionary/options/dry-run/grants config+history **200**; dry-run suggestions only (**0** events written) |
+| Browser authenticated Admin UI | **Not exercised** in this run (no interactive operator session). API verification above stands in for read paths. |
+| Deployment-induced wallet mutations | **0** |
+| Administrative grants created | **0** |
+| Existing app smoke | Gallery **200**; auth/me **401**; auth/stars **401**; IAP apple status **200**; push capability/vapid **200**; web Stars copy still “Stars can only” + App Store/Play; native configs **unchanged** |
+| Vite gates preserved | Registration UI **false**; Magic/Front-Back/Dual Magic **true**; croquis notice SHA256 match prior tip; SW safety **ok** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/e0ee7bed-web-stars-restriction /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Rollback BE (app only; keep Alembic **044**) | `tar -C /opt/fashionrise/src -xzf /var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/backend-src-working-tree.tgz && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
+| Rollback nginx | `cp -a /var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/nginx-sites-available.fashionrise.app.conf /etc/nginx/sites-available/fashionrise.app && nginx -t && systemctl reload nginx` |
+| Do **not** | Auto-downgrade **044**; restore DB dump over newer customer writes without separate recovery authorization; set `ADMIN_STARS_GRANT_ACTOR_IDS` or perform live grants without new PM OK |
+| Known limitations | Stars Grants UI visible to admins but mutations fail-closed; all accounts still UNCLASSIFIED until operators classify; no interactive browser Admin UI session in this deploy; pre-deploy BE tree had local uncommitted drift on `f34bd487` branch — replaced by clean `78771a0b` |
+| Exact next action | **STOP.** Separate authorization required to (1) set `ADMIN_STARS_GRANT_ACTOR_IDS` owner UUIDs and (2) run a controlled live grant validation. Do not classify production accounts or grant Stars until then. |
+
+## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — DEPLOYED (see LIVE above)
+
+| Field | Value |
+| --- | --- |
+| Status | **MERGED + DEPLOYED** with #503 — financial mutations remain fail-closed |
+| Merged SHA | **`6abc0d10`** |
 | Merged at | 2026-11-26 00:01 Asia/Jerusalem (`2026-11-25T22:01:10Z`) |
 | Prior #503 merge | **`05e93b26`** |
-| Docs tip after #503 | **`02cc2598`** |
-| Migration on `main` | **042 → 043 → 044** present; **not applied to production** |
+| Production tip | **`78771a0b`** · Alembic **044** |
 | Design | Positive-only ADD; uncertain-retry preserves key; authoritative current wallet; read-only reconcile; FinancialAdminUser UUID allowlist |
-| Pre-merge verification | BE **147 passed**; FE **34 passed**; `tsc`/`lint`/`build`+SW **ok**; nginx reconcile path documented |
-| Production prerequisites | 1) nginx admin allowlist (incl. grant + reconcile) 2) tip FE/BE deploy 3) Alembic **043 then 044** 4) set `ADMIN_STARS_GRANT_ACTOR_IDS` 5) then live grants |
-| Exact next action | **STOP for joint #503+#504 production deployment authorization** — do not migrate or grant yet |
+| Exact next action | See **LIVE — Admin 2.0** section — grants not enabled until financial UUID allowlist authorized |
 
-
-## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — DEPLOYED (see LIVE above)
 
 | Field | Value |
 | --- | --- |
-| Status | **MERGED to `main`** — production tip deploy + Alembic **043** still **pending authorization** |
-| Merged SHA | **`05e93b26`** (merge of tip `c0b62d9c` / implementation `06ddd250`) |
+| Status | **MERGED + DEPLOYED** with #504 |
+| Merged SHA | **`05e93b26`** |
 | Merged at | 2026-11-25 23:55 Asia/Jerusalem (`2026-11-25T21:55:16Z`) |
 | Design doc | [`docs/ADMIN-2.0-BUSINESS-INTELLIGENCE.md`](./ADMIN-2.0-BUSINESS-INTELLIGENCE.md) |
-| Baseline main (pre-merge) | **`f3967dbf`** |
-| Final acceptance | Gross/refund/net no double-subtraction · Jerusalem calendar-day registration trend · classification identity-map refresh · reserved username blocked on invite register + Google auto-username |
-| Migration on `main` | Alembic **043** present (`042 → 043`); **not applied to production** |
-| Combined chain (with #504) | **042 → 043 → 044** — **044** remains on PR **#504** until integrated |
-| Mutations on merge | Classification PATCH only (audited); **no** prod classification / wallet / payment / notification changes |
-| Admin Stars grants | Stacked PR **#504** notified to rebase onto merged `main` `05e93b26` |
-| Pre-merge verification | Tip full suite **1235 passed / 100 failed / 2 errors**; tip failure set vs baseline `f3967dbf`: **99 failed + 2 errors reproduce**; **1** flaky (`test_oldest_queue_tick_would_prefer_earlier_job`, outside #503 diff, passes 3/3 isolated) → **0 newly introduced deterministic failures**; admin/registration **103 passed**; required CI checks **none reported** / mergeable **CLEAN** |
-| Screenshots | **Not generated** |
-| Exact next action | **#504 merged (`6abc0d10`)** — joint #503+#504 production deploy (nginx allowlist + tip + migrations **043 then 044**) pending authorization |
+| Production tip | **`78771a0b`** · Alembic **043**+**044** |
+| Exact next action | See **LIVE — Admin 2.0** section |
 
 ## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 
