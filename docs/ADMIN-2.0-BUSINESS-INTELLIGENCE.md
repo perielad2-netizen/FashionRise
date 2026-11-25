@@ -86,7 +86,7 @@ Social UI distinguishes **actions by audience** vs **engagement received by audi
 | Absolute max | Code constant `ABSOLUTE_GRANT_CEILING = 50_000`; env cannot raise it; invalid max → 10_000 |
 | Default max / confirm | 10_000 / confirm ≥ 500 (exposed via `/admin/stars/grants/config`) |
 | Idempotency | Unique key bound to **actor + recipient + amount + reason + note**; cross-admin replay → 409 |
-| FE recovery | `sessionStorage` pending grant (admin/recipient/amount/reason fingerprint + key); no notes/emails stored |
+| FE recovery | Single pending slot — never overwrite another unresolved grant; read-only `GET …/stars/grants/idempotency/{key}` before retry; re-enter note (not stored in browser); definitive 4xx clears pending; uncertain keeps key |
 | Wallet path | Reuses `ai_stars.credit_stars` under `FOR UPDATE`; SAVEPOINT rolls back wallet+ledger together |
 | Deletion | Migration **044** `ON DELETE SET NULL` for recipient/actor — audit row retained anonymized |
 | Editable | Grant rows **not** editable/deletable via admin UI |

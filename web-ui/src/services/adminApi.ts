@@ -450,6 +450,30 @@ export async function postAdminStarsGrant(
   })
 }
 
+export type AdminStarsGrantReconcileOutcome = 'recorded' | 'not_found' | 'unavailable'
+
+export type AdminStarsGrantReconcileResult = {
+  outcome: AdminStarsGrantReconcileOutcome
+  message: string
+  grant: AdminStarsGrantRecord | null
+  wallet: {
+    recipient_id: string
+    ai_stars: number
+    ai_stars_unlimited: boolean
+    ai_stars_iap_debt: number
+  } | null
+  wallet_mutations: number
+}
+
+/** Read-only reconciliation — never credits Stars. */
+export async function fetchAdminStarsGrantByIdempotency(
+  idempotencyKey: string,
+): Promise<AdminStarsGrantReconcileResult> {
+  return apiRequest(
+    `/admin/stars/grants/idempotency/${encodeURIComponent(idempotencyKey)}`,
+  )
+}
+
 /** Session-scoped pending grant recovery (no notes / emails persisted). */
 export type PendingStarsGrant = {
   adminId: string
@@ -463,7 +487,7 @@ export type PendingStarsGrant = {
 
 const PENDING_GRANT_STORAGE_KEY = 'fr.admin.starsGrant.pending.v1'
 
-function noteFingerprint(note: string): string {
+export function noteFingerprint(note: string): string {
   // Short non-reversible fingerprint — do not store the note itself.
   let h = 0
   const s = note || ''
@@ -509,8 +533,19 @@ export function readPendingStarsGrant(): PendingStarsGrant | null {
   }
 }
 
-export function writePendingStarsGrant(pending: PendingStarsGrant): void {
+/**
+ * Write a pending grant. Never silently overwrites a different unresolved grant.
+ * Same idempotency key may refresh metadata; a different key is blocked.
+ */
+export function writePendingStarsGrant(
+  pending: PendingStarsGrant,
+): { ok: true } | { ok: false; existing: PendingStarsGrant } {
+  const current = readPendingStarsGrant()
+  if (current && current.idempotencyKey !== pending.idempotencyKey) {
+    return { ok: false, existing: current }
+  }
   sessionStorage.setItem(PENDING_GRANT_STORAGE_KEY, JSON.stringify(pending))
+  return { ok: true }
 }
 
 export function clearPendingStarsGrant(idempotencyKey?: string): void {
@@ -536,4 +571,9 @@ export function pendingMatchesPayload(
     pending.reason === input.reason &&
     pending.noteFingerprint === noteFingerprint(input.note)
   )
+}
+
+/** Definitive client/auth/validation failures — do not keep retrying blindly. */
+export function isDefinitiveGrantFailure(status: number): boolean {
+  return status === 400 || status === 401 || status === 403 || status === 404 || status === 409 || status === 422
 }

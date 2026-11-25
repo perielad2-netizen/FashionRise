@@ -189,6 +189,24 @@ def admin_stars_grants_config(_admin: AdminUser) -> dict[str, Any]:
     return admin_stars_grants.grant_limits_payload()
 
 
+@router.get("/stars/grants/idempotency/{idempotency_key}")
+def admin_stars_grant_reconcile(
+    idempotency_key: str,
+    admin: FinancialAdminUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Read-only reconciliation of a grant by idempotency key.
+
+    FinancialAdminUser only. Actor ownership enforced. No wallet mutations.
+    """
+    try:
+        return admin_stars_grants.reconcile_grant_by_idempotency(
+            db, actor=admin, idempotency_key=idempotency_key
+        )
+    except AppError:
+        raise
+
+
 @router.get("/stars/grants")
 def admin_stars_grants_overview(
     _admin: AdminUser,

@@ -1,8 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { ApiError } from '@/services/api/client'
 import {
   buildPendingStarsGrant,
   clearPendingStarsGrant,
+  fetchAdminStarsGrantByIdempotency,
   fetchAdminStarsGrantLimits,
+  isDefinitiveGrantFailure,
+  noteFingerprint,
   parsePositiveGrantAmount,
   pendingMatchesPayload,
   postAdminStarsGrant,
@@ -26,7 +30,7 @@ const REASONS: Array<{ id: AdminStarsGrantReason; label: string }> = [
   { id: 'OTHER', label: 'Other' },
 ]
 
-type Step = 'form' | 'confirm' | 'success'
+type Step = 'form' | 'confirm' | 'success' | 'blocked'
 
 type Props = {
   customer: Pick<
@@ -36,6 +40,12 @@ type Props = {
   adminId: string
   onClose: () => void
   onGranted: (grant: AdminStarsGrantRecord) => void
+  /** Optional wallet refresh when reconcile returns a newer balance. */
+  onWalletRefresh?: (wallet: {
+    ai_stars: number
+    ai_stars_unlimited: boolean
+    ai_stars_iap_debt: number
+  }) => void
 }
 
 function newIdempotencyKey(): string {
@@ -45,12 +55,19 @@ function newIdempotencyKey(): string {
   return `grant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props) {
+export function GrantStarsModal({
+  customer,
+  adminId,
+  onClose,
+  onGranted,
+  onWalletRefresh,
+}: Props) {
   const titleId = useId()
+  const [walletStars, setWalletStars] = useState(Number(customer.wallet.ai_stars || 0))
   const unlimited = Boolean(customer.wallet.ai_stars_unlimited)
   const debt = Number(customer.wallet.ai_stars_iap_debt || 0)
   const blocked = unlimited || debt > 0
-  const current = Number(customer.wallet.ai_stars || 0)
+  const current = walletStars
 
   const [maxPerTxn, setMaxPerTxn] = useState(10_000)
   const [largeThreshold, setLargeThreshold] = useState(500)
@@ -60,10 +77,18 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [reconciling, setReconciling] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
   const [result, setResult] = useState<AdminStarsGrantRecord | null>(null)
   const [uncertain, setUncertain] = useState(false)
+  const [noteRequiredForRecovery, setNoteRequiredForRecovery] = useState(false)
+  const [blockingPending, setBlockingPending] = useState<{
+    recipientId: string
+    idempotencyKey: string
+  } | null>(null)
+  const [walletChangedNote, setWalletChangedNote] = useState<string | null>(null)
   const submitLock = useRef(false)
+  const reconcileOnce = useRef(false)
 
   useEffect(() => {
     void fetchAdminStarsGrantLimits()
@@ -76,21 +101,88 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
       })
   }, [])
 
-  // Restore pending grant for this admin + recipient after refresh / reopen.
+  // Restore pending grant / block other-customer unresolved grants.
   useEffect(() => {
+    if (reconcileOnce.current) return
+    reconcileOnce.current = true
     const pending = readPendingStarsGrant()
     if (!pending) return
-    if (pending.adminId !== adminId || pending.recipientId !== customer.id) return
+    if (pending.adminId !== adminId) return
+
+    if (pending.recipientId !== customer.id) {
+      setBlockingPending({
+        recipientId: pending.recipientId,
+        idempotencyKey: pending.idempotencyKey,
+      })
+      setStep('blocked')
+      setError(
+        'An unresolved Stars grant for another customer is still pending recovery. ' +
+          'Reconcile that grant before starting a new one — the pending record was not overwritten.',
+      )
+      return
+    }
+
     setIdempotencyKey(pending.idempotencyKey)
     setAmountRaw(String(pending.amount))
     setReason(pending.reason as AdminStarsGrantReason)
     setUncertain(true)
-    setError(
-      'A previous grant attempt for this customer may still be unresolved. ' +
-        'Confirm to reconcile with the same idempotency key — do not change the amount.',
-    )
+    setNoteRequiredForRecovery(pending.noteFingerprint !== noteFingerprint(''))
+    setNote('')
     setStep('confirm')
-  }, [adminId, customer.id])
+    setReconciling(true)
+    setError('Checking whether this grant already completed…')
+
+    void fetchAdminStarsGrantByIdempotency(pending.idempotencyKey)
+      .then((rec) => {
+        if (rec.outcome === 'recorded' && rec.grant) {
+          clearPendingStarsGrant(pending.idempotencyKey)
+          setResult(rec.grant)
+          setUncertain(false)
+          setNoteRequiredForRecovery(false)
+          if (rec.wallet) {
+            setWalletStars(rec.wallet.ai_stars)
+            onWalletRefresh?.({
+              ai_stars: rec.wallet.ai_stars,
+              ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
+              ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
+            })
+            if (rec.wallet.ai_stars !== rec.grant.balance_after) {
+              setWalletChangedNote(
+                `Wallet has changed since the grant completed (current balance ${rec.wallet.ai_stars.toLocaleString()} Stars; grant recorded balance after ${rec.grant.balance_after.toLocaleString()}).`,
+              )
+            }
+          }
+          setError(null)
+          setStep('success')
+          onGranted(rec.grant)
+          return
+        }
+        if (rec.outcome === 'unavailable') {
+          setError(
+            rec.message ||
+              'Grant reconciliation is unavailable for this administrator. Do not submit a new key.',
+          )
+          setStep('blocked')
+          return
+        }
+        // not_found — preserve key; require exact payload (incl. note) before retry.
+        setError(
+          'No completed grant was found for this idempotency key yet. ' +
+            'A concurrent request may still commit. Re-enter the exact original note (if any), ' +
+            'then confirm to retry with the same key — do not change the amount.',
+        )
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Reconciliation failed'
+        setError(
+          `${msg}. Pending grant kept. Re-enter the original note if needed, then confirm — ` +
+            'the same idempotency key will be reused. Not-found / network errors are not proof of failure.',
+        )
+      })
+      .finally(() => {
+        setReconciling(false)
+      })
+  }, [adminId, customer.id, onGranted, onWalletRefresh])
 
   const amount = parsePositiveGrantAmount(amountRaw)
   const previewAfter = amount != null ? current + amount : null
@@ -113,6 +205,27 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
     }
     if (reason === 'OTHER' && !note.trim()) return 'An explanatory note is required for Other.'
     if (note.trim().length > 2000) return 'Note must be at most 2000 characters.'
+    if (uncertain) {
+      const pending = readPendingStarsGrant()
+      if (
+        pending &&
+        !pendingMatchesPayload(pending, {
+          adminId,
+          recipientId: customer.id,
+          amount,
+          reason,
+          note: note.trim(),
+        })
+      ) {
+        if (noteRequiredForRecovery && !note.trim()) {
+          return 'Re-enter the original internal note before retrying this pending grant.'
+        }
+        return (
+          'Reconstructed payload must match the pending grant (amount, reason, and note). ' +
+          'Do not change the amount or start a new idempotency key.'
+        )
+      }
+    }
     return null
   }
 
@@ -127,7 +240,7 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
   }
 
   function attemptClose() {
-    if (submitting || submitLock.current) {
+    if (submitting || submitLock.current || reconciling) {
       setError('Grant is in progress — wait for confirmation before closing.')
       return
     }
@@ -135,7 +248,7 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
   }
 
   async function confirmGrant() {
-    if (submitLock.current || submitting) return
+    if (submitLock.current || submitting || reconciling) return
     const err = validateForm()
     if (err || amount == null) {
       setError(err ?? 'Invalid amount')
@@ -146,6 +259,17 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
     const pendingExisting = readPendingStarsGrant()
     let key = idempotencyKey
     if (pendingExisting) {
+      if (pendingExisting.adminId === adminId && pendingExisting.recipientId !== customer.id) {
+        setError(
+          'An unresolved grant for another customer must be reconciled before submitting a new grant.',
+        )
+        setBlockingPending({
+          recipientId: pendingExisting.recipientId,
+          idempotencyKey: pendingExisting.idempotencyKey,
+        })
+        setStep('blocked')
+        return
+      }
       const matches = pendingMatchesPayload(pendingExisting, {
         adminId,
         recipientId: customer.id,
@@ -157,12 +281,46 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
         key = pendingExisting.idempotencyKey
         setIdempotencyKey(key)
       } else if (pendingExisting.recipientId === customer.id && pendingExisting.adminId === adminId) {
-        // Same recipient, different payload while unresolved — refuse new key.
         setError(
           'A pending grant with different details exists for this customer. ' +
-            'Reconcile or clear the session pending grant before submitting a new amount.',
+            'Re-enter the exact original note and amount, or reconcile via the server before a new grant.',
         )
         return
+      }
+    }
+
+    // Prefer read-only reconcile before another POST when recovering.
+    if (uncertain) {
+      try {
+        const rec = await fetchAdminStarsGrantByIdempotency(key)
+        if (rec.outcome === 'recorded' && rec.grant) {
+          clearPendingStarsGrant(key)
+          setResult(rec.grant)
+          setUncertain(false)
+          if (rec.wallet) {
+            setWalletStars(rec.wallet.ai_stars)
+            onWalletRefresh?.({
+              ai_stars: rec.wallet.ai_stars,
+              ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
+              ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
+            })
+            if (rec.wallet.ai_stars !== rec.grant.balance_after) {
+              setWalletChangedNote(
+                `Wallet has changed since the grant completed (current balance ${rec.wallet.ai_stars.toLocaleString()} Stars).`,
+              )
+            }
+          }
+          setStep('success')
+          onGranted(rec.grant)
+          return
+        }
+        if (rec.outcome === 'unavailable') {
+          setError(rec.message)
+          setStep('blocked')
+          return
+        }
+      } catch {
+        // Fall through to POST — uncertain network; keep same key.
       }
     }
 
@@ -174,12 +332,23 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
       note: note.trim(),
       idempotencyKey: key,
     })
-    writePendingStarsGrant(pending)
+    const writeResult = writePendingStarsGrant(pending)
+    if (!writeResult.ok) {
+      setError(
+        'An unresolved pending grant already exists and was not overwritten. ' +
+          `Reconcile recipient ${writeResult.existing.recipientId} first.`,
+      )
+      setBlockingPending({
+        recipientId: writeResult.existing.recipientId,
+        idempotencyKey: writeResult.existing.idempotencyKey,
+      })
+      setStep('blocked')
+      return
+    }
 
     submitLock.current = true
     setSubmitting(true)
     setError(null)
-    setUncertain(false)
     try {
       const grant = await postAdminStarsGrant(customer.id, {
         amount,
@@ -189,18 +358,32 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
         confirm_large: amount >= largeThreshold,
       })
       clearPendingStarsGrant(key)
+      setUncertain(false)
+      setNoteRequiredForRecovery(false)
       setResult(grant)
+      setWalletStars(grant.balance_after)
       setStep('success')
       onGranted(grant)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Grant failed'
-      // Keep pending key for retry / refresh recovery on uncertain network outcomes.
-      setUncertain(true)
-      setError(
-        `${msg}. If the network dropped after submit, reopen this grant and confirm again — ` +
-          'the same idempotency key will be reused.',
-      )
-      setStep('confirm')
+      const status = e instanceof ApiError ? e.status : 0
+      if (status && isDefinitiveGrantFailure(status)) {
+        // Definitive rejection — clear pending so a corrected new attempt can proceed.
+        clearPendingStarsGrant(key)
+        setUncertain(false)
+        setNoteRequiredForRecovery(false)
+        setIdempotencyKey(newIdempotencyKey())
+        setError(`${msg}. This rejection is definitive — pending recovery was cleared.`)
+        setStep('form')
+      } else {
+        setUncertain(true)
+        setNoteRequiredForRecovery(noteFingerprint(note.trim()) !== noteFingerprint(''))
+        setError(
+          `${msg}. Outcome uncertain. Reopen or confirm again with the same idempotency key ` +
+            'after re-entering the original note — do not start a new key.',
+        )
+        setStep('confirm')
+      }
     } finally {
       submitLock.current = false
       setSubmitting(false)
@@ -212,7 +395,7 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
       className={styles.scrim}
       role="presentation"
       onClick={() => {
-        if (!submitting) attemptClose()
+        if (!submitting && !reconciling) attemptClose()
       }}
     >
       <div
@@ -231,7 +414,7 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
             type="button"
             className={styles.close}
             onClick={attemptClose}
-            disabled={submitting}
+            disabled={submitting || reconciling}
           >
             Close
           </button>
@@ -258,12 +441,36 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
 
         {uncertain ? (
           <div className={styles.banner} role="status">
-            Pending grant recovery active — idempotency key reused for this administrator +
-            recipient + payload.
+            Pending grant recovery active — idempotency key preserved. Reconcile via the server
+            before posting again. Notes are not stored in the browser; re-enter the original note
+            if one was supplied.
           </div>
         ) : null}
 
         {error ? <div className={styles.error}>{error}</div> : null}
+
+        {step === 'blocked' ? (
+          <div className={styles.body}>
+            <p className={styles.confirmLead}>
+              Grant submission is blocked until the unresolved pending operation is reconciled.
+            </p>
+            {blockingPending ? (
+              <ul className={styles.confirmList}>
+                <li>
+                  Pending recipient id: <code>{blockingPending.recipientId}</code>
+                </li>
+                <li>
+                  Idempotency key: <code>{blockingPending.idempotencyKey}</code>
+                </li>
+              </ul>
+            ) : null}
+            <div className={styles.actions}>
+              <button type="button" className={styles.primary} onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {step === 'form' && !blocked ? (
           <div className={styles.body}>
@@ -336,14 +543,20 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
             </label>
 
             <label className={styles.field}>
-              Internal note{reason === 'OTHER' ? ' (required)' : ' (optional)'}
+              Internal note
+              {reason === 'OTHER' || noteRequiredForRecovery
+                ? ' (required)'
+                : ' (optional)'}
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={2000}
                 rows={3}
-                placeholder="Visible only to administrators"
-                readOnly={uncertain}
+                placeholder={
+                  noteRequiredForRecovery
+                    ? 'Re-enter the exact original internal note'
+                    : 'Visible only to administrators'
+                }
               />
             </label>
 
@@ -386,6 +599,19 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
                 Reason: <strong>{reasonLabel}</strong>
               </li>
             </ul>
+            {uncertain ? (
+              <label className={styles.field}>
+                Internal note
+                {noteRequiredForRecovery || reason === 'OTHER' ? ' (required for retry)' : ''}
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={2000}
+                  rows={3}
+                  placeholder="Re-enter the exact original internal note (not stored in the browser)"
+                />
+              </label>
+            ) : null}
             <p className={styles.warn}>
               This operation cannot be undone from the administration panel. The backend calculates
               the authoritative balance atomically. Rapid double-clicks are ignored.
@@ -395,9 +621,9 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
                 type="button"
                 className={styles.secondary}
                 onClick={() => {
-                  if (!submitting) setStep('form')
+                  if (!submitting && !reconciling) setStep('form')
                 }}
-                disabled={submitting}
+                disabled={submitting || reconciling}
               >
                 Back
               </button>
@@ -405,11 +631,13 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
                 type="button"
                 className={styles.primary}
                 onClick={() => void confirmGrant()}
-                disabled={submitting}
+                disabled={submitting || reconciling}
               >
-                {submitting
-                  ? 'Granting…'
-                  : `Confirm & Grant ${amount.toLocaleString()} Stars`}
+                {submitting || reconciling
+                  ? 'Working…'
+                  : uncertain
+                    ? `Reconcile / Confirm ${amount.toLocaleString()} Stars`
+                    : `Confirm & Grant ${amount.toLocaleString()} Stars`}
               </button>
             </div>
           </div>
@@ -419,7 +647,7 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
           <div className={styles.body}>
             <div className={styles.success} role="status">
               Stars granted successfully
-              {result.idempotent_replay ? ' (idempotent replay)' : ''}
+              {result.idempotent_replay ? ' (idempotent replay / reconciled)' : ''}
             </div>
             <ul className={styles.confirmList}>
               <li>
@@ -427,12 +655,21 @@ export function GrantStarsModal({ customer, adminId, onClose, onGranted }: Props
                 <strong className={styles.positive}>+{result.amount.toLocaleString()}</strong>
               </li>
               <li>
-                New balance: <strong>{result.balance_after.toLocaleString()} Stars</strong>
+                Balance after grant:{' '}
+                <strong>{result.balance_after.toLocaleString()} Stars</strong>
+              </li>
+              <li>
+                Current wallet: <strong>{current.toLocaleString()} Stars</strong>
               </li>
               <li>
                 Grant reference: <code>{result.grant_id}</code>
               </li>
             </ul>
+            {walletChangedNote ? (
+              <p className={styles.warn} role="status">
+                {walletChangedNote}
+              </p>
+            ) : null}
             <div className={styles.actions}>
               <button type="button" className={styles.primary} onClick={onClose}>
                 Done

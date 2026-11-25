@@ -9,12 +9,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **DRAFT** — Final integration corrections; syncing onto merged #503 `main`; **STOP** — not deployed / no live grants |
-| Stack / base | Rebase onto merged `main` (**`05e93b26`** / docs tip **`02cc2598`**) |
+| Status | **DRAFT** — Final integration corrections on merged #503 `main`; **STOP** — not deployed / no live grants |
+| Stack / base | Rebased onto merged `main` (**`05e93b26`** / docs tip **`02cc2598`**) |
 | Branch | `cursor/admin-positive-only-stars-grants-77c6` |
-| Design | Positive-only ADD; pending isolation; read-only reconcile; uncertain-retry preserves key; authoritative current wallet display |
-| Migration chain | **042 → 043 → 044** (043 on main; 044 this PR) |
-| Exact next action | Verify → merge #504 → joint deploy authorization separately |
+| Inspected SHA (pre-recovery) | **`a44239db`** (prior tip **`a33e4afe`**) |
+| Final recovery SHA | **`fa861d60`** |
+| Design | Positive-only ADD; pending isolation; read-only reconcile; uncertain-retry preserves key; authoritative current wallet; migration **044** |
 
 
 ## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED

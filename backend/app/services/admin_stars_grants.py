@@ -305,6 +305,76 @@ def list_grants_for_user(
     return [_serialize(r) for r in rows]
 
 
+def reconcile_grant_by_idempotency(
+    db: Session,
+    *,
+    actor: User,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    """Read-only lookup of a completed grant by idempotency key.
+
+    Outcomes:
+    - ``recorded`` — grant exists and was created by this financial admin.
+    - ``not_found`` — no row yet; a concurrent POST may still commit
+      (not-found is **not** proof that the operation cannot complete).
+    - ``unavailable`` — a grant exists for this key but is not owned by the
+      requesting administrator (details withheld).
+
+    Never mutates wallets or grant rows.
+    """
+    idem = _validate_idempotency_key(idempotency_key)
+    existing = db.scalar(
+        select(AdminStarsGrant).where(AdminStarsGrant.idempotency_key == idem)
+    )
+    if existing is None:
+        return {
+            "outcome": "not_found",
+            "message": (
+                "No completed grant recorded for this idempotency key. "
+                "A concurrent request may still commit — not-found is not "
+                "proof that the operation cannot complete."
+            ),
+            "grant": None,
+            "wallet": None,
+            "wallet_mutations": 0,
+        }
+
+    if existing.actor_id != actor.id:
+        return {
+            "outcome": "unavailable",
+            "message": (
+                "Grant reconciliation is unavailable for this administrator. "
+                "Another administrator may own this idempotency key."
+            ),
+            "grant": None,
+            "wallet": None,
+            "wallet_mutations": 0,
+        }
+
+    wallet: dict[str, Any] | None = None
+    if existing.recipient_id is not None:
+        recipient = db.get(User, existing.recipient_id)
+        if recipient is not None:
+            wallet = {
+                "recipient_id": str(recipient.id),
+                "ai_stars": int(recipient.ai_stars or 0),
+                "ai_stars_unlimited": bool(
+                    ai_stars.user_has_unlimited_stars(recipient)
+                ),
+                "ai_stars_iap_debt": max(
+                    0, int(getattr(recipient, "ai_stars_iap_debt", 0) or 0)
+                ),
+            }
+
+    return {
+        "outcome": "recorded",
+        "message": "Completed grant recorded for this idempotency key.",
+        "grant": {**_serialize(existing), "idempotent_replay": True},
+        "wallet": wallet,
+        "wallet_mutations": 0,
+    }
+
+
 def grants_overview(
     db: Session,
     *,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildPendingStarsGrant,
   clearPendingStarsGrant,
+  isDefinitiveGrantFailure,
   pendingMatchesPayload,
   readPendingStarsGrant,
   writePendingStarsGrant,
@@ -25,7 +26,7 @@ describe('pending Stars grant session recovery', () => {
       note: 'secret customer note',
       idempotencyKey: 'grant-abc-12345678',
     })
-    writePendingStarsGrant(pending)
+    expect(writePendingStarsGrant(pending).ok).toBe(true)
     const raw = sessionStorage.getItem('fr.admin.starsGrant.pending.v1')!
     expect(raw).not.toContain('secret customer note')
     const restored = readPendingStarsGrant()
@@ -92,10 +93,69 @@ describe('pending Stars grant session recovery', () => {
         idempotencyKey: 'grant-refresh-key',
       }),
     )
-    // Simulate modal remount / page refresh within the same browser session.
     const again = readPendingStarsGrant()
     expect(again?.idempotencyKey).toBe('grant-refresh-key')
     expect(again?.amount).toBe(500)
+  })
+
+  it('refuses to overwrite customer A pending when writing customer B', () => {
+    const pendingA = buildPendingStarsGrant({
+      adminId: 'admin-1',
+      recipientId: 'customer-a',
+      amount: 50,
+      reason: 'CUSTOMER_APPRECIATION',
+      note: '',
+      idempotencyKey: 'grant-customer-a-key',
+    })
+    expect(writePendingStarsGrant(pendingA).ok).toBe(true)
+
+    const pendingB = buildPendingStarsGrant({
+      adminId: 'admin-1',
+      recipientId: 'customer-b',
+      amount: 25,
+      reason: 'WELCOME_BONUS',
+      note: '',
+      idempotencyKey: 'grant-customer-b-key',
+    })
+    const result = writePendingStarsGrant(pendingB)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.existing.recipientId).toBe('customer-a')
+      expect(result.existing.idempotencyKey).toBe('grant-customer-a-key')
+    }
+    expect(readPendingStarsGrant()?.recipientId).toBe('customer-a')
+    expect(readPendingStarsGrant()?.idempotencyKey).toBe('grant-customer-a-key')
+  })
+
+  it('allows rewriting the same unresolved idempotency key', () => {
+    const first = buildPendingStarsGrant({
+      adminId: 'admin-1',
+      recipientId: 'customer-a',
+      amount: 50,
+      reason: 'CUSTOMER_APPRECIATION',
+      note: 'n1',
+      idempotencyKey: 'grant-same-key-01',
+    })
+    expect(writePendingStarsGrant(first).ok).toBe(true)
+    const again = buildPendingStarsGrant({
+      adminId: 'admin-1',
+      recipientId: 'customer-a',
+      amount: 50,
+      reason: 'CUSTOMER_APPRECIATION',
+      note: 'n1',
+      idempotencyKey: 'grant-same-key-01',
+    })
+    expect(writePendingStarsGrant(again).ok).toBe(true)
+    expect(readPendingStarsGrant()?.idempotencyKey).toBe('grant-same-key-01')
+  })
+
+  it('classifies definitive vs uncertain grant failures', () => {
+    expect(isDefinitiveGrantFailure(422)).toBe(true)
+    expect(isDefinitiveGrantFailure(403)).toBe(true)
+    expect(isDefinitiveGrantFailure(409)).toBe(true)
+    expect(isDefinitiveGrantFailure(401)).toBe(true)
+    expect(isDefinitiveGrantFailure(500)).toBe(false)
+    expect(isDefinitiveGrantFailure(0)).toBe(false)
   })
 })
 

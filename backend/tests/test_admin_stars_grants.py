@@ -993,3 +993,175 @@ def test_grants_config_endpoint(
     assert body["max_per_transaction"] == 10_000
     assert body["absolute_ceiling"] == 50_000
     assert body["large_confirm_threshold"] == 500
+
+
+def test_reconcile_recorded_after_lost_response(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    """Refresh after a successful grant whose response was lost → recorded, zero mutations."""
+    admin = _admin(db_session, tag="rec1")
+    _authorize_financial(monkeypatch, admin)
+    recipient = _user(db_session, username="lost_resp", ai_stars_balance=10)
+    key = f"lost-{uuid.uuid4()}"
+    created = client.post(
+        f"/api/v1/admin/users/{recipient.id}/stars/grants",
+        headers=_auth(admin),
+        json=_grant_payload(amount=50, idempotency_key=key, note="secret note"),
+    )
+    assert created.status_code == 201
+    db_session.refresh(recipient)
+    assert recipient.ai_stars == 60
+    stars_before = recipient.ai_stars
+    grant_count_before = int(
+        db_session.scalar(select(func.count()).select_from(AdminStarsGrant)) or 0
+    )
+
+    rec = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/{key}",
+        headers=_auth(admin),
+    )
+    assert rec.status_code == 200
+    body = rec.json()
+    assert body["outcome"] == "recorded"
+    assert body["wallet_mutations"] == 0
+    assert body["grant"]["amount"] == 50
+    assert body["grant"]["balance_after"] == 60
+    assert body["grant"]["note"] == "secret note"
+    assert body["grant"]["idempotent_replay"] is True
+    assert body["wallet"]["ai_stars"] == 60
+
+    db_session.refresh(recipient)
+    assert recipient.ai_stars == stars_before
+    grant_count_after = int(
+        db_session.scalar(select(func.count()).select_from(AdminStarsGrant)) or 0
+    )
+    assert grant_count_after == grant_count_before
+
+
+def test_reconcile_not_found_is_not_proof_of_absence(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    admin = _admin(db_session, tag="rec2")
+    _authorize_financial(monkeypatch, admin)
+    key = f"missing-{uuid.uuid4()}"
+    rec = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/{key}",
+        headers=_auth(admin),
+    )
+    assert rec.status_code == 200
+    body = rec.json()
+    assert body["outcome"] == "not_found"
+    assert body["grant"] is None
+    assert body["wallet_mutations"] == 0
+    assert "concurrent" in body["message"].lower()
+
+
+def test_reconcile_cross_administrator_unavailable(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    admin_a = _admin(db_session, tag="rec_a")
+    admin_b = _admin(db_session, tag="rec_b")
+    _authorize_financial(monkeypatch, admin_a, admin_b)
+    recipient = _user(db_session, username="cross_rec", ai_stars_balance=10)
+    key = f"cross-rec-{uuid.uuid4()}"
+    assert (
+        client.post(
+            f"/api/v1/admin/users/{recipient.id}/stars/grants",
+            headers=_auth(admin_a),
+            json=_grant_payload(amount=25, idempotency_key=key),
+        ).status_code
+        == 201
+    )
+    db_session.refresh(recipient)
+    before = int(recipient.ai_stars)
+    rec = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/{key}",
+        headers=_auth(admin_b),
+    )
+    assert rec.status_code == 200
+    body = rec.json()
+    assert body["outcome"] == "unavailable"
+    assert body["grant"] is None
+    assert body["wallet"] is None
+    assert body["wallet_mutations"] == 0
+    db_session.refresh(recipient)
+    assert recipient.ai_stars == before
+
+
+def test_reconcile_wallet_changed_after_grant(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    admin = _admin(db_session, tag="rec3")
+    _authorize_financial(monkeypatch, admin)
+    recipient = _user(db_session, username="wallet_moved", ai_stars_balance=10)
+    key = f"moved-{uuid.uuid4()}"
+    assert (
+        client.post(
+            f"/api/v1/admin/users/{recipient.id}/stars/grants",
+            headers=_auth(admin),
+            json=_grant_payload(amount=40, idempotency_key=key),
+        ).status_code
+        == 201
+    )
+    # Simulate later consumption changing the wallet after the original grant.
+    recipient = db_session.get(User, recipient.id)
+    assert recipient is not None
+    recipient.ai_stars = 30
+    db_session.commit()
+
+    rec = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/{key}",
+        headers=_auth(admin),
+    )
+    assert rec.status_code == 200
+    body = rec.json()
+    assert body["outcome"] == "recorded"
+    assert body["grant"]["balance_after"] == 50  # original recorded after
+    assert body["wallet"]["ai_stars"] == 30  # current authoritative wallet
+    assert body["wallet_mutations"] == 0
+    db_session.refresh(recipient)
+    assert recipient.ai_stars == 30
+
+
+def test_reconcile_requires_financial_admin(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    admin = _admin(db_session, tag="rec_nf")
+    # Admin but not on financial allowlist.
+    monkeypatch.setenv("ADMIN_STARS_GRANT_ACTOR_IDS", "")
+    get_settings.cache_clear()
+    r = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/some-key-xx",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 403
+
+
+def test_reconcile_other_reason_with_note(
+    client: TestClient, db_session: Session, grant_env, monkeypatch
+):
+    admin = _admin(db_session, tag="rec_ot")
+    _authorize_financial(monkeypatch, admin)
+    recipient = _user(db_session, username="other_note_rec", ai_stars_balance=5)
+    key = f"other-note-{uuid.uuid4()}"
+    created = client.post(
+        f"/api/v1/admin/users/{recipient.id}/stars/grants",
+        headers=_auth(admin),
+        json=_grant_payload(
+            amount=10,
+            reason="OTHER",
+            note="manual goodwill adjustment",
+            idempotency_key=key,
+        ),
+    )
+    assert created.status_code == 201
+    rec = client.get(
+        f"/api/v1/admin/stars/grants/idempotency/{key}",
+        headers=_auth(admin),
+    )
+    assert rec.status_code == 200
+    body = rec.json()
+    assert body["outcome"] == "recorded"
+    assert body["grant"]["reason"] == "OTHER"
+    assert body["grant"]["note"] == "manual goodwill adjustment"
+    assert body["wallet_mutations"] == 0

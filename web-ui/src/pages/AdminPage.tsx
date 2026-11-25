@@ -12,6 +12,7 @@ import {
   fetchClassificationDryRun,
   fetchMetricDictionary,
   patchAdminClassification,
+  readPendingStarsGrant,
   type AccountClassification,
   type AdminCustomer,
   type AdminCustomerDetail,
@@ -238,6 +239,20 @@ function AdminShell() {
 
   async function openGrantFor(id: string) {
     try {
+      const pending = readPendingStarsGrant()
+      if (
+        pending &&
+        user &&
+        pending.adminId === user.id &&
+        pending.recipientId !== id
+      ) {
+        setError(
+          'An unresolved Stars grant for another customer is still pending recovery. ' +
+            'Open that customer and reconcile before granting Stars to someone else — ' +
+            'the pending record was not overwritten.',
+        )
+        return
+      }
       const detail = await fetchAdminCustomer(id)
       setGrantTarget(detail)
     } catch (err) {
@@ -1187,7 +1202,7 @@ function AdminShell() {
                 type="button"
                 className={styles.grantBtnWide}
                 disabled={selectedCustomer.wallet.ai_stars_unlimited}
-                onClick={() => setGrantTarget(selectedCustomer)}
+                onClick={() => void openGrantFor(selectedCustomer.id)}
               >
                 + Grant Stars
               </button>
@@ -1354,6 +1369,34 @@ function AdminShell() {
           customer={grantTarget}
           adminId={user.id}
           onClose={() => setGrantTarget(null)}
+          onWalletRefresh={(wallet) => {
+            setSelectedCustomer((prev) =>
+              prev && prev.id === grantTarget.id
+                ? {
+                    ...prev,
+                    wallet: {
+                      ...prev.wallet,
+                      ai_stars: wallet.ai_stars,
+                      ai_stars_unlimited: wallet.ai_stars_unlimited,
+                      ai_stars_iap_debt: wallet.ai_stars_iap_debt,
+                    },
+                  }
+                : prev,
+            )
+            setGrantTarget((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    wallet: {
+                      ...prev.wallet,
+                      ai_stars: wallet.ai_stars,
+                      ai_stars_unlimited: wallet.ai_stars_unlimited,
+                      ai_stars_iap_debt: wallet.ai_stars_iap_debt,
+                    },
+                  }
+                : prev,
+            )
+          }}
           onGranted={(grant) => {
             setSelectedCustomer((prev) =>
               prev && prev.id === grant.recipient_id
