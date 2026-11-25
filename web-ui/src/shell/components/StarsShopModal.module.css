@@ -361,6 +361,144 @@
   line-height: 1.4;
 }
 
+/* Browser / PWA — Get more Stars (no checkout) */
+.webStorePanel {
+  margin: 0;
+  padding: 18px 16px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(253, 230, 138, 0.2);
+  background:
+    radial-gradient(90% 80% at 12% 0%, rgba(253, 230, 138, 0.14), transparent 55%),
+    radial-gradient(70% 70% at 100% 10%, rgba(244, 114, 182, 0.12), transparent 50%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.webStoreIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: rgba(253, 230, 138, 0.12);
+  color: #fde68a;
+}
+
+/* Beat `.section h3` (uppercase label style) — keep display heading sentence case. */
+.webStorePanel .webStoreHeading {
+  margin: 0 0 8px;
+  font-family: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: #fff8e8;
+}
+
+.webStoreLead {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: rgba(248, 244, 240, 0.82);
+}
+
+.webStoreSync {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(248, 244, 240, 0.58);
+}
+
+.storeOptions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.storeCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.storeCardAvailable {
+  border-color: rgba(253, 230, 138, 0.28);
+}
+
+.storeCardSoon {
+  opacity: 0.88;
+}
+
+.storeCardBody {
+  min-width: 0;
+}
+
+.storeCardTitle {
+  font-weight: 650;
+  font-size: 0.95rem;
+  color: #f8f4f0;
+}
+
+.storeCardSub {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(248, 244, 240, 0.62);
+}
+
+.storeLink {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f8e7b0 0%, #e8b86d 48%, #f0a3c2 100%);
+  color: #1a1014;
+  font-weight: 650;
+  font-size: 0.84rem;
+  text-decoration: none;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+
+.storeLink:hover {
+  filter: brightness(1.05);
+}
+
+.storeLink:focus-visible {
+  outline: 2px solid #fde68a;
+  outline-offset: 2px;
+}
+
+.storeLink:active {
+  transform: scale(0.98);
+}
+
+.storeBadge {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(253, 230, 138, 0.92);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
 .error {
   margin: 12px 0 0;
   color: #fecaca;
