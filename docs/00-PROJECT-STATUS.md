@@ -3,7 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:30 Asia/Jerusalem — Stable Admin FE **`cd988519`** LIVE + #514 merged to `main` (`f2ea69b7`)
+**Last updated:** 2026-11-26 01:58 Asia/Jerusalem — Admin Customers Classification multi-select checkbox filter (pending tip deploy)
+
+## READY — Admin Classification multi-select checkbox filter
+
+| Field | Value |
+| --- | --- |
+| Status | **Implemented** — Customers Classification filter is checkbox multi-select (not single radio/select) |
+| Branch | `cursor/admin-class-checkbox-filter-77c6` |
+| API | `GET /admin/customers?classification=QA_AUTOMATION,INTERNAL_TESTER` (comma-separated) |
+| UX | Details panel with checkboxes; summary shows All / one / first+N |
+| Prerequisite | #514/#515 merged on `main`; stale #510 closed |
+| Exact next action | Merge → FE+BE tip deploy |
 
 ## LIVE — Stable Admin mobile UX (sticky + Customers toolbar) (2026-11-26 Asia/Jerusalem)
 

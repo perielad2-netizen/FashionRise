@@ -716,6 +716,29 @@ def test_customers_pagination(client: TestClient, db_session: Session):
     assert ids1.isdisjoint(ids2)
 
 
+def test_customers_multi_classification_checkbox_filter(
+    client: TestClient, db_session: Session
+):
+    admin = _user(db_session, username="yanivprbk")
+    _user(db_session, username="multi_cust", classification="CUSTOMER")
+    _user(db_session, username="multi_qa", classification="QA_AUTOMATION")
+    _user(db_session, username="multi_internal", classification="INTERNAL_TESTER")
+    _user(db_session, username="multi_owner", classification="OWNER")
+    r = client.get(
+        "/api/v1/admin/customers"
+        "?audience=all&classification=QA_AUTOMATION,INTERNAL_TESTER&sort=username_asc",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    classes = {item["classification"] for item in body["items"]}
+    assert classes <= {"QA_AUTOMATION", "INTERNAL_TESTER"}
+    assert "QA_AUTOMATION" in classes
+    assert "INTERNAL_TESTER" in classes
+    assert "CUSTOMER" not in classes
+    assert body["classifications"] == ["QA_AUTOMATION", "INTERNAL_TESTER"]
+
+
 def test_metric_dictionary(client: TestClient, db_session: Session):
     admin = _user(db_session, username="yanivprbk")
     r = client.get("/api/v1/admin/metrics/dictionary", headers=_auth(admin))

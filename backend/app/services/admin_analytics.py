@@ -226,6 +226,41 @@ def _classification_of(user: User) -> str:
     return raw
 
 
+def _parse_classification_filters(classification: str | None) -> list[str]:
+    """Accept a single value or comma-separated multi-select filter."""
+    if not classification:
+        return []
+    raw_parts = [p.strip().upper() for p in classification.split(",")]
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in raw_parts:
+        if not part or part in seen:
+            continue
+        if part not in ACCOUNT_CLASSIFICATIONS:
+            raise ValueError(f"Invalid classification filter: {part}")
+        seen.add(part)
+        out.append(part)
+    return out
+
+
+def _classification_filter(classes: list[str]):
+    """Match any selected classification. UNCLASSIFIED includes NULL legacy rows."""
+    if not classes:
+        return None
+    conds = []
+    for c in classes:
+        if c == "UNCLASSIFIED":
+            conds.append(
+                or_(
+                    User.account_classification.is_(None),
+                    User.account_classification == "UNCLASSIFIED",
+                )
+            )
+        else:
+            conds.append(User.account_classification == c)
+    return or_(*conds) if len(conds) > 1 else conds[0]
+
+
 def _is_production_env(environment: str | None) -> bool:
     env = (environment or "").strip().lower()
     return env in _PRODUCTION_ENVS
@@ -1223,11 +1258,9 @@ def list_customers(
     stmt = select(User)
     count_stmt = select(func.count()).select_from(User)
 
-    if classification:
-        c = classification.strip().upper()
-        if c not in ACCOUNT_CLASSIFICATIONS:
-            raise ValueError(f"Invalid classification filter: {classification}")
-        filt = User.account_classification == c
+    class_filters = _parse_classification_filters(classification)
+    if class_filters:
+        filt = _classification_filter(class_filters)
     else:
         filt = _audience_user_filter(audience)
 
@@ -1277,7 +1310,8 @@ def list_customers(
         "offset": off,
         "has_more": off + len(items) < total,
         "audience": audience,
-        "classification": classification,
+        "classification": ",".join(class_filters) if class_filters else None,
+        "classifications": class_filters,
         "sort": sort,
     }
 

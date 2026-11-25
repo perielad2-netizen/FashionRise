@@ -122,7 +122,7 @@ function AdminShell() {
   const [customerTotal, setCustomerTotal] = useState(0)
   const [customerQ, setCustomerQ] = useState('')
   const [customerQDraft, setCustomerQDraft] = useState('')
-  const [customerClassFilter, setCustomerClassFilter] = useState('')
+  const [customerClassFilters, setCustomerClassFilters] = useState<AccountClassification[]>([])
   const [customerSort, setCustomerSort] = useState('created_at_desc')
   const [customerOffset, setCustomerOffset] = useState(0)
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerDetail | null>(null)
@@ -173,8 +173,9 @@ function AdminShell() {
           fetchAdminOverview({ range, audience }),
           fetchAdminCustomers({
             q: customerQ || undefined,
-            audience: customerClassFilter ? 'all' : 'all',
-            classification: customerClassFilter || undefined,
+            audience: 'all',
+            classification:
+              customerClassFilters.length > 0 ? customerClassFilters.join(',') : undefined,
             limit: PAGE_SIZE,
             offset: customerOffset,
             sort: customerSort,
@@ -204,7 +205,7 @@ function AdminShell() {
     range,
     audience,
     customerQ,
-    customerClassFilter,
+    customerClassFilters,
     customerOffset,
     customerSort,
   ])
@@ -314,10 +315,24 @@ function AdminShell() {
   function clearCustomerFilters() {
     setCustomerQ('')
     setCustomerQDraft('')
-    setCustomerClassFilter('')
+    setCustomerClassFilters([])
     setCustomerSort('created_at_desc')
     setCustomerOffset(0)
   }
+
+  function toggleCustomerClassFilter(value: AccountClassification) {
+    setCustomerOffset(0)
+    setCustomerClassFilters((prev) =>
+      prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value],
+    )
+  }
+
+  const classFilterSummary =
+    customerClassFilters.length === 0
+      ? 'All classifications'
+      : customerClassFilters.length === 1
+        ? customerClassFilters[0]
+        : `${customerClassFilters[0]} +${customerClassFilters.length - 1}`
 
   if (native) {
     return <Navigate to="/studio/home" replace />
@@ -1162,25 +1177,37 @@ function AdminShell() {
                 />
               </label>
               <div className={styles.toolbarFilters}>
-                <label className={styles.filterSelect}>
+                <div className={styles.filterSelect}>
                   <span className={styles.filterLabel}>Classification</span>
-                  <select
-                    className={styles.select}
-                    value={customerClassFilter}
-                    onChange={(e) => {
-                      setCustomerOffset(0)
-                      setCustomerClassFilter(e.target.value)
-                    }}
-                    aria-label="Filter by classification"
-                  >
-                    <option value="">All classifications</option>
-                    {CLASS_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <details className={styles.classFilter}>
+                    <summary className={styles.classFilterSummary} aria-label="Filter by classification">
+                      {classFilterSummary}
+                    </summary>
+                    <div className={styles.classFilterPanel} role="group" aria-label="Classification filters">
+                      <label className={styles.classFilterOption}>
+                        <input
+                          type="checkbox"
+                          checked={customerClassFilters.length === 0}
+                          onChange={() => {
+                            setCustomerOffset(0)
+                            setCustomerClassFilters([])
+                          }}
+                        />
+                        <span>All classifications</span>
+                      </label>
+                      {CLASS_OPTIONS.map((c) => (
+                        <label key={c} className={styles.classFilterOption}>
+                          <input
+                            type="checkbox"
+                            checked={customerClassFilters.includes(c)}
+                            onChange={() => toggleCustomerClassFilter(c)}
+                          />
+                          <span>{c}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                </div>
                 <label className={styles.filterSelect}>
                   <span className={styles.filterLabel}>Sort</span>
                   <select
