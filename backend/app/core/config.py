@@ -440,6 +440,23 @@ class Settings(BaseSettings):
     # Empty = no financial grants. Classification / username alone never authorize grants.
     admin_stars_grant_actor_ids: str = ""
 
+    # --- Admin AI financial intelligence (Phase D) — sync DISABLED by default ---
+    # OpenAI Organization Costs API (read-only admin key — never use for generations).
+    openai_admin_api_key: str | None = None
+    openai_billing_project_id: str = ""
+    openai_cost_sync_enabled: bool = False
+    openai_cost_sync_lookback_days: int = 14
+    openai_cost_sync_timeout_seconds: float = 30.0
+    # FASHN GET /v1/credits balance snapshots (uses existing FASHN_API_KEY).
+    fashn_credit_sync_enabled: bool = False
+    fashn_credit_sync_timeout_seconds: float = 20.0
+    fashn_low_credits_threshold: int = 50
+    # Actual purchased USD per FASHN credit (operator-confirmed). Empty/0 → documented estimate only.
+    # Example: if 100 credits cost $7.50 → 0.075. Never invent; leave unset until known.
+    fashn_operator_credit_usd: float = 0.0
+    # Shared sync throttle for AI worker / cron ticks (seconds).
+    ai_cost_sync_interval_seconds: float = 3600.0
+
     # Web Push (VAPID). Empty = push subscribe/send disabled (fail closed).
     # Generate with: python -c "from py_vapid import Vapid01; v=Vapid01(); v.generate_keys(); print(v.public_key); print(v.private_key)"
     # Or: npx web-push generate-vapid-keys

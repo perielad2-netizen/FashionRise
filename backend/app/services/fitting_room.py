@@ -2979,6 +2979,38 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         ):
             if k in meta:
                 result[k] = meta[k]
+        # Best-effort FASHN financial ledger (never fail Fitting Room completion).
+        try:
+            from app.services.ai_cost_accounting import record_fashn_prediction
+
+            details = meta.get("prediction_credit_details")
+            if isinstance(details, list) and details:
+                for d in details:
+                    if not isinstance(d, dict):
+                        continue
+                    pid = str(d.get("prediction_id") or "").strip()
+                    if not pid:
+                        continue
+                    hdr_present = bool(d.get("credits_header_present"))
+                    hdr_credits = d.get("credits_from_header")
+                    record_fashn_prediction(
+                        db,
+                        prediction_id=pid,
+                        feature="fitting_room",
+                        final_status="completed",
+                        user_id=job.user_id,
+                        job_id=job.id,
+                        model=str(meta.get("model") or "")[:128] or None,
+                        generation_mode=str(meta.get("generation_mode") or "")[:64] or None,
+                        resolution=str(meta.get("resolution") or "")[:64] or None,
+                        output_count=1,
+                        credits_consumed=int(hdr_credits)
+                        if hdr_present and hdr_credits is not None
+                        else None,
+                        credits_header_present=hdr_present,
+                    )
+        except Exception:  # noqa: BLE001
+            logger.exception("Fitting Room FASHN cost ledger write failed (non-fatal)")
     if isinstance(meta, dict):
         if meta.get("fitting_room_look_path"):
             result["fitting_room_look_path"] = meta.get("fitting_room_look_path")

@@ -3,7 +3,53 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 00:20 Asia/Jerusalem — Admin 2.0 #503+#504 **LIVE** on production (`78771a0b`, Alembic **044**); financial grants still fail-closed
+**Last updated:** 2026-11-26 01:55 Asia/Jerusalem — Admin AI financial intelligence + classification select UX fix; sync **disabled** until credentials verified
+
+## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
+
+| Field | Value |
+| --- | --- |
+| Status | **Implemented** — Admin 2.0 Phase D provider cost surfaces; provider sync **fail-closed OFF** |
+| Branch | `cursor/admin-ai-financial-intel-77c6` |
+| Alembic | **045** revises **044** — `provider_pricing_versions`, `fashn_prediction_costs`, `ai_provider_operations`, `openai_cost_daily`, `fashn_credit_snapshots`, `operator_expense_records`, `provider_sync_runs` |
+| OpenAI | `GET /v1/organization/costs` sync client; project vs org-unattributed separation; idempotent daily upsert |
+| FASHN | `GET /v1/credits` balance snapshots; `x-fashn-credits-used` ledger (idempotent per prediction); missing header → **unavailable** (not zero) |
+| Admin UI | Revenue → income vs expenses (operating mode); AI & Costs → actual vs estimated provider cards, by feature/classification, daily OpenAI trend when synced |
+| Sync flags (default) | `OPENAI_COST_SYNC_ENABLED=false` · `FASHN_CREDIT_SYNC_ENABLED=false` · worker tick respects interval + gates |
+| Safety | No paid AI generations in tests; admin key never used for image generation; secrets redacted from sync errors; no auto top-up |
+| Credential setup | See **Credential setup (AI financial sync)** below — do **not** enable sync until keys + project id verified |
+| Exact next action | Merge → apply Alembic **045** on prod → deploy FE+BE with sync flags **left false** → separately authorize credential setup + sync enable |
+
+### Credential setup (AI financial sync)
+
+Do **not** paste secrets into chat, commits, or Admin API responses.
+
+1. **OpenAI Admin key (Costs API only)**  
+   - Create an organization Admin API key in OpenAI with read access to organization usage/costs.  
+   - Set on the API host only: `OPENAI_ADMIN_API_KEY=...`  
+   - Optional but recommended: `OPENAI_BILLING_PROJECT_ID=<FashionRise project id>` so project costs stay separate from org-unattributed charges.  
+   - Keep generation traffic on the existing `OPENAI_API_KEY` — never point image/edit workers at the admin key.
+
+2. **FASHN credits**  
+   - Uses existing `FASHN_API_KEY` for `GET https://api.fashn.ai/v1/credits` only when sync is enabled.  
+   - Optional: `FASHN_LOW_CREDITS_THRESHOLD=50` (dashboard alert).  
+   - Optional actual purchase rate: `FASHN_OPERATOR_CREDIT_USD=0.075` (USD per credit from your invoice; leave `0` until known).
+
+3. **Enable sync only after a dry check**  
+   - Confirm env present on the API/worker host (values never logged).  
+   - Flip independently: `OPENAI_COST_SYNC_ENABLED=true` and/or `FASHN_CREDIT_SYNC_ENABLED=true`.  
+   - Optional: `AI_COST_SYNC_INTERVAL_SECONDS=3600` (default hourly throttle).  
+   - Restart `fashionrise-api` + `fashionrise-ai-worker@{1..3}`.  
+   - Admin → AI & Costs / Revenue financial summary should populate from snapshots.
+
+4. **Still unavailable without invoices**  
+   - FASHN actual cash (no public invoice API) — use `operator_expense_records` / category `fashn_invoice` when an invoice is verified.  
+   - Apple/Google net proceeds remain unavailable.
+
+### Admin classification UX (same tip)
+
+- Proposed classification select now forces readable ink color (Android blank-select fix) and shows **Selected: …** under the control.  
+- Submit stays visually disabled until reason (≥3 chars) + confirm; failures render inside the customer drawer.
 
 ## LIVE — Admin 2.0 + ADD-ONLY Stars grants joint deploy (#503+#504) (2026-11-25/26 Asia/Jerusalem)
 

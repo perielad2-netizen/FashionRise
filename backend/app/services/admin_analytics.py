@@ -47,6 +47,10 @@ from app.models.techpack_ai_run import TechpackAIRun
 from app.models.user import User
 from app.models.user_follow import UserFollow
 from app.services import admin_stars_grants, ai_stars
+from app.services.ai_cost_accounting import (
+    build_ai_financial_section,
+    build_income_vs_expenses,
+)
 from app.services.iap_service import STARS_PRODUCTS
 
 # Launch ASC / Play list prices (USD) — catalog estimates, not storefront FX / proceeds.
@@ -343,6 +347,47 @@ def metric_dictionary() -> list[dict[str, Any]]:
                 "Not Apple/Google proceeds. Sandbox/unknown envs excluded separately. "
                 "Authoritative refund timestamps unavailable — reporting uses current status."
             ),
+        },
+        {
+            "id": "ai.openai_project_costs_usd",
+            "name": "OpenAI recorded project costs (USD)",
+            "definition": (
+                "Actual monetary amounts from OpenAI Organization Costs API "
+                "(GET /v1/organization/costs), filtered to OPENAI_BILLING_PROJECT_ID when set. "
+                "Served from persisted daily snapshots — not live on each Admin refresh."
+            ),
+            "source": "openai_cost_daily",
+            "kind": "actual",
+            "period": "range",
+            "audience_scoped": False,
+            "limitations": (
+                "Global/provider scope. OpenAI org user IDs are not FashionRise customers. "
+                "Sync disabled until OPENAI_COST_SYNC_ENABLED + OPENAI_ADMIN_API_KEY verified."
+            ),
+        },
+        {
+            "id": "ai.fashn_credits_consumed",
+            "name": "FASHN credits consumed (header-reported)",
+            "definition": (
+                "Sum of x-fashn-credits-used for completed predictions attributed to the "
+                "selected audience. Missing headers are unavailable — never recorded as zero."
+            ),
+            "source": "fashn_prediction_costs",
+            "kind": "exact",
+            "period": "range",
+            "audience_scoped": True,
+        },
+        {
+            "id": "ai.fashn_estimated_consumption_usd",
+            "name": "FASHN estimated consumption (USD)",
+            "definition": (
+                "Actual credits × versioned documented/operator credit rate. "
+                "Not cash invoices. Balance decreases are not expenditure."
+            ),
+            "source": "fashn_prediction_costs + provider_pricing_versions",
+            "kind": "estimated",
+            "period": "range",
+            "audience_scoped": True,
         },
         {
             "id": "revenue.refunds_list_price_usd",
@@ -871,7 +916,7 @@ def overview(
 
     starting_cfg = ai_stars.starting_balance()
 
-    return {
+    payload: dict[str, Any] = {
         "generated_at": now.isoformat(),
         "timezone_reporting": "Asia/Jerusalem",
         "range": {
@@ -1096,7 +1141,7 @@ def overview(
             },
             "ai_cost_trend": {
                 "kind": "unavailable",
-                "detail": "Provider cash billing unavailable (Phase D).",
+                "detail": "Provider cash billing unavailable until sync populates rows.",
             },
         },
         "needs_attention": needs_attention,
@@ -1107,7 +1152,6 @@ def overview(
             "engagement.dau",
             "engagement.wau",
             "external.app_store_downloads_live",
-            "ai.provider_actual_billing",
             "stars.free_vs_paid_attribution",
             "stars.historical_spend_actual",
         ],
@@ -1115,6 +1159,51 @@ def overview(
         # FE transitional: expose jobs_* on ai_usage for existing cards.
         "ai_usage_extended": True,
     }
+
+    # AI financial intelligence (Phase D) — persisted snapshots; sync disabled by default.
+    ai_financial = build_ai_financial_section(
+        db,
+        start=range_start,
+        end=range_end,
+        audience_filter=aud_filt,
+    )
+    payload["ai_financial"] = ai_financial
+    successful_gens = int(
+        magic_in_range
+        + fitting_in_range
+        + try_on_in_range
+        + croquis_in_range
+        + techpack_completed_in_range
+    )
+    payload["income_vs_expenses"] = build_income_vs_expenses(
+        revenue_gross=float(gross_list),
+        revenue_refunds=float(refund_list),
+        revenue_net=float(net_list),
+        ai_financial=ai_financial,
+        stars_purchased_net=int(stars_bought_net),
+        successful_generations=successful_gens,
+        paying_customers=int(paying_customers),
+    )
+    trend = ai_financial.get("daily_cost_trend") or {}
+    payload["charts"]["ai_cost_trend"] = {
+        "kind": trend.get("kind") or "unavailable",
+        "detail": trend.get("detail"),
+        "points": trend.get("points") or [],
+        "scope_label": trend.get("scope_label"),
+        "period": "range",
+        "audience_scoped": False,
+    }
+    for alert in ai_financial.get("alerts") or []:
+        if isinstance(alert, dict):
+            payload["needs_attention"].append(alert)
+    # Keep unavailable honest: org billing remains unavailable until sync has actual rows.
+    openai_proj = (ai_financial.get("openai") or {}).get("project_costs") or {}
+    if openai_proj.get("kind") != "actual":
+        payload["unavailable"].append("ai.provider_actual_billing")
+    else:
+        payload["unavailable"].append("ai.fashn_actual_cash_invoices")
+
+    return payload
 
 
 def list_customers(

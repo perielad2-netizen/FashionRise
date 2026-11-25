@@ -1636,6 +1636,61 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         result["fashn_calls"] = meta.get("fashn_calls")
         result["fashn_layout"] = meta.get("layout")
         result["credits_used"] = meta.get("credits_used")
+        # Best-effort financial ledger — never fail the try-on path.
+        try:
+            from app.services.ai_cost_accounting import record_fashn_prediction
+
+            details = meta.get("prediction_credit_details")
+            feature = (
+                "virtual_try_on_max"
+                if provider_name == TRY_ON_PROVIDER_FASHN_MAX
+                else "virtual_try_on"
+            )
+            if isinstance(details, list) and details:
+                for d in details:
+                    if not isinstance(d, dict):
+                        continue
+                    pid = str(d.get("prediction_id") or "").strip()
+                    if not pid:
+                        continue
+                    hdr_present = bool(d.get("credits_header_present"))
+                    hdr_credits = d.get("credits_from_header")
+                    record_fashn_prediction(
+                        db,
+                        prediction_id=pid,
+                        feature=feature,
+                        final_status="completed",
+                        user_id=job.user_id,
+                        job_id=job.id,
+                        model=str(meta.get("model") or "")[:128] or None,
+                        generation_mode=str(meta.get("generation_mode") or "")[:64] or None,
+                        resolution=str(meta.get("resolution") or "")[:64] or None,
+                        output_count=1,
+                        credits_consumed=int(hdr_credits)
+                        if hdr_present and hdr_credits is not None
+                        else None,
+                        credits_header_present=hdr_present,
+                    )
+            else:
+                from app.services.ai_cost_accounting import record_fashn_predictions_best_effort
+
+                record_fashn_predictions_best_effort(
+                    db,
+                    prediction_ids=list(meta.get("prediction_ids") or []),
+                    credits_used_total=int(meta["credits_used"])
+                    if isinstance(meta.get("credits_used"), int)
+                    else None,
+                    credits_header_present=bool(meta.get("credits_header_present")),
+                    feature=feature,
+                    user_id=job.user_id,
+                    job_id=job.id,
+                    model=str(meta.get("model") or "")[:128] or None,
+                    generation_mode=str(meta.get("generation_mode") or "")[:64] or None,
+                    resolution=str(meta.get("resolution") or "")[:64] or None,
+                    final_status="completed",
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("FASHN cost ledger write failed (non-fatal)")
     if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
         smart_result = bool(data.get("smart_fallback")) or (
             isinstance(data.get("smart_pipeline"), dict)

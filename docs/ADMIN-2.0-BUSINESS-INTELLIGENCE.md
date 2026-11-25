@@ -164,18 +164,29 @@ Full list: `GET /api/v1/admin/metrics/dictionary` and Admin UI → Metric dictio
 
 Kinds: **exact** · **estimated** · **unavailable**
 
-Unavailable (honest gaps): platform/country acquisition, D7 retention, DAU/WAU, live App Store downloads, provider cash billing, free/paid Stars attribution, historical spend actuals, durable admin-grant ledger (separate feature).
+Unavailable (honest gaps): platform/country acquisition, D7 retention, DAU/WAU, live App Store downloads, free/paid Stars attribution, historical spend actuals, FASHN cash invoices (no public API), Apple/Google net proceeds.
 
 ---
 
-## 10. Phase C / D (not in this PR)
+## 10. Phase C / D
 
 **Phase C:** activation funnels, retention cohorts, acquisition charts, CSV exports, notification/system health panels, daily revenue series.  
 
-**Phase D:** versioned analytics events, App Store Connect / Play analytics, provider billing imports, durable admin-grant ledger integration (coordinate with ADD-ONLY grants PR — no duplicate accounting).
+**Phase D (provider billing — migration 045):** OpenAI Organization Costs API sync + FASHN credits balance/consumption ledger + Admin income-vs-expenses (operating vs documented cash). Sync disabled by default (`OPENAI_COST_SYNC_ENABLED` / `FASHN_CREDIT_SYNC_ENABLED`). Actual vs estimated kinds are explicit; do not sum OpenAI actual totals with per-op OpenAI estimates. Durable admin-grant ledger shipped in **044** / PR #504.
+
+### Financial methodology (Phase D)
+
+| Value | Kind | Source |
+| --- | --- | --- |
+| OpenAI project/org daily USD | **actual** | Costs API → `openai_cost_daily` |
+| FASHN credits remaining | **exact** | Credits API snapshot |
+| FASHN credits consumed | **exact** when `x-fashn-credits-used` present; else **unavailable** | Prediction ledger |
+| FASHN USD consumption | **estimated** | Credits × versioned documented/operator rate |
+| FASHN cash invoices | **unavailable** until operator invoice row | No public invoice API |
+| Contribution margin | **estimated** / **estimated_incomplete** | Net catalog revenue − (OpenAI actual + FASHN estimated) — **not accounting profit** |
 
 ---
 
 ## 11. Exact next action
 
-Technical PM re-review of amended PR #503 → approve migration plan → disposable DB proof → authorize nginx allowlist → FE+BE tip deploy (separate authorize). **STOP — do not merge/deploy from this agent.**
+Merge financial-intelligence PR → apply Alembic **045** → deploy with sync flags **false** → separately authorize OpenAI admin key + FASHN credit sync enablement.

@@ -134,6 +134,25 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
             else:
                 job.error_message = raw_msg[:240]
             job.result_data = _safe_failure_result(getattr(e, "safe_meta", None))
+        # Automatic OpenAI cost estimate for every settled job (incl. failed billable).
+        # FASHN predictions are recorded separately; skip when result provider is FASHN.
+        try:
+            from app.services.ai_cost_accounting import record_job_openai_estimate_best_effort
+
+            result = job.result_data if isinstance(job.result_data, dict) else {}
+            provider = str(result.get("provider") or "")
+            if job.status in ("completed", "failed") and "Cancelled" not in (job.error_message or ""):
+                record_job_openai_estimate_best_effort(
+                    db,
+                    job_id=job.id,
+                    user_id=job.user_id,
+                    job_type=job.job_type,
+                    final_status=job.status,
+                    model=str(result.get("model") or "")[:128] or None,
+                    provider=provider,
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("Job cost ledger hook failed (non-fatal)")
         db.commit()
         processed += 1
     return processed
@@ -144,4 +163,11 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
     magic_n = run_magic_worker_tick(db, limit=limit)
     croquis_n = run_croquis_worker_tick(db, limit=min(4, limit))
     tech_n = run_techpack_worker_tick(db, limit=2)
+    # Provider financial sync (OpenAI costs / FASHN credits) — gated off by default.
+    try:
+        from app.services.ai_cost_sync_worker import run_cost_sync_tick
+
+        run_cost_sync_tick(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("AI cost sync tick failed (non-fatal)")
     return magic_n + croquis_n + tech_n
