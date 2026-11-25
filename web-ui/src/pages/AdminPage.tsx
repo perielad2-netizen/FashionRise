@@ -402,15 +402,19 @@ function AdminShell() {
         </header>
 
         <div className={styles.globalFilters} aria-label="Global filters">
+          <p className={styles.filterLegend}>
+            <strong>Audience</strong> = which accounts metrics include · <strong>Range</strong> = time
+            window for period stats
+          </p>
           {/* Mobile: compact selects so chips never sticky-overlap KPIs */}
           <div className={styles.filterSelects}>
             <label className={styles.filterSelect}>
-              <span className={styles.filterLabel}>Audience</span>
+              <span className={styles.filterLabel}>Audience — who</span>
               <select
                 className={styles.select}
                 value={audience}
                 onChange={(e) => setAudience(e.target.value)}
-                aria-label="Audience"
+                aria-label="Audience — which accounts to include"
               >
                 {AUDIENCES.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -421,12 +425,12 @@ function AdminShell() {
               </select>
             </label>
             <label className={styles.filterSelect}>
-              <span className={styles.filterLabel}>Range</span>
+              <span className={styles.filterLabel}>Range — when</span>
               <select
                 className={styles.select}
                 value={range}
                 onChange={(e) => setRange(e.target.value as AdminRangeKey)}
-                aria-label="Range"
+                aria-label="Range — time window"
               >
                 {RANGES.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -440,7 +444,7 @@ function AdminShell() {
           {/* Desktop / wide tablet: chip rows */}
           <div className={styles.filterChips}>
             <div className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Audience</span>
+              <span className={styles.filterLabel}>Audience — who</span>
               <div className={styles.chipRow} role="group" aria-label="Audience">
                 {AUDIENCES.map((a) => (
                   <button
@@ -456,7 +460,7 @@ function AdminShell() {
               </div>
             </div>
             <div className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Range</span>
+              <span className={styles.filterLabel}>Range — when</span>
               <div className={styles.chipRow} role="group" aria-label="Range">
                 {RANGES.map((r) => (
                   <button
@@ -856,64 +860,85 @@ function AdminShell() {
         {!loading && !error && section === 'customers' ? (
           <>
             <div className={styles.toolbar}>
-              <input
-                className={styles.search}
-                placeholder="Search username or email"
-                value={customerQDraft}
-                onChange={(e) => setCustomerQDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+              <label className={styles.filterSelect}>
+                <span className={styles.filterLabel}>Search</span>
+                <input
+                  className={styles.search}
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  placeholder="Username or email"
+                  value={customerQDraft}
+                  onChange={(e) => setCustomerQDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setCustomerOffset(0)
+                      setCustomerQ(customerQDraft.trim())
+                    }
+                  }}
+                  aria-label="Search customers by username or email"
+                />
+              </label>
+              <div className={styles.toolbarFilters}>
+                <label className={styles.filterSelect}>
+                  <span className={styles.filterLabel}>Classification</span>
+                  <select
+                    className={styles.select}
+                    value={customerClassFilter}
+                    onChange={(e) => {
+                      setCustomerOffset(0)
+                      setCustomerClassFilter(e.target.value)
+                    }}
+                    aria-label="Filter by classification"
+                  >
+                    <option value="">All classifications</option>
+                    {CLASS_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.filterSelect}>
+                  <span className={styles.filterLabel}>Sort</span>
+                  <select
+                    className={styles.select}
+                    value={customerSort}
+                    onChange={(e) => {
+                      setCustomerOffset(0)
+                      setCustomerSort(e.target.value)
+                    }}
+                    aria-label="Sort customers"
+                  >
+                    <option value="created_at_desc">Newest</option>
+                    <option value="username_asc">Username</option>
+                    <option value="stars_desc">Stars</option>
+                  </select>
+                </label>
+              </div>
+              <div className={styles.toolbarActions}>
+                <button
+                  type="button"
+                  className={styles.refresh}
+                  onClick={() => {
                     setCustomerOffset(0)
                     setCustomerQ(customerQDraft.trim())
-                  }
-                }}
-                aria-label="Search customers"
-              />
-              <select
-                className={styles.select}
-                value={customerClassFilter}
-                onChange={(e) => {
-                  setCustomerOffset(0)
-                  setCustomerClassFilter(e.target.value)
-                }}
-                aria-label="Classification filter"
-              >
-                <option value="">All classifications</option>
-                {CLASS_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={styles.select}
-                value={customerSort}
-                onChange={(e) => {
-                  setCustomerOffset(0)
-                  setCustomerSort(e.target.value)
-                }}
-                aria-label="Sort customers"
-              >
-                <option value="created_at_desc">Newest</option>
-                <option value="username_asc">Username</option>
-                <option value="stars_desc">Stars</option>
-              </select>
-              <button
-                type="button"
-                className={styles.refresh}
-                onClick={() => {
-                  setCustomerOffset(0)
-                  setCustomerQ(customerQDraft.trim())
-                }}
-              >
-                Search
-              </button>
-              <button type="button" className={styles.secondaryBtn} onClick={clearCustomerFilters}>
-                Clear
-              </button>
-              <button type="button" className={styles.secondaryBtn} onClick={() => void runDryRun()}>
-                Dry-run
-              </button>
+                  }}
+                >
+                  Search
+                </button>
+                <button type="button" className={styles.secondaryBtn} onClick={clearCustomerFilters}>
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryBtn}
+                  onClick={() => void runDryRun()}
+                  title="Read-only classification suggestions — does not change accounts"
+                >
+                  Suggest
+                </button>
+              </div>
             </div>
             {dryRunNote ? <div className={styles.banner}>{dryRunNote}</div> : null}
             <p className={styles.kpiHint}>
