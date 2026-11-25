@@ -674,16 +674,63 @@ th {
 }
 
 .customerCard {
-  appearance: none;
   border: 1px solid var(--admin-line);
   background: #fff;
   border-radius: 14px;
   padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.customerCardMain {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
   text-align: left;
   font: inherit;
   cursor: pointer;
   display: grid;
   gap: 8px;
+  width: 100%;
+}
+
+.grantBtn,
+.grantBtnWide {
+  appearance: none;
+  border: 1px solid #b7e0c8;
+  background: #e8f6ee;
+  color: #1b7a4a;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  justify-self: start;
+}
+
+.grantBtn:disabled,
+.grantBtnWide:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.grantBtnWide {
+  width: 100%;
+  justify-self: stretch;
+}
+
+.linkish {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--admin-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
 }
 
 .customerMain {
