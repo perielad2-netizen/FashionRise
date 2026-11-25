@@ -50,6 +50,7 @@ from app.models.competition import (
     StarPayout,
 )
 from app.models.account_classification_event import AccountClassificationEvent
+from app.models.admin_stars_grant import AdminStarsGrant
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow
@@ -58,6 +59,7 @@ from app.models.user_profile import UserProfile
 
 __all__ = [
     "AIJob",
+    "AdminStarsGrant",
     "BodyMeasurementProfile",
     "ColorPalette",
     "CompetitionAward",

@@ -3,7 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 PR #503 merged to main (`05e93b26`); not deployed
+**Last updated:** 2026-11-25 Asia/Jerusalem — PR #504 final integration ready on main (not deployed)
+
+## READY — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+
+| Field | Value |
+| --- | --- |
+| Status | **READY TO MERGE** onto `main` after #503 (`05e93b26`); **STOP** — no production deploy / migration / live grants |
+| Base | Merged `main` **`05e93b26`** (+ docs tip **`02cc2598`**) |
+| Branch | `cursor/admin-positive-only-stars-grants-77c6` |
+| Final integration tip (pre-merge) | see branch HEAD after push |
+| Design | Positive-only ADD; `FinancialAdminUser`; pending isolation; read-only reconcile; uncertain-retry preserves key (4xx on retry ≠ proof of earlier failure); authoritative current wallet; deduped grant history |
+| Migration chain | **042 → 043 → 044** — 043 on main; 044 this PR; disposable verify only; **never** downgrade live ledger |
+| Nginx | Proposed allowlist includes `GET …/stars/grants/idempotency/{key}` |
+| Verification (this pass) | Grants+admin+wallet+IAP **147 passed**; FE grant/Admin **34 passed**; `tsc`/`lint`/`build`+SW **ok**; nginx reconcile path present; **no screenshots** |
+| Production prerequisites | Authorize nginx admin allowlist · tip deploy · Alembic **043 then 044** · set `ADMIN_STARS_GRANT_ACTOR_IDS` · then live grants |
+| Exact next action | Merge #504 → joint #503+#504 deploy authorization |
+
 
 ## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
 

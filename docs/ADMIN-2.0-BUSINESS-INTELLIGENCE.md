@@ -70,11 +70,26 @@ Social UI distinguishes **actions by audience** vs **engagement received by audi
 - Not labeled as actual money received / store proceeds (those fields = unavailable).  
 - Sandbox + unknown environments excluded and counted separately.  
 - Customer lifetime revenue sums **all** eligible Production rows (independent of 50-row purchase display).  
-- Administrative Stars grants: **unavailable / separate PR #504** — never revenue.  
+- Administrative Stars grants: **PR #504** — durable `ADMIN_GRANT` ledger; **never** revenue / purchased Stars; audience + range filtered totals; free-vs-paid still unavailable.  
+
 - Free vs paid consumption: **unavailable** (no historical debit amounts).  
 - Starting balance shown = **today’s config**, not historical grants issued.  
 - Unlimited wallets remain in AI usage even when Stars = 0.  
 - Registration trend: PostgreSQL `timezone('Asia/Jerusalem', created_at)` calendar-day buckets (not UTC days relabeled). All Time chart capped to last 90 Jerusalem days and labeled.
+
+### 4.1 Administrative Stars grants (PR #504 — stacked on #503)
+
+| Rule | Enforcement |
+| --- | --- |
+| Positive-only | API + service + DB `amount > 0`; reject target/replacement/signed fields (`extra=forbid`) |
+| Financial auth | `FinancialAdminUser` = AdminUser **and** UUID in `ADMIN_STARS_GRANT_ACTOR_IDS` (fail-closed when empty) |
+| Absolute max | Code constant `ABSOLUTE_GRANT_CEILING = 50_000`; env cannot raise it; invalid max → 10_000 |
+| Default max / confirm | 10_000 / confirm ≥ 500 (exposed via `/admin/stars/grants/config`) |
+| Idempotency | Unique key bound to **actor + recipient + amount + reason + note**; cross-admin replay → 409 |
+| FE recovery | Single pending slot — never overwrite another unresolved grant; read-only `GET …/stars/grants/idempotency/{key}` before retry; re-enter note (not stored in browser); definitive 4xx clears pending; uncertain keeps key |
+| Wallet path | Reuses `ai_stars.credit_stars` under `FOR UPDATE`; SAVEPOINT rolls back wallet+ledger together |
+| Deletion | Migration **044** `ON DELETE SET NULL` for recipient/actor — audit row retained anonymized |
+| Editable | Grant rows **not** editable/deletable via admin UI |
 
 ---
 

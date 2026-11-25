@@ -241,7 +241,68 @@ export type AdminCustomerDetail = AdminCustomer & {
     actor_username?: string | null
     created_at: string | null
   }>
+  admin_stars_grants?: {
+    kind?: string
+    items: AdminStarsGrantRecord[]
+    excluded_from_revenue?: boolean
+    counts_toward_revenue?: boolean
+    editable?: boolean
+    deletable?: boolean
+  }
   unavailable?: string[]
+}
+
+export type AdminStarsGrantReason =
+  | 'CUSTOMER_APPRECIATION'
+  | 'TECHNICAL_COMPENSATION'
+  | 'PROMOTIONAL_GIFT'
+  | 'WELCOME_BONUS'
+  | 'COMPETITION_REWARD'
+  | 'INTERNAL_TESTING'
+  | 'OTHER'
+
+export type AdminStarsGrantRecord = {
+  grant_id: string
+  recipient_id: string | null
+  actor_id: string | null
+  amount: number
+  balance_before: number
+  balance_after: number
+  reason: string
+  note: string | null
+  source: string
+  status: string
+  idempotency_key: string
+  created_at: string | null
+  idempotent_replay?: boolean
+}
+
+export type AdminStarsGrantLimits = {
+  max_per_transaction: number
+  absolute_ceiling: number
+  large_confirm_threshold: number
+  reasons: string[]
+}
+
+export type AdminStarsGrantsOverview = AdminStarsGrantLimits & {
+  kind: string
+  source: string
+  counts_toward_revenue: boolean
+  creates_iap_transactions: boolean
+  total_stars_granted: number
+  grant_count: number
+  recipient_count: number
+  by_reason: Record<string, { count: number; stars: number }>
+  by_administrator: Array<{
+    actor_id: string | null
+    username: string | null
+    count: number
+    stars: number
+  }>
+  recent: AdminStarsGrantRecord[]
+  audience?: string
+  note?: string
+  range?: { key: string; start: string | null; end: string }
 }
 
 export type MetricDefinition = {
@@ -350,4 +411,211 @@ export async function fetchClassificationDryRun(limit = 200): Promise<{
 
 export async function fetchClassificationOptions(): Promise<{ items: string[] }> {
   return apiRequest('/admin/classification/options')
+}
+
+export function parsePositiveGrantAmount(raw: string): number | null {
+  const s = (raw || '').trim()
+  if (!/^[1-9][0-9]*$/.test(s)) return null
+  const n = Number(s)
+  if (!Number.isSafeInteger(n) || n <= 0) return null
+  return n
+}
+
+export async function fetchAdminStarsGrantLimits(): Promise<AdminStarsGrantLimits> {
+  return apiRequest('/admin/stars/grants/config')
+}
+
+export async function fetchAdminStarsGrantsOverview(opts?: {
+  range?: AdminRangeKey | string
+  audience?: string
+}): Promise<AdminStarsGrantsOverview> {
+  return apiRequest(
+    `/admin/stars/grants${qs({ range: opts?.range, audience: opts?.audience })}`,
+  )
+}
+
+export async function postAdminStarsGrant(
+  userId: string,
+  body: {
+    amount: number
+    reason: AdminStarsGrantReason | string
+    note?: string | null
+    idempotency_key: string
+    confirm_large: boolean
+  },
+): Promise<AdminStarsGrantRecord> {
+  return apiRequest(`/admin/users/${encodeURIComponent(userId)}/stars/grants`, {
+    method: 'POST',
+    body,
+  })
+}
+
+export type AdminStarsGrantReconcileOutcome = 'recorded' | 'not_found' | 'unavailable'
+
+export type AdminStarsGrantReconcileResult = {
+  outcome: AdminStarsGrantReconcileOutcome
+  message: string
+  grant: AdminStarsGrantRecord | null
+  wallet: {
+    recipient_id: string
+    ai_stars: number
+    ai_stars_unlimited: boolean
+    ai_stars_iap_debt: number
+  } | null
+  wallet_mutations: number
+}
+
+/** Read-only reconciliation — never credits Stars. */
+export async function fetchAdminStarsGrantByIdempotency(
+  idempotencyKey: string,
+): Promise<AdminStarsGrantReconcileResult> {
+  return apiRequest(
+    `/admin/stars/grants/idempotency/${encodeURIComponent(idempotencyKey)}`,
+  )
+}
+
+/** Session-scoped pending grant recovery (no notes / emails persisted). */
+export type PendingStarsGrant = {
+  adminId: string
+  recipientId: string
+  amount: number
+  reason: string
+  noteFingerprint: string
+  idempotencyKey: string
+  createdAt: string
+}
+
+const PENDING_GRANT_STORAGE_KEY = 'fr.admin.starsGrant.pending.v1'
+
+export function noteFingerprint(note: string): string {
+  // Short non-reversible fingerprint — do not store the note itself.
+  let h = 0
+  const s = note || ''
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0
+  return `${s.length}:${h}`
+}
+
+export function buildPendingStarsGrant(input: {
+  adminId: string
+  recipientId: string
+  amount: number
+  reason: string
+  note: string
+  idempotencyKey: string
+}): PendingStarsGrant {
+  return {
+    adminId: input.adminId,
+    recipientId: input.recipientId,
+    amount: input.amount,
+    reason: input.reason,
+    noteFingerprint: noteFingerprint(input.note),
+    idempotencyKey: input.idempotencyKey,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+export function readPendingStarsGrant(): PendingStarsGrant | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_GRANT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PendingStarsGrant
+    if (
+      !parsed?.adminId ||
+      !parsed?.recipientId ||
+      !parsed?.idempotencyKey ||
+      typeof parsed.amount !== 'number'
+    ) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Write a pending grant. Never silently overwrites a different unresolved grant.
+ * Same idempotency key may refresh metadata; a different key is blocked.
+ */
+export function writePendingStarsGrant(
+  pending: PendingStarsGrant,
+): { ok: true } | { ok: false; existing: PendingStarsGrant } {
+  const current = readPendingStarsGrant()
+  if (current && current.idempotencyKey !== pending.idempotencyKey) {
+    return { ok: false, existing: current }
+  }
+  sessionStorage.setItem(PENDING_GRANT_STORAGE_KEY, JSON.stringify(pending))
+  return { ok: true }
+}
+
+export function clearPendingStarsGrant(idempotencyKey?: string): void {
+  const current = readPendingStarsGrant()
+  if (idempotencyKey && current && current.idempotencyKey !== idempotencyKey) return
+  sessionStorage.removeItem(PENDING_GRANT_STORAGE_KEY)
+}
+
+export function pendingMatchesPayload(
+  pending: PendingStarsGrant,
+  input: {
+    adminId: string
+    recipientId: string
+    amount: number
+    reason: string
+    note: string
+  },
+): boolean {
+  return (
+    pending.adminId === input.adminId &&
+    pending.recipientId === input.recipientId &&
+    pending.amount === input.amount &&
+    pending.reason === input.reason &&
+    pending.noteFingerprint === noteFingerprint(input.note)
+  )
+}
+
+/** Definitive client/auth/validation failures — do not keep retrying blindly. */
+export function isDefinitiveGrantFailure(status: number): boolean {
+  return status === 400 || status === 401 || status === 403 || status === 404 || status === 409 || status === 422
+}
+
+export type GrantWalletSnapshot = {
+  ai_stars: number
+  ai_stars_unlimited?: boolean
+  ai_stars_iap_debt?: number
+}
+
+/**
+ * Apply a completed grant to customer detail for Admin UI.
+ * Prefer authoritative current wallet when provided (reconcile / post-grant drift).
+ * Never duplicate an existing grant_id in history.
+ */
+export function applyStarsGrantToCustomerDetail(
+  prev: AdminCustomerDetail,
+  grant: AdminStarsGrantRecord,
+  currentWallet?: GrantWalletSnapshot | null,
+): AdminCustomerDetail {
+  if (prev.id !== grant.recipient_id) return prev
+  const items = prev.admin_stars_grants?.items || []
+  const exists = items.some((g) => g.grant_id === grant.grant_id)
+  return {
+    ...prev,
+    wallet: {
+      ...prev.wallet,
+      ai_stars: currentWallet?.ai_stars ?? grant.balance_after,
+      ...(currentWallet?.ai_stars_unlimited !== undefined
+        ? { ai_stars_unlimited: currentWallet.ai_stars_unlimited }
+        : {}),
+      ...(currentWallet?.ai_stars_iap_debt !== undefined
+        ? { ai_stars_iap_debt: currentWallet.ai_stars_iap_debt }
+        : {}),
+    },
+    admin_stars_grants: {
+      kind: 'exact',
+      counts_toward_revenue: false,
+      editable: false,
+      deletable: false,
+      excluded_from_revenue: true,
+      items: exists ? items : [grant, ...items],
+    },
+  }
 }

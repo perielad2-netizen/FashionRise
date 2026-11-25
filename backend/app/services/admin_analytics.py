@@ -46,7 +46,7 @@ from app.models.personal_croquis import PersonalCroquis
 from app.models.techpack_ai_run import TechpackAIRun
 from app.models.user import User
 from app.models.user_follow import UserFollow
-from app.services import ai_stars
+from app.services import admin_stars_grants, ai_stars
 from app.services.iap_service import STARS_PRODUCTS
 
 # Launch ASC / Play list prices (USD) — catalog estimates, not storefront FX / proceeds.
@@ -1018,11 +1018,12 @@ def overview(
             "costs": ai_stars.cost_catalog(),
             "costs_config": ai_stars.cost_catalog(),
             "admin_grants": {
-                "kind": "unavailable",
-                "detail": (
-                    "Administrative ADD-ONLY grants are a separate feature/PR with its own ledger. "
-                    "Not counted as revenue here."
+                **admin_stars_grants.grants_overview(
+                    db, start=range_start, end=range_end, audience=audience
                 ),
+                "period": "range",
+                "excluded_from_revenue": True,
+                "excluded_from_purchased_stars": True,
             },
             "audience_scoped": True,
         },
@@ -1355,6 +1356,13 @@ def customer_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any] | None:
             }
             for h in history
         ],
+        "admin_stars_grants": {
+            "items": admin_stars_grants.list_grants_for_user(db, user.id, limit=50),
+            "excluded_from_revenue": True,
+            "excluded_from_purchased_stars": True,
+            "editable": False,
+            "deletable": False,
+        },
         "unavailable": [
             "first_platform",
             "country",
