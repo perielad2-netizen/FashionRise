@@ -428,12 +428,17 @@ class Settings(BaseSettings):
     ai_stars_finite_override_emails: str = ""
     # Shop checkout remains disabled until payment is wired.
     stars_shop_checkout_enabled: bool = False
-    # Admin ADD-ONLY Stars grants (financial admin). Server-enforced maximum per txn.
-    # Soft default 10_000; hard ceiling 50_000 regardless of env misconfiguration.
+    # Admin ADD-ONLY Stars grants (financial admin).
+    # Soft default max 10_000. Absolute code ceiling is 50_000 (immutable in service).
+    # Misconfigured max (> ceiling or < 1) fails safe to 10_000.
     admin_stars_grant_max_amount: int = 10_000
+    # Deprecated for raising the absolute ceiling — service clamps to code constant 50_000.
     admin_stars_grant_hard_ceiling: int = 50_000
     # Grants at/above this amount require client confirm_large=true.
     admin_stars_grant_large_confirm_threshold: int = 500
+    # Fail-closed financial allowlist: comma-separated user UUIDs authorized to grant Stars.
+    # Empty = no financial grants. Classification / username alone never authorize grants.
+    admin_stars_grant_actor_ids: str = ""
 
     # Web Push (VAPID). Empty = push subscribe/send disabled (fail closed).
     # Generate with: python -c "from py_vapid import Vapid01; v=Vapid01(); v.generate_keys(); print(v.public_key); print(v.private_key)"

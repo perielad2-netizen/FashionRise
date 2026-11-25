@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { GrantStarsModal } from '@/components/admin/GrantStarsModal'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/services/auth/AuthProvider'
 import {
@@ -7,6 +8,7 @@ import {
   fetchAdminCustomers,
   fetchAdminOverview,
   fetchAdminReports,
+  fetchAdminStarsGrantsOverview,
   fetchClassificationDryRun,
   fetchMetricDictionary,
   patchAdminClassification,
@@ -16,6 +18,7 @@ import {
   type AdminOverview,
   type AdminRangeKey,
   type AdminReport,
+  type AdminStarsGrantsOverview,
   type MetricDefinition,
 } from '@/services/adminApi'
 import { isNativeShell } from '@/services/native/platform'
@@ -27,6 +30,7 @@ type Section =
   | 'overview'
   | 'customers'
   | 'revenue'
+  | 'grants'
   | 'ai'
   | 'community'
   | 'dictionary'
@@ -36,6 +40,7 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'customers', label: 'Customers' },
   { id: 'revenue', label: 'Revenue & Stars' },
+  { id: 'grants', label: 'Stars Grants' },
   { id: 'ai', label: 'AI & Costs' },
   { id: 'community', label: 'Community' },
   { id: 'reports', label: 'Reports' },
@@ -119,6 +124,8 @@ function AdminShell() {
   const [customerSort, setCustomerSort] = useState('created_at_desc')
   const [customerOffset, setCustomerOffset] = useState(0)
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerDetail | null>(null)
+  const [grantTarget, setGrantTarget] = useState<AdminCustomerDetail | null>(null)
+  const [grantsOverview, setGrantsOverview] = useState<AdminStarsGrantsOverview | null>(null)
   const [classDraft, setClassDraft] = useState('')
   const [classReason, setClassReason] = useState('')
   const [classNote, setClassNote] = useState('')
@@ -142,6 +149,14 @@ function AdminShell() {
         const ov = await fetchAdminOverview({ range, audience })
         if (gen !== loadGen.current) return
         setOverview(ov)
+      } else if (section === 'grants') {
+        const [ov, grants] = await Promise.all([
+          fetchAdminOverview({ range, audience }),
+          fetchAdminStarsGrantsOverview({ range, audience }),
+        ])
+        if (gen !== loadGen.current) return
+        setOverview(ov)
+        setGrantsOverview(grants)
       } else if (section === 'reports' || section === 'community') {
         const [ov, res] = await Promise.all([
           fetchAdminOverview({ range, audience }),
@@ -218,6 +233,15 @@ function AdminShell() {
       setClassConfirm(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load customer')
+    }
+  }
+
+  async function openGrantFor(id: string) {
+    try {
+      const detail = await fetchAdminCustomer(id)
+      setGrantTarget(detail)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open grant form')
     }
   }
 
@@ -843,22 +867,36 @@ function AdminShell() {
             </p>
             <div className={styles.customerList}>
               {customers.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={styles.customerCard}
-                  onClick={() => void openCustomer(c.id)}
-                >
-                  <div className={styles.customerMain}>
-                    <strong>@{c.username}</strong>
-                    <span className={styles.emailClip}>{c.email}</span>
-                  </div>
-                  <div className={styles.customerMeta}>
-                    <span className={styles.classBadge}>{c.classification}</span>
-                    <span>{c.ai_stars_unlimited ? '∞' : fmt(c.ai_stars)} Stars</span>
-                    <span>{c.is_active ? 'Enabled' : 'Disabled'}</span>
-                  </div>
-                </button>
+                <div key={c.id} className={styles.customerCard}>
+                  <button
+                    type="button"
+                    className={styles.customerCardMain}
+                    onClick={() => void openCustomer(c.id)}
+                  >
+                    <div className={styles.customerMain}>
+                      <strong>@{c.username}</strong>
+                      <span className={styles.emailClip}>{c.email}</span>
+                    </div>
+                    <div className={styles.customerMeta}>
+                      <span className={styles.classBadge}>{c.classification}</span>
+                      <span>{c.ai_stars_unlimited ? '∞' : fmt(c.ai_stars)} Stars</span>
+                      <span>{c.is_active ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.grantBtn}
+                    disabled={c.ai_stars_unlimited}
+                    title={
+                      c.ai_stars_unlimited
+                        ? 'Unlimited wallets cannot receive manual grants'
+                        : `Grant Stars to @${c.username}`
+                    }
+                    onClick={() => void openGrantFor(c.id)}
+                  >
+                    + Grant Stars
+                  </button>
+                </div>
               ))}
               {customers.length === 0 ? (
                 <div className={styles.empty}>No accounts match this search or filter.</div>
@@ -886,6 +924,122 @@ function AdminShell() {
                 Next
               </button>
             </div>
+          </>
+        ) : null}
+
+        {!loading && !error && section === 'grants' && grantsOverview ? (
+          <>
+            <section className={styles.kpiRow} aria-label="Stars grants KPIs">
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>
+                  Stars granted{' '}
+                  <span className={`${styles.kind} ${styles.kindExact}`}>exact</span>
+                </div>
+                <div className={styles.kpiValue}>{fmt(grantsOverview.total_stars_granted)}</div>
+                <div className={styles.kpiHint}>Not purchase revenue · audience + range</div>
+              </div>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>Grants</div>
+                <div className={styles.kpiValue}>{fmt(grantsOverview.grant_count)}</div>
+              </div>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>Recipients</div>
+                <div className={styles.kpiValue}>{fmt(grantsOverview.recipient_count)}</div>
+              </div>
+              <div className={styles.kpi}>
+                <div className={styles.kpiLabel}>Max / txn</div>
+                <div className={styles.kpiValue}>{fmt(grantsOverview.max_per_transaction)}</div>
+                <div className={styles.kpiHint}>
+                  Ceiling {fmt(grantsOverview.absolute_ceiling)} · confirm ≥{' '}
+                  {fmt(grantsOverview.large_confirm_threshold)}
+                </div>
+              </div>
+            </section>
+            <p className={styles.note}>{grantsOverview.note}</p>
+            <section className={styles.grid}>
+              <article className={styles.card}>
+                <h2>By reason</h2>
+                {Object.keys(grantsOverview.by_reason).length === 0 ? (
+                  <p className={styles.kpiHint}>No grants in this range.</p>
+                ) : (
+                  <ul className={styles.plainList}>
+                    {Object.entries(grantsOverview.by_reason).map(([reason, row]) => (
+                      <li key={reason}>
+                        {reason} · {fmt(row.count)} grants · {fmt(row.stars)} Stars
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+              <article className={styles.card}>
+                <h2>By administrator</h2>
+                {grantsOverview.by_administrator.length === 0 ? (
+                  <p className={styles.kpiHint}>No administrators in this range.</p>
+                ) : (
+                  <ul className={styles.plainList}>
+                    {grantsOverview.by_administrator.map((a) => (
+                      <li key={a.actor_id ?? a.username ?? 'anon'}>
+                        @{a.username || (a.actor_id ? a.actor_id.slice(0, 8) : 'anonymized')} ·{' '}
+                        {fmt(a.count)} · {fmt(a.stars)} Stars
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            </section>
+            <section className={styles.card}>
+              <h2>Recent grant activity</h2>
+              {grantsOverview.recent.length === 0 ? (
+                <p className={styles.kpiHint}>No grants yet.</p>
+              ) : (
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>When</th>
+                        <th>Amount</th>
+                        <th>Reason</th>
+                        <th>Recipient</th>
+                        <th>Balance</th>
+                        <th>Ref</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grantsOverview.recent.map((g) => (
+                        <tr key={g.grant_id}>
+                          <td>
+                            {g.created_at
+                              ? new Date(g.created_at).toLocaleString('en-IL', {
+                                  timeZone: 'Asia/Jerusalem',
+                                })
+                              : '—'}
+                          </td>
+                          <td>+{fmt(g.amount)}</td>
+                          <td>{g.reason}</td>
+                          <td>
+                            {g.recipient_id ? (
+                              <button
+                                type="button"
+                                className={styles.linkish}
+                                onClick={() => void openCustomer(g.recipient_id!)}
+                              >
+                                {g.recipient_id.slice(0, 8)}…
+                              </button>
+                            ) : (
+                              <span>anonymized</span>
+                            )}
+                          </td>
+                          <td>
+                            {fmt(g.balance_before)} → {fmt(g.balance_after)}
+                          </td>
+                          <td>{g.grant_id.slice(0, 8)}…</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </>
         ) : null}
 
@@ -1029,6 +1183,14 @@ function AdminShell() {
               </button>
             </header>
             <div className={styles.drawerBody}>
+              <button
+                type="button"
+                className={styles.grantBtnWide}
+                disabled={selectedCustomer.wallet.ai_stars_unlimited}
+                onClick={() => setGrantTarget(selectedCustomer)}
+              >
+                + Grant Stars
+              </button>
               <div className={styles.classConfirmBox}>
                 <p className={styles.kpiHint}>
                   Current: <strong>{selectedCustomer.classification}</strong>
@@ -1140,6 +1302,24 @@ function AdminShell() {
                   ))}
                 </ul>
               )}
+              <h3 className={styles.subHead}>Admin Stars grants</h3>
+              {(selectedCustomer.admin_stars_grants?.items || []).length === 0 ? (
+                <p className={styles.kpiHint}>No administrative grants for this account.</p>
+              ) : (
+                <ul className={styles.plainList}>
+                  {(selectedCustomer.admin_stars_grants?.items || []).map((g) => (
+                    <li key={g.grant_id}>
+                      +{fmt(g.amount)} · {g.reason} · {fmt(g.balance_before)}→
+                      {fmt(g.balance_after)}
+                      {g.created_at
+                        ? ` · ${new Date(g.created_at).toLocaleString('en-IL', {
+                            timeZone: 'Asia/Jerusalem',
+                          })}`
+                        : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <h3 className={styles.subHead}>Classification history</h3>
               {selectedCustomer.classification_history.length === 0 ? (
                 <p className={styles.kpiHint}>No classification events yet.</p>
@@ -1167,6 +1347,36 @@ function AdminShell() {
             </div>
           </aside>
         </div>
+      ) : null}
+
+      {grantTarget && user ? (
+        <GrantStarsModal
+          customer={grantTarget}
+          adminId={user.id}
+          onClose={() => setGrantTarget(null)}
+          onGranted={(grant) => {
+            setSelectedCustomer((prev) =>
+              prev && prev.id === grant.recipient_id
+                ? {
+                    ...prev,
+                    wallet: {
+                      ...prev.wallet,
+                      ai_stars: grant.balance_after,
+                    },
+                    admin_stars_grants: {
+                      kind: 'exact',
+                      counts_toward_revenue: false,
+                      editable: false,
+                      deletable: false,
+                      items: [grant, ...(prev.admin_stars_grants?.items || [])],
+                    },
+                  }
+                : prev,
+            )
+            setGrantTarget(null)
+            void load()
+          }}
+        />
       ) : null}
     </div>
   )

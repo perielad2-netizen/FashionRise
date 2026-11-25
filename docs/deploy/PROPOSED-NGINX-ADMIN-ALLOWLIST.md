@@ -16,6 +16,10 @@ Exact locations required by Admin 2.0 (beyond the original overview + reports):
 | PATCH | `/api/v1/admin/customers/{uuid}/classification` | Audited classification |
 | GET | `/api/v1/admin/classification/dry-run` | Non-mutating suggestions |
 | GET | `/api/v1/admin/classification/options` | Enum list |
+| GET | `/api/v1/admin/stars/grants/config` | Effective grant limits (any AdminUser) |
+| GET | `/api/v1/admin/stars/grants` | Grant aggregates (AdminUser; not revenue) |
+| GET | `/api/v1/admin/users/{uuid}/stars/grants` | Per-recipient grant history |
+| POST | `/api/v1/admin/users/{uuid}/stars/grants` | ADD-ONLY grant (**FinancialAdminUser** + UUID allowlist) |
 
 ```nginx
     # FashionRise Admin 2.0 console (username allowlist + is_admin on API)
@@ -99,6 +103,39 @@ Exact locations required by Admin 2.0 (beyond the original overview + reports):
 
     location ~ ^/api/v1/admin/customers/[0-9a-fA-F-]{36}/classification$ {
         limit_except PATCH OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    location = /api/v1/admin/stars/grants/config {
+        limit_except GET OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    location = /api/v1/admin/stars/grants {
+        limit_except GET OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    location ~ ^/api/v1/admin/users/[0-9a-fA-F-]{36}/stars/grants$ {
+        limit_except GET POST OPTIONS { deny all; }
         proxy_pass http://127.0.0.1:8010;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

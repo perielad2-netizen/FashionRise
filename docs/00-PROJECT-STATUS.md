@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 PR #503 merged to main (`05e93b26`); not deployed
+**Last updated:** 2026-11-25 Asia/Jerusalem — PR #504 final integration corrections (not deployed)
+
+## DRAFT — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+
+| Field | Value |
+| --- | --- |
+| Status | **DRAFT** — Final integration corrections; syncing onto merged #503 `main`; **STOP** — not deployed / no live grants |
+| Stack / base | Rebase onto merged `main` (**`05e93b26`** / docs tip **`02cc2598`**) |
+| Branch | `cursor/admin-positive-only-stars-grants-77c6` |
+| Design | Positive-only ADD; pending isolation; read-only reconcile; uncertain-retry preserves key; authoritative current wallet display |
+| Migration chain | **042 → 043 → 044** (043 on main; 044 this PR) |
+| Exact next action | Verify → merge #504 → joint deploy authorization separately |
+
 
 ## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
 

@@ -6,6 +6,9 @@ Create Date: 2026-11-25
 
 Stores durable audit rows for positive-only administrative Stars credits.
 Does not change existing wallets. No signed adjustment / deduction API.
+
+Account deletion: recipient_id / actor_id use ON DELETE SET NULL so legitimate
+grant history is preserved in anonymized form and deletion is not blocked.
 """
 
 from __future__ import annotations
@@ -29,14 +32,14 @@ def upgrade() -> None:
         sa.Column(
             "recipient_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column(
             "actor_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
-            nullable=False,
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column("amount", sa.Integer(), nullable=False),
         sa.Column("balance_before", sa.Integer(), nullable=False),
@@ -62,8 +65,22 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.UniqueConstraint("idempotency_key", name="uq_admin_stars_grants_idempotency_key"),
-        sa.CheckConstraint("amount > 0", name="ck_admin_stars_grants_amount_positive"),
+        sa.UniqueConstraint(
+            "idempotency_key", name="uq_admin_stars_grants_idempotency_key"
+        ),
+        sa.CheckConstraint(
+            "amount > 0", name="ck_admin_stars_grants_amount_positive"
+        ),
+        sa.CheckConstraint(
+            "balance_before >= 0", name="ck_admin_stars_grants_balance_before_nonneg"
+        ),
+        sa.CheckConstraint(
+            "balance_after >= 0", name="ck_admin_stars_grants_balance_after_nonneg"
+        ),
+        sa.CheckConstraint(
+            "balance_after = balance_before + amount",
+            name="ck_admin_stars_grants_balance_math",
+        ),
     )
     op.create_index(
         "ix_admin_stars_grants_recipient_id", "admin_stars_grants", ["recipient_id"]
@@ -76,7 +93,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Safe only when no legitimate grant rows must be preserved in production.
-    # Documented separately — do not auto-run against live financial data.
+    # Never auto-downgrade a live financial ledger containing real grants.
     op.drop_index("ix_admin_stars_grants_created_at", table_name="admin_stars_grants")
     op.drop_index("ix_admin_stars_grants_actor_id", table_name="admin_stars_grants")
     op.drop_index("ix_admin_stars_grants_recipient_id", table_name="admin_stars_grants")

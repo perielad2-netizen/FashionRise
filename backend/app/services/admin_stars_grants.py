@@ -19,9 +19,11 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.admin_stars_grant import (
+    ABSOLUTE_GRANT_CEILING,
     ADMIN_GRANT_REASONS,
     ADMIN_GRANT_SOURCE,
     ADMIN_GRANT_STATUS_COMPLETED,
+    STARS_INT_MAX,
     AdminStarsGrant,
 )
 from app.models.user import User
@@ -32,28 +34,44 @@ _log = logging.getLogger(__name__)
 NOTE_MAX_LEN = 2000
 IDEMPOTENCY_KEY_MIN = 8
 IDEMPOTENCY_KEY_MAX = 128
+DEFAULT_MAX_GRANT = 10_000
+
+
+def absolute_grant_ceiling() -> int:
+    """Immutable code-enforced maximum — cannot be raised via environment."""
+    return ABSOLUTE_GRANT_CEILING
 
 
 def effective_max_grant_amount() -> int:
+    """Configured max clamped to the absolute ceiling; invalid config → 10_000."""
     settings = get_settings()
     configured = int(settings.admin_stars_grant_max_amount)
-    ceiling = int(settings.admin_stars_grant_hard_ceiling)
-    if configured < 1:
-        configured = 10_000
-    if ceiling < 1:
-        ceiling = 50_000
-    return min(configured, ceiling)
+    if configured < 1 or configured > ABSOLUTE_GRANT_CEILING:
+        configured = DEFAULT_MAX_GRANT
+    return min(configured, ABSOLUTE_GRANT_CEILING)
 
 
 def large_confirm_threshold() -> int:
-    return max(1, int(get_settings().admin_stars_grant_large_confirm_threshold))
+    raw = int(get_settings().admin_stars_grant_large_confirm_threshold)
+    if raw < 1:
+        return 500
+    return min(raw, ABSOLUTE_GRANT_CEILING)
+
+
+def grant_limits_payload() -> dict[str, Any]:
+    return {
+        "max_per_transaction": effective_max_grant_amount(),
+        "absolute_ceiling": absolute_grant_ceiling(),
+        "large_confirm_threshold": large_confirm_threshold(),
+        "reasons": list(ADMIN_GRANT_REASONS),
+    }
 
 
 def _serialize(grant: AdminStarsGrant) -> dict[str, Any]:
     return {
         "grant_id": str(grant.id),
-        "recipient_id": str(grant.recipient_id),
-        "actor_id": str(grant.actor_id),
+        "recipient_id": str(grant.recipient_id) if grant.recipient_id else None,
+        "actor_id": str(grant.actor_id) if grant.actor_id else None,
         "amount": int(grant.amount),
         "balance_before": int(grant.balance_before),
         "balance_after": int(grant.balance_after),
@@ -74,12 +92,16 @@ def _validate_amount(raw: Any) -> int:
         )
     if raw <= 0:
         raise ValidationAppError("amount must be a strictly positive integer")
-    if raw > 2_147_483_647:
+    if raw > STARS_INT_MAX:
         raise ValidationAppError("amount exceeds integer safety limit")
     max_allowed = effective_max_grant_amount()
     if raw > max_allowed:
         raise ValidationAppError(
             f"amount exceeds maximum allowed grant of {max_allowed} Stars per transaction"
+        )
+    if raw > ABSOLUTE_GRANT_CEILING:
+        raise ValidationAppError(
+            f"amount exceeds absolute ceiling of {ABSOLUTE_GRANT_CEILING} Stars"
         )
     return raw
 
@@ -110,13 +132,16 @@ def _validate_idempotency_key(key: str) -> str:
 def _idempotent_match(
     existing: AdminStarsGrant,
     *,
+    actor_id: uuid.UUID,
     recipient_id: uuid.UUID,
     amount: int,
     reason: str,
     note: str | None,
 ) -> bool:
+    """Same key may replay only for the same administrator + exact payload."""
     return (
-        existing.recipient_id == recipient_id
+        existing.actor_id == actor_id
+        and existing.recipient_id == recipient_id
         and int(existing.amount) == amount
         and existing.reason == reason
         and (existing.note or None) == note
@@ -136,8 +161,10 @@ def grant_stars(
 ) -> dict[str, Any]:
     """Atomically credit Stars and write an AdminStarsGrant audit row.
 
-    Idempotent on ``idempotency_key``. Same key + same payload → original result.
-    Same key + different payload → conflict. Never creates IapPurchase rows.
+    Idempotent on ``idempotency_key`` bound to the administrator identity.
+    Same key + same actor + same payload → original result.
+    Same key + different actor or payload → conflict.
+    Never creates IapPurchase rows. Never deducts.
     """
     amt = _validate_amount(amount)
     reason_n, note_n = _validate_reason_and_note(reason, note)
@@ -154,24 +181,27 @@ def grant_stars(
     if existing is not None:
         if not _idempotent_match(
             existing,
+            actor_id=actor.id,
             recipient_id=recipient_id,
             amount=amt,
             reason=reason_n,
             note=note_n,
         ):
             raise ConflictError(
-                "idempotency_key already used with different grant details",
+                "idempotency_key already used with different grant details "
+                "or by a different administrator",
                 payload={"grant_id": str(existing.id)},
             )
         return {**_serialize(existing), "idempotent_replay": True}
 
+    # Fresh authoritative recipient under row lock — avoid stale identity-map values.
+    db.expire_all()
     recipient = db.scalar(select(User).where(User.id == recipient_id).with_for_update())
     if recipient is None:
         raise NotFoundError("User not found")
     if not bool(recipient.is_active):
         raise ValidationAppError("Cannot grant Stars to an inactive account")
 
-    # Unlimited wallets: display-only; grants disabled (no documented accounting need).
     if ai_stars.user_has_unlimited_stars(recipient):
         raise ForbiddenError(
             "Manual Stars grants are disabled for unlimited-wallet accounts"
@@ -179,20 +209,27 @@ def grant_stars(
 
     debt = max(0, int(getattr(recipient, "ai_stars_iap_debt", 0) or 0))
     if debt > 0:
-        # credit_stars would silently settle debt — ambiguous for an ADD-ONLY admin gift.
         raise ForbiddenError(
             "Cannot grant Stars while outstanding IAP Stars debt exists "
             f"({debt} Stars). Resolve debt through the existing refund accounting path first."
         )
 
     balance_before = int(recipient.ai_stars or 0)
+    if balance_before < 0:
+        raise ValidationAppError("Recipient wallet balance is corrupt (negative)")
+    if balance_before > STARS_INT_MAX - amt:
+        raise ValidationAppError(
+            "Grant would overflow the Stars wallet integer limit; reduce amount"
+        )
+    expected_after = balance_before + amt
+
     grant = AdminStarsGrant(
         id=uuid.uuid4(),
         recipient_id=recipient.id,
         actor_id=actor.id,
         amount=amt,
         balance_before=balance_before,
-        balance_after=balance_before,  # filled after credit
+        balance_after=expected_after,
         reason=reason_n,
         note=note_n,
         source=ADMIN_GRANT_SOURCE,
@@ -201,12 +238,22 @@ def grant_stars(
     )
 
     try:
-        # SAVEPOINT: if unique idempotency races, roll back credit+row together.
+        # SAVEPOINT: wallet credit + ledger row succeed or roll back together.
         with db.begin_nested():
             balance_after = ai_stars.credit_stars(
                 db, recipient, amt, reason=f"admin_grant:{reason_n}"
             )
-            grant.balance_after = int(balance_after)
+            credited = int(balance_after)
+            if credited != expected_after:
+                raise ValidationAppError(
+                    "Grant aborted: credited balance did not equal requested add "
+                    f"(expected {expected_after}, got {credited})"
+                )
+            if credited != balance_before + amt:
+                raise ValidationAppError(
+                    "Grant aborted: credit did not equal the requested positive amount"
+                )
+            grant.balance_after = credited
             db.add(grant)
             db.flush()
     except IntegrityError as exc:
@@ -216,6 +263,7 @@ def grant_stars(
         if raced is not None:
             if _idempotent_match(
                 raced,
+                actor_id=actor.id,
                 recipient_id=recipient_id,
                 amount=amt,
                 reason=reason_n,
@@ -223,7 +271,8 @@ def grant_stars(
             ):
                 return {**_serialize(raced), "idempotent_replay": True}
             raise ConflictError(
-                "idempotency_key already used with different grant details",
+                "idempotency_key already used with different grant details "
+                "or by a different administrator",
                 payload={"grant_id": str(raced.id)},
             ) from exc
         raise ValidationAppError("Grant could not be recorded; please retry") from exc
@@ -261,32 +310,42 @@ def grants_overview(
     *,
     start: datetime | None = None,
     end: datetime | None = None,
+    audience: str | None = None,
 ) -> dict[str, Any]:
-    """Aggregate admin-grant stats for Admin 2.0 (separate from purchase revenue)."""
+    """Aggregate admin-grant stats (separate from purchase revenue).
 
-    def _apply_range(stmt):
+    When ``audience`` is provided, filter by recipient classification via SQL subquery.
+    """
+    from app.services.admin_analytics import _apply_audience_fk, parse_audience
+
+    aud = parse_audience(audience) if audience is not None else "all"
+
+    def _apply_filters(stmt):
         if start is not None:
             stmt = stmt.where(AdminStarsGrant.created_at >= start)
         if end is not None:
             stmt = stmt.where(AdminStarsGrant.created_at < end)
+        stmt = _apply_audience_fk(stmt, AdminStarsGrant.recipient_id, aud)
         return stmt
 
     stars_sum = int(
-        db.scalar(_apply_range(select(func.coalesce(func.sum(AdminStarsGrant.amount), 0))))
+        db.scalar(
+            _apply_filters(select(func.coalesce(func.sum(AdminStarsGrant.amount), 0)))
+        )
         or 0
     )
     grant_count = int(
-        db.scalar(_apply_range(select(func.count()).select_from(AdminStarsGrant))) or 0
+        db.scalar(_apply_filters(select(func.count()).select_from(AdminStarsGrant))) or 0
     )
     recipient_count = int(
         db.scalar(
-            _apply_range(select(func.count(func.distinct(AdminStarsGrant.recipient_id))))
+            _apply_filters(select(func.count(func.distinct(AdminStarsGrant.recipient_id))))
         )
         or 0
     )
 
     by_reason_rows = db.execute(
-        _apply_range(
+        _apply_filters(
             select(
                 AdminStarsGrant.reason,
                 func.count(),
@@ -300,7 +359,7 @@ def grants_overview(
     }
 
     by_actor_rows = db.execute(
-        _apply_range(
+        _apply_filters(
             select(
                 AdminStarsGrant.actor_id,
                 func.count(),
@@ -310,34 +369,38 @@ def grants_overview(
     ).all()
     by_actor: list[dict[str, Any]] = []
     for actor_id, cnt, stars in by_actor_rows:
-        actor = db.get(User, actor_id)
+        actor = db.get(User, actor_id) if actor_id else None
         by_actor.append(
             {
-                "actor_id": str(actor_id),
+                "actor_id": str(actor_id) if actor_id else None,
                 "username": actor.username if actor else None,
                 "count": int(cnt),
                 "stars": int(stars),
             }
         )
 
-    recent = db.scalars(
-        select(AdminStarsGrant).order_by(AdminStarsGrant.created_at.desc()).limit(20)
-    ).all()
+    recent_stmt = select(AdminStarsGrant).order_by(AdminStarsGrant.created_at.desc()).limit(20)
+    recent_stmt = _apply_filters(recent_stmt)
+    recent = db.scalars(recent_stmt).all()
 
     return {
         "kind": "exact",
         "source": ADMIN_GRANT_SOURCE,
         "counts_toward_revenue": False,
         "creates_iap_transactions": False,
+        "excluded_from_purchased_stars": True,
         "total_stars_granted": stars_sum,
         "grant_count": grant_count,
         "recipient_count": recipient_count,
         "by_reason": by_reason,
         "by_administrator": by_actor,
         "recent": [_serialize(r) for r in recent],
-        "max_per_transaction": effective_max_grant_amount(),
+        "audience": aud,
+        "audience_scoped": aud != "all",
+        **grant_limits_payload(),
         "note": (
             "Administrative ADD-ONLY credits. Not purchased Stars. "
-            "Not Apple/Google revenue. Distinct from competition payouts."
+            "Not Apple/Google revenue. Distinct from competition payouts and starting grants. "
+            "Free-vs-paid consumption attribution remains unavailable."
         ),
     }
