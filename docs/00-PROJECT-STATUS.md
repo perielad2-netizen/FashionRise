@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:55 Asia/Jerusalem — Admin AI financial intelligence + classification select UX fix; sync **disabled** until credentials verified
+**Last updated:** 2026-11-26 01:30 Asia/Jerusalem — Stable Admin FE tip consolidating sticky filters + compact Customers search
+
+## LIVE — Stable Admin mobile UX (sticky + Customers toolbar) (2026-11-26 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** — sticky filters fixed + compact Customers search (no giant input) |
+| PR | **#514** · branch `cursor/admin-overview-sticky-fix-77c6` (includes cherry-picks of #509+#511 UX) |
+| Supersedes open | #509 (sticky), #511 (Customers toolbar) — same UX onto `main` tip |
+| Deployed FE SHA | *(pending this push tip)* · prior `a0ca544e-admin-overview-sticky` |
+| Previous FE | `/var/www/fashionrise/releases/208357df-admin-ai-financial` (**preserved**) |
+| BE | Unchanged tip **`208357df`** · Alembic **045** · sync flags still **false** |
+| Fixes | Slim sticky title; mobile Audience/Range selects; Customers search height capped at 44px; labeled Classification/Sort |
+| Exact next action | Hard-refresh `/admin`; merge #514 (+ close #509/#511 as superseded); optional docs #513 |
+
 
 ## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
 
