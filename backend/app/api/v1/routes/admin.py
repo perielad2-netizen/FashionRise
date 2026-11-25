@@ -15,14 +15,17 @@ from app.db.session import get_db
 from app.models.account_classification_event import ACCOUNT_CLASSIFICATIONS
 from app.models.user import User
 from app.services import admin_analytics
+from app.services.admin_analytics import ConflictClassificationError
 
 router = APIRouter()
 
 
 class ClassificationBody(BaseModel):
     classification: str = Field(..., min_length=3, max_length=32)
-    reason: str | None = Field(default=None, max_length=500)
+    reason: str = Field(..., min_length=3, max_length=500)
     note: str | None = Field(default=None, max_length=2000)
+    expected_classification: str | None = Field(default=None, max_length=32)
+    expected_updated_at: str | None = Field(default=None, max_length=64)
 
 
 @router.get("/overview")
@@ -30,7 +33,7 @@ def admin_overview(
     _admin: AdminUser,
     db: Session = Depends(get_db),
     range: str = Query(default="last_30d", alias="range"),
-    audience: str = Query(default="all"),
+    audience: str = Query(default="customers"),
     start: datetime | None = Query(default=None),
     end: datetime | None = Query(default=None),
 ) -> dict[str, Any]:
@@ -54,19 +57,22 @@ def admin_customers(
     q: str | None = Query(default=None, max_length=120),
     classification: str | None = Query(default=None),
     audience: str = Query(default="all"),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="created_at_desc"),
 ) -> dict[str, Any]:
-    return admin_analytics.list_customers(
-        db,
-        q=q,
-        classification=classification,
-        audience=audience,
-        limit=limit,
-        offset=offset,
-        sort=sort,
-    )
+    try:
+        return admin_analytics.list_customers(
+            db,
+            q=q,
+            classification=classification,
+            audience=audience,
+            limit=limit,
+            offset=offset,
+            sort=sort,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/customers/{user_id}")
@@ -99,9 +105,14 @@ def admin_set_classification(
             to_classification=body.classification,
             reason=body.reason,
             note=body.note,
+            expected_classification=body.expected_classification,
+            expected_updated_at=body.expected_updated_at,
         )
         db.commit()
         return result
+    except ConflictClassificationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

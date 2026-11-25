@@ -69,6 +69,13 @@ def upgrade() -> None:
         "users",
         ["account_classification"],
     )
+    op.create_check_constraint(
+        "ck_users_account_classification",
+        "users",
+        "account_classification IN ("
+        + ", ".join(f"'{c}'" for c in _CLASSIFICATIONS)
+        + ")",
+    )
 
     op.create_table(
         "account_classification_events",
@@ -95,6 +102,18 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.CheckConstraint(
+            "from_classification IN ("
+            + ", ".join(f"'{c}'" for c in _CLASSIFICATIONS)
+            + ")",
+            name="ck_classification_events_from",
+        ),
+        sa.CheckConstraint(
+            "to_classification IN ("
+            + ", ".join(f"'{c}'" for c in _CLASSIFICATIONS)
+            + ")",
+            name="ck_classification_events_to",
+        ),
     )
     op.create_index(
         "ix_account_classification_events_user_id",
@@ -118,6 +137,7 @@ def downgrade() -> None:
         table_name="account_classification_events",
     )
     op.drop_table("account_classification_events")
+    op.drop_constraint("ck_users_account_classification", "users", type_="check")
     op.drop_index("ix_users_account_classification", table_name="users")
     op.drop_column("users", "account_classification_updated_by_id")
     op.drop_column("users", "account_classification_updated_at")
