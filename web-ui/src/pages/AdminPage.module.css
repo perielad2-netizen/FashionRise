@@ -523,12 +523,19 @@ th {
 
 .globalFilters {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin: 0 0 16px;
   width: 100%;
   /* In document flow — never sticky/overlapping content */
   position: relative;
   z-index: 1;
+}
+
+.filterLegend {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--admin-muted);
+  line-height: 1.35;
 }
 
 .filterSelects {
@@ -670,18 +677,44 @@ th {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   gap: 10px;
   margin-bottom: 12px;
 }
 
+.toolbarFilters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.toolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .search {
-  flex: 1 1 220px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
   min-height: 44px;
+  max-height: 44px;
   border: 1px solid var(--admin-line);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 0 14px;
   font: inherit;
+  font-size: 0.95rem;
+  line-height: 44px;
+  color: var(--admin-ink);
   background: #fff;
+  /* Prevent flex-grow stretch in column toolbars (was making search huge) */
+  flex: 0 0 auto;
+  resize: none;
 }
 
 .secondaryBtn {
@@ -983,17 +1016,28 @@ th {
 }
 
 .select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
   min-height: 44px;
+  max-height: 44px;
   border: 1px solid var(--admin-line);
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 0 36px 0 12px;
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 500;
+  line-height: 1.25;
   color: var(--admin-ink);
   -webkit-text-fill-color: var(--admin-ink);
-  background: #fff;
-  appearance: auto;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%231a1520' d='M1.4 0.6L6 5.2 10.6 0.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 8px;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .select option {
@@ -1103,10 +1147,33 @@ th {
 
   .toolbar {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbarFilters {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .toolbarActions {
+    width: 100%;
+  }
+
+  .toolbarActions .refresh,
+  .toolbarActions .secondaryBtn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+  }
+
+  .filterSelect {
+    width: 100%;
   }
 
   .search,
   .select {
     width: 100%;
+    flex: 0 0 auto;
   }
 }
