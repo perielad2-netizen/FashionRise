@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:55 Asia/Jerusalem — Admin AI financial intelligence + classification select UX fix; sync **disabled** until credentials verified
+**Last updated:** 2026-11-26 01:24 Asia/Jerusalem — Admin Overview sticky-filter FE tip **`a0ca544e`** LIVE (filters no longer overlay KPIs)
+
+## LIVE — Admin Overview sticky filters fix (FE `a0ca544e`) (2026-11-26 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** — Audience/Range no longer sticky-overlap KPI cards on mobile |
+| PR | **#514** · branch `cursor/admin-overview-sticky-fix-77c6` |
+| Deployed FE SHA | **`a0ca544e`** · `/var/www/fashionrise/releases/a0ca544e-admin-overview-sticky` |
+| Previous FE | `/var/www/fashionrise/releases/208357df-admin-ai-financial` (**preserved**) |
+| BE | Unchanged tip **`208357df`** · Alembic **045** · sync flags still **false** |
+| Fix | Slim sticky title bar only; filters in document flow; mobile compact `<select>`s |
+| Exact next action | Hard-refresh `/admin` on phone; merge #514 to pin tip on `main` |
 
 ## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
 
