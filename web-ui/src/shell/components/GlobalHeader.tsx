@@ -225,7 +225,7 @@ export function GlobalHeader({
     ? 'Buy Stars with Apple In‑App Purchase when purchasing is enabled for this build.'
     : nativeAndroid
       ? 'Google Play Billing for Stars is not available yet. Your current balance still works for AI features.'
-      : 'Web checkout for Stars is not open yet. On iPhone, buy Stars in the FashionRise iOS app when enabled.'
+      : 'Stars can only be purchased through the FashionRise mobile app. Sign in with the same account to use your Stars on the web.'
 
   return (
     <header className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>

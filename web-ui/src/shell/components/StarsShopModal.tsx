@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingBag, Star, X } from 'lucide-react'
+import { ExternalLink, ShoppingBag, Smartphone, Star, X } from 'lucide-react'
+import { MOBILE_STORE_LINKS } from '@/config/mobileStoreLinks'
 import { ApiError } from '@/services/api/client'
 import {
   fetchAppleIapStatus,
@@ -13,16 +14,8 @@ import {
   type PurchaseFlowState,
   type StarsIapProduct,
 } from '@/services/native/iap'
-import {
-  checkoutStarCart,
-  clearStarCart,
-  fetchStarCart,
-  fetchStarPackages,
-  formatUsdCents,
-  setStarCartItem,
-  type StarCart,
-  type StarPackage,
-} from '@/services/starsShopApi'
+import { isNativeShell } from '@/services/native/platform'
+import { fetchStarPackages, formatUsdCents, type StarPackage } from '@/services/starsShopApi'
 import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './StarsShopModal.module.css'
@@ -61,12 +54,13 @@ function stateMessage(state: PurchaseFlowState, fallback?: string): string | nul
 export function StarsShopModal({ open, onClose }: Props) {
   const { user, refreshUser } = useAuth()
   const { costs } = useAiStarsWallet()
+  // Capacitor-only detection (`@/services/native/platform`). Safari / Chrome / PWA stay web.
   const nativeIos = isNativeIosStarsShop()
   const nativeAndroid = isNativeAndroidShell()
+  const isWebRuntime = !isNativeShell()
   const costLine = `Magic: ${costs.magic} Stars · Model: ${costs.croquis} Stars · Fabric: ${costs.fabric} Stars · PDF: ${costs.pdf} Stars`
 
   const [packages, setPackages] = useState<StarPackage[]>([])
-  const [cart, setCart] = useState<StarCart | null>(null)
   const [iapProducts, setIapProducts] = useState<StarsIapProduct[]>([])
   const [iapStatus, setIapStatus] = useState<AppleIapStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -77,11 +71,10 @@ export function StarsShopModal({ open, onClose }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const purchaseLock = useRef(false)
 
-  const reloadWeb = useCallback(async () => {
+  const reloadAndroidCatalog = useCallback(async () => {
     setError(null)
-    const [pkgs, nextCart] = await Promise.all([fetchStarPackages(), fetchStarCart()])
+    const pkgs = await fetchStarPackages()
     setPackages(pkgs)
-    setCart(nextCart)
     void refreshUser()
   }, [refreshUser])
 
@@ -122,8 +115,16 @@ export function StarsShopModal({ open, onClose }: Props) {
             setNotice(recovery.message || 'Recovered a pending Stars purchase.')
             void refreshUser()
           }
+        } else if (nativeAndroid) {
+          // Native Android keeps current catalog preview; Play Billing is a future task.
+          await reloadAndroidCatalog()
         } else {
-          await reloadWeb()
+          // Browser / mobile browser / installed PWA — balance only; no purchase APIs.
+          setPackages([])
+          setIapProducts([])
+          setIapStatus(null)
+          setError(null)
+          void refreshUser()
         }
       } catch (err) {
         if (!cancelled) {
@@ -134,54 +135,13 @@ export function StarsShopModal({ open, onClose }: Props) {
     return () => {
       cancelled = true
     }
-  }, [open, nativeIos, reloadNativeIos, reloadWeb, refreshUser])
+  }, [open, nativeIos, nativeAndroid, reloadNativeIos, reloadAndroidCatalog, refreshUser])
 
   if (!open) return null
 
-  async function onAdd(sku: string) {
-    setBusy(true)
-    setError(null)
-    setNotice(null)
-    try {
-      const current = cart?.items.find((i) => i.package_sku === sku)?.quantity ?? 0
-      const next = await setStarCartItem(sku, current + 1)
-      setCart(next)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update cart.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onClear() {
-    setBusy(true)
-    setError(null)
-    try {
-      setCart(await clearStarCart())
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not clear cart.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onCheckout() {
-    setBusy(true)
-    setError(null)
-    setNotice(null)
-    try {
-      await checkoutStarCart()
-      setNotice('Checkout complete.')
-      await reloadWeb()
-    } catch (err) {
-      // Expected until payments ship.
-      setNotice(err instanceof ApiError ? err.message : 'Checkout is not available yet.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function onNativeBuy(productId: string) {
+    // Hard boundary: StoreKit purchase only on Capacitor iOS.
+    if (!nativeIos || isWebRuntime || nativeAndroid) return
     if (purchaseLock.current || busy) return
     purchaseLock.current = true
     setBusy(true)
@@ -238,6 +198,7 @@ export function StarsShopModal({ open, onClose }: Props) {
         aria-modal="true"
         aria-label="Stars shop"
         data-testid="stars-shop-modal"
+        data-platform={nativeIos ? 'ios' : nativeAndroid ? 'android' : 'web'}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={styles.handle} aria-hidden />
@@ -329,17 +290,15 @@ export function StarsShopModal({ open, onClose }: Props) {
               </p>
             ) : null}
           </>
-        ) : (
+        ) : nativeAndroid ? (
           <>
             <p className={styles.hint}>
-              Stars power your AI fashion creations. Choose a package below to get started.
-              {nativeAndroid
-                ? ' Google Play Stars purchasing is not available yet.'
-                : ' Packages are listed now; web checkout opens later. On iOS, buy Stars in the App Store app.'}
+              Stars power your AI fashion creations. Choose a package below to get started. Google
+              Play Stars purchasing is not available yet.
             </p>
             <p className={styles.costs}>{costLine}</p>
 
-            <section className={styles.section}>
+            <section className={styles.section} data-testid="stars-android-packages">
               <h3>Packages</h3>
               <ul className={styles.list}>
                 {packages.map((pkg) => (
@@ -363,8 +322,9 @@ export function StarsShopModal({ open, onClose }: Props) {
                     <button
                       type="button"
                       className={styles.addBtn}
-                      disabled={busy || nativeAndroid}
-                      onClick={() => void onAdd(pkg.sku)}
+                      disabled
+                      aria-disabled="true"
+                      title="Google Play Stars purchasing is not available yet"
                     >
                       Add
                     </button>
@@ -372,54 +332,74 @@ export function StarsShopModal({ open, onClose }: Props) {
                 ))}
               </ul>
             </section>
+          </>
+        ) : (
+          <>
+            <p className={styles.hint}>
+              Stars power your AI fashion creations. Your balance works the same on web and in the
+              mobile apps.
+            </p>
+            <p className={styles.costs}>{costLine}</p>
 
-            {!nativeAndroid ? (
-              <section className={styles.section}>
-                <h3>Cart</h3>
-                {!cart?.items.length ? (
-                  <p className={styles.empty}>Cart is empty.</p>
-                ) : (
-                  <ul className={styles.cartList}>
-                    {cart.items.map((item) => (
-                      <li key={item.package_sku} className={styles.cartLine}>
-                        <span>
-                          {item.name} × {item.quantity}
-                        </span>
-                        <span>
-                          {item.stars_line} Stars · {formatUsdCents(item.price_usd_cents_line)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {cart ? (
-                  <div className={styles.totals}>
-                    <span>Total: {cart.stars_total} Stars</span>
-                    <span>{formatUsdCents(cart.price_usd_cents_total)}</span>
-                  </div>
-                ) : null}
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.secondary}
-                    disabled={busy || !cart?.items.length}
-                    onClick={() => void onClear()}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.primary}
-                    disabled={busy || !cart?.items.length}
-                    onClick={() => void onCheckout()}
-                    title={cart?.checkout_note || 'Checkout'}
-                  >
-                    Checkout
-                  </button>
+            <section
+              className={styles.section}
+              data-testid="stars-web-store-panel"
+              aria-labelledby="fr-get-more-stars"
+            >
+              <div className={styles.webStorePanel}>
+                <div className={styles.webStoreIcon} aria-hidden>
+                  <Smartphone size={22} />
                 </div>
-                {cart?.checkout_note ? <p className={styles.comingSoon}>{cart.checkout_note}</p> : null}
-              </section>
-            ) : null}
+                <h3 id="fr-get-more-stars" className={styles.webStoreHeading}>
+                  Get more Stars
+                </h3>
+                <p className={styles.webStoreLead}>
+                  Stars can only be purchased through the FashionRise mobile app.
+                </p>
+                <p className={styles.webStoreSync}>
+                  Sign in with the same FashionRise account to use your Stars across devices.
+                </p>
+                <ul className={styles.storeOptions}>
+                  {MOBILE_STORE_LINKS.map((store) => {
+                    const available = store.availability === 'available' && Boolean(store.href)
+                    return (
+                      <li
+                        key={store.id}
+                        className={`${styles.storeCard} ${
+                          available ? styles.storeCardAvailable : styles.storeCardSoon
+                        }`}
+                        data-testid={`stars-store-${store.id}`}
+                        data-availability={store.availability}
+                      >
+                        <div className={styles.storeCardBody}>
+                          <div className={styles.storeCardTitle}>{store.title}</div>
+                          <div className={styles.storeCardSub}>{store.subtitle}</div>
+                        </div>
+                        {available && store.href ? (
+                          <a
+                            className={styles.storeLink}
+                            href={store.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={`stars-store-link-${store.id}`}
+                          >
+                            Open
+                            <ExternalLink size={14} aria-hidden />
+                          </a>
+                        ) : (
+                          <span
+                            className={styles.storeBadge}
+                            data-testid={`stars-store-badge-${store.id}`}
+                          >
+                            Coming soon
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </section>
           </>
         )}
 
