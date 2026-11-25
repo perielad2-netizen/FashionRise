@@ -8,6 +8,7 @@ import {
   fetchAdminCustomers,
   fetchAdminOverview,
   fetchAdminReports,
+  applyStarsGrantToCustomerDetail,
   fetchAdminStarsGrantsOverview,
   fetchClassificationDryRun,
   fetchMetricDictionary,
@@ -1397,24 +1398,9 @@ function AdminShell() {
                 : prev,
             )
           }}
-          onGranted={(grant) => {
+          onGranted={(grant, currentWallet) => {
             setSelectedCustomer((prev) =>
-              prev && prev.id === grant.recipient_id
-                ? {
-                    ...prev,
-                    wallet: {
-                      ...prev.wallet,
-                      ai_stars: grant.balance_after,
-                    },
-                    admin_stars_grants: {
-                      kind: 'exact',
-                      counts_toward_revenue: false,
-                      editable: false,
-                      deletable: false,
-                      items: [grant, ...(prev.admin_stars_grants?.items || [])],
-                    },
-                  }
-                : prev,
+              prev ? applyStarsGrantToCustomerDetail(prev, grant, currentWallet) : prev,
             )
             setGrantTarget(null)
             void load()

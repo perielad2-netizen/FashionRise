@@ -577,3 +577,45 @@ export function pendingMatchesPayload(
 export function isDefinitiveGrantFailure(status: number): boolean {
   return status === 400 || status === 401 || status === 403 || status === 404 || status === 409 || status === 422
 }
+
+export type GrantWalletSnapshot = {
+  ai_stars: number
+  ai_stars_unlimited?: boolean
+  ai_stars_iap_debt?: number
+}
+
+/**
+ * Apply a completed grant to customer detail for Admin UI.
+ * Prefer authoritative current wallet when provided (reconcile / post-grant drift).
+ * Never duplicate an existing grant_id in history.
+ */
+export function applyStarsGrantToCustomerDetail(
+  prev: AdminCustomerDetail,
+  grant: AdminStarsGrantRecord,
+  currentWallet?: GrantWalletSnapshot | null,
+): AdminCustomerDetail {
+  if (prev.id !== grant.recipient_id) return prev
+  const items = prev.admin_stars_grants?.items || []
+  const exists = items.some((g) => g.grant_id === grant.grant_id)
+  return {
+    ...prev,
+    wallet: {
+      ...prev.wallet,
+      ai_stars: currentWallet?.ai_stars ?? grant.balance_after,
+      ...(currentWallet?.ai_stars_unlimited !== undefined
+        ? { ai_stars_unlimited: currentWallet.ai_stars_unlimited }
+        : {}),
+      ...(currentWallet?.ai_stars_iap_debt !== undefined
+        ? { ai_stars_iap_debt: currentWallet.ai_stars_iap_debt }
+        : {}),
+    },
+    admin_stars_grants: {
+      kind: 'exact',
+      counts_toward_revenue: false,
+      editable: false,
+      deletable: false,
+      excluded_from_revenue: true,
+      items: exists ? items : [grant, ...items],
+    },
+  }
+}

@@ -15,6 +15,7 @@ import {
   type AdminCustomerDetail,
   type AdminStarsGrantReason,
   type AdminStarsGrantRecord,
+  type GrantWalletSnapshot,
 } from '@/services/adminApi'
 import styles from './GrantStarsModal.module.css'
 
@@ -39,7 +40,8 @@ type Props = {
   >
   adminId: string
   onClose: () => void
-  onGranted: (grant: AdminStarsGrantRecord) => void
+  /** Second arg is authoritative current wallet when known (may differ from grant.balance_after). */
+  onGranted: (grant: AdminStarsGrantRecord, currentWallet?: GrantWalletSnapshot) => void
   /** Optional wallet refresh when reconcile returns a newer balance. */
   onWalletRefresh?: (wallet: {
     ai_stars: number
@@ -154,7 +156,16 @@ export function GrantStarsModal({
           }
           setError(null)
           setStep('success')
-          onGranted(rec.grant)
+          onGranted(
+            rec.grant,
+            rec.wallet
+              ? {
+                  ai_stars: rec.wallet.ai_stars,
+                  ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
+                  ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
+                }
+              : { ai_stars: rec.grant.balance_after },
+          )
           return
         }
         if (rec.outcome === 'unavailable') {
@@ -256,6 +267,9 @@ export function GrantStarsModal({
       return
     }
 
+    // Snapshot recovery state before any async work. A 4xx on retry does NOT
+    // prove the earlier uncertain request failed — keep the original key.
+    const recoveringUncertain = uncertain
     const pendingExisting = readPendingStarsGrant()
     let key = idempotencyKey
     if (pendingExisting) {
@@ -289,67 +303,76 @@ export function GrantStarsModal({
       }
     }
 
-    // Prefer read-only reconcile before another POST when recovering.
-    if (uncertain) {
-      try {
-        const rec = await fetchAdminStarsGrantByIdempotency(key)
-        if (rec.outcome === 'recorded' && rec.grant) {
-          clearPendingStarsGrant(key)
-          setResult(rec.grant)
-          setUncertain(false)
-          if (rec.wallet) {
-            setWalletStars(rec.wallet.ai_stars)
-            onWalletRefresh?.({
-              ai_stars: rec.wallet.ai_stars,
-              ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
-              ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
-            })
-            if (rec.wallet.ai_stars !== rec.grant.balance_after) {
-              setWalletChangedNote(
-                `Wallet has changed since the grant completed (current balance ${rec.wallet.ai_stars.toLocaleString()} Stars).`,
-              )
-            }
-          }
-          setStep('success')
-          onGranted(rec.grant)
-          return
-        }
-        if (rec.outcome === 'unavailable') {
-          setError(rec.message)
-          setStep('blocked')
-          return
-        }
-      } catch {
-        // Fall through to POST — uncertain network; keep same key.
-      }
-    }
-
-    const pending = buildPendingStarsGrant({
-      adminId,
-      recipientId: customer.id,
-      amount,
-      reason,
-      note: note.trim(),
-      idempotencyKey: key,
-    })
-    const writeResult = writePendingStarsGrant(pending)
-    if (!writeResult.ok) {
-      setError(
-        'An unresolved pending grant already exists and was not overwritten. ' +
-          `Reconcile recipient ${writeResult.existing.recipientId} first.`,
-      )
-      setBlockingPending({
-        recipientId: writeResult.existing.recipientId,
-        idempotencyKey: writeResult.existing.idempotencyKey,
-      })
-      setStep('blocked')
-      return
-    }
-
+    // Sync lock before any async reconcile or POST (double-click / concurrent safe).
     submitLock.current = true
     setSubmitting(true)
     setError(null)
     try {
+      // Prefer read-only reconcile before another POST when recovering.
+      if (recoveringUncertain) {
+        try {
+          const rec = await fetchAdminStarsGrantByIdempotency(key)
+          if (rec.outcome === 'recorded' && rec.grant) {
+            clearPendingStarsGrant(key)
+            setResult(rec.grant)
+            setUncertain(false)
+            setNoteRequiredForRecovery(false)
+            const walletSnap: GrantWalletSnapshot = rec.wallet
+              ? {
+                  ai_stars: rec.wallet.ai_stars,
+                  ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
+                  ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
+                }
+              : { ai_stars: rec.grant.balance_after }
+            setWalletStars(walletSnap.ai_stars)
+            if (rec.wallet) {
+              onWalletRefresh?.({
+                ai_stars: rec.wallet.ai_stars,
+                ai_stars_unlimited: rec.wallet.ai_stars_unlimited,
+                ai_stars_iap_debt: rec.wallet.ai_stars_iap_debt,
+              })
+              if (rec.wallet.ai_stars !== rec.grant.balance_after) {
+                setWalletChangedNote(
+                  `Wallet has changed since the grant completed (current balance ${rec.wallet.ai_stars.toLocaleString()} Stars).`,
+                )
+              }
+            }
+            setStep('success')
+            onGranted(rec.grant, walletSnap)
+            return
+          }
+          if (rec.outcome === 'unavailable') {
+            setError(rec.message)
+            setStep('blocked')
+            return
+          }
+        } catch {
+          // Fall through to POST — uncertain network; keep same key.
+        }
+      }
+
+      const pending = buildPendingStarsGrant({
+        adminId,
+        recipientId: customer.id,
+        amount,
+        reason,
+        note: note.trim(),
+        idempotencyKey: key,
+      })
+      const writeResult = writePendingStarsGrant(pending)
+      if (!writeResult.ok) {
+        setError(
+          'An unresolved pending grant already exists and was not overwritten. ' +
+            `Reconcile recipient ${writeResult.existing.recipientId} first.`,
+        )
+        setBlockingPending({
+          recipientId: writeResult.existing.recipientId,
+          idempotencyKey: writeResult.existing.idempotencyKey,
+        })
+        setStep('blocked')
+        return
+      }
+
       const grant = await postAdminStarsGrant(customer.id, {
         amount,
         reason,
@@ -363,12 +386,23 @@ export function GrantStarsModal({
       setResult(grant)
       setWalletStars(grant.balance_after)
       setStep('success')
-      onGranted(grant)
+      onGranted(grant, { ai_stars: grant.balance_after })
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Grant failed'
       const status = e instanceof ApiError ? e.status : 0
-      if (status && isDefinitiveGrantFailure(status)) {
-        // Definitive rejection — clear pending so a corrected new attempt can proceed.
+      if (recoveringUncertain) {
+        // Retry 4xx / network while recovering: keep original pending key until
+        // authoritative reconcile proves recorded or a human resolves it.
+        setUncertain(true)
+        setNoteRequiredForRecovery(noteFingerprint(note.trim()) !== noteFingerprint(''))
+        setError(
+          `${msg}. Outcome still uncertain for the original idempotency key — ` +
+            'pending recovery was preserved. Reconcile or retry with the same key; ' +
+            'do not start a new key. A 4xx on retry does not prove the earlier request failed.',
+        )
+        setStep('confirm')
+      } else if (status && isDefinitiveGrantFailure(status)) {
+        // First-attempt definitive validation/auth rejection — safe to clear.
         clearPendingStarsGrant(key)
         setUncertain(false)
         setNoteRequiredForRecovery(false)

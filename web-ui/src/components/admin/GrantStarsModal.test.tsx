@@ -318,7 +318,7 @@ describe('GrantStarsModal', () => {
     expect(postAdminStarsGrant.mock.calls[1][1].idempotency_key).toBe('grant-pending-key-01')
   })
 
-  it('clears pending on definitive rejection', async () => {
+  it('clears pending on definitive first-attempt rejection', async () => {
     postAdminStarsGrant.mockRejectedValueOnce(
       new ApiError('amount must be a strictly positive integer', 422, null),
     )
@@ -335,6 +335,97 @@ describe('GrantStarsModal', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Confirm & Grant 25 Stars/i }))
     await waitFor(() => expect(clearPendingStarsGrant).toHaveBeenCalled())
     await screen.findByText(/rejection is definitive/i)
+  })
+
+  it('keeps original pending key when uncertain recovery retry returns 4xx', async () => {
+    readPendingStarsGrant.mockReturnValue({
+      adminId: 'admin-1',
+      recipientId: 'user-1',
+      amount: 50,
+      reason: 'CUSTOMER_APPRECIATION',
+      noteFingerprint: '0:0',
+      idempotencyKey: 'grant-uncertain-key',
+      createdAt: new Date().toISOString(),
+    })
+    fetchAdminStarsGrantByIdempotency.mockResolvedValue({
+      outcome: 'not_found',
+      message: 'No completed grant',
+      grant: null,
+      wallet: null,
+      wallet_mutations: 0,
+    })
+    postAdminStarsGrant.mockRejectedValueOnce(
+      new ApiError('Cannot grant while outstanding IAP Stars debt exists', 403, null),
+    )
+    render(
+      <GrantStarsModal
+        customer={customer}
+        adminId="admin-1"
+        onClose={vi.fn()}
+        onGranted={vi.fn()}
+      />,
+    )
+    await screen.findByText(/Pending grant recovery active/i)
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Reconcile \/ Confirm 50 Stars/i }),
+    )
+    await waitFor(() => expect(postAdminStarsGrant).toHaveBeenCalled())
+    expect(postAdminStarsGrant.mock.calls[0][1].idempotency_key).toBe('grant-uncertain-key')
+    expect(clearPendingStarsGrant).not.toHaveBeenCalled()
+    await screen.findByText(/pending recovery was preserved/i)
+    expect(postAdminStarsGrant.mock.calls[0][1].idempotency_key).toBe('grant-uncertain-key')
+  })
+
+  it('passes authoritative current wallet to onGranted on reconcile', async () => {
+    const onGranted = vi.fn()
+    readPendingStarsGrant.mockReturnValue({
+      adminId: 'admin-1',
+      recipientId: 'user-1',
+      amount: 50,
+      reason: 'CUSTOMER_APPRECIATION',
+      noteFingerprint: '0:0',
+      idempotencyKey: 'grant-wallet-auth',
+      createdAt: new Date().toISOString(),
+    })
+    fetchAdminStarsGrantByIdempotency.mockResolvedValue({
+      outcome: 'recorded',
+      message: 'Completed',
+      grant: {
+        grant_id: 'g-auth',
+        recipient_id: 'user-1',
+        actor_id: 'admin-1',
+        amount: 50,
+        balance_before: 10,
+        balance_after: 60,
+        reason: 'CUSTOMER_APPRECIATION',
+        note: null,
+        source: 'ADMIN_GRANT',
+        status: 'completed',
+        idempotency_key: 'grant-wallet-auth',
+        created_at: null,
+        idempotent_replay: true,
+      },
+      wallet: {
+        recipient_id: 'user-1',
+        ai_stars: 42,
+        ai_stars_unlimited: false,
+        ai_stars_iap_debt: 0,
+      },
+      wallet_mutations: 0,
+    })
+    render(
+      <GrantStarsModal
+        customer={customer}
+        adminId="admin-1"
+        onClose={vi.fn()}
+        onGranted={onGranted}
+      />,
+    )
+    await screen.findByText(/Stars granted successfully/i)
+    expect(onGranted).toHaveBeenCalledWith(
+      expect.objectContaining({ grant_id: 'g-auth', balance_after: 60 }),
+      expect.objectContaining({ ai_stars: 42 }),
+    )
   })
 
   it('shows wallet change after reconcile when current balance differs', async () => {
