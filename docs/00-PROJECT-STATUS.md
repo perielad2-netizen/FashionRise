@@ -14,6 +14,7 @@
 | Baseline main | **`f3967dbf`** |
 | Pre-correction SHA | **`27fa5361`** (Technical PM source inspection) |
 | PM-amendments SHA | **`19e900e0`** |
+| Final acceptance SHA | **`06ddd250`** |
 | Final acceptance | Gross/refund/net no double-subtraction · Jerusalem calendar-day registration trend · classification identity-map refresh · reserved username blocked on invite register + Google auto-username |
 | Scope | Audience-scoped analytics · Jerusalem date ranges · Production-only revenue · honest Stars unavailable · classification confirm/concurrency · auth reservation · customer pagination · Enabled Accounts terminology · AI status verify · nginx allowlist proposal · expanded tests |
 | Migration | Alembic **043** — disposable **042→043→042→043** verified; **not applied to production** |
