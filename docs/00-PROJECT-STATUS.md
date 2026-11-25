@@ -3,12 +3,13 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction MERGED (not deployed)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction **CLOSED** (FE tip `e0ee7bed`)
 
-## MERGED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
+| Status | **CLOSED** — FE tip live + authenticated prod browser verification + docs tip merged |
 | Product decision | Browser/PWA must **not** offer Stars checkout; purchases only via native mobile stores |
 | Implementation | `StarsShopModal` web branch → **Get more Stars** panel; Capacitor `isNativeShell` / `isNativeIosStarsShop` / `isNativeAndroidShell` isolation |
 | Unrecognized native | Capacitor native shell that is neither iOS nor Android → balance-only safe UI (**no** web store promo, **no** payment) |
@@ -20,11 +21,23 @@
 | Baseline test compare | `d3bdb570` vs PR: **0 newly introduced deterministic failures**; Techpack PDF validity desktop case is **flaky** on both revisions |
 | Focused Stars/IAP | **25 passed** (Capacitor-mocked platform helpers) |
 | Build / SW / Vite flags | Production build + SW safety + prod Vite asserts **ok** |
+| Feature merge | [#500](https://github.com/perielad2-netizen/FashionRise/pull/500) → `main` @ **`31e0edc3`** (impl `cb4bf659`) |
+| Tip SHA | **`e0ee7bed`** (`e0ee7bed6c72164c370bc4db454148d56d1e5c33`) — #500 + status tip #501 only; no unrelated product commits |
+| Production release dir | `/var/www/fashionrise/releases/e0ee7bed-web-stars-restriction` |
+| Previous FE release | `/var/www/fashionrise/releases/f8d73dc9-ios-profile-kbd` (`f8d73dc9`) |
+| Public `/version.json` | `{"app":"e0ee7bed","sha":"e0ee7bed","builtAt":"2026-11-25T19:52:32.189Z"}` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/f8d73dc9-ios-profile-kbd /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Vite / feature flags | Preserved tip allowlist: `REGISTRATION=false`, Magic/Front-Back/Dual Magic **on**, Croquis notices SHA256 match tip `f8d73dc9`; assert-prod-vite-flags **pass** |
+| Visual checkpoint | Early dark captures = mid-animation (`starsFade` 280ms / `starsSheet` 420ms). Post-animation desktop 1280×800 / tablet 768×1024 / mobile 390×844: backdrop+modal computed opacity **1**; balance, Get more Stars, Apple **Open**, Google Play **Coming soon** readable; no overflow. **No app code change** (timing-only). Artifacts: `stars-shop-{desktop,tablet,mobile}-postanim.png` |
+| Public smoke | Home/login/register **200**; title `FashionRise · App e0ee7bed`; tip assets `index-C0oqSWFS.js` + SW precache; App Store **301→200**; loopback API health/ready **ok**; **0** new console errors |
+| Authenticated prod browser | Authorized owner account: login → Studio → Stars Shop (balance **∞ unlimited**, Get more Stars, App Store `id6832116469`, Google Play **Coming soon**, **no** cart/checkout) → My Stars & Billing (web purchase message) → close → Studio resumed. **No** purchases, Stars spend, or paid AI. Artifacts: `prod-auth-stars-shop.png`, `prod-auth-billing.png`, `prod-auth-studio-resumed.png` |
+| Backend | **Unchanged** — no API/worker restart; `fashionrise-api` ActiveEnter `2026-11-24 14:11:15 UTC`; BE tree tip still `f34bd48` |
+| Native apps | **Unchanged** — no Codemagic / ASC / Play submit |
 | Native rebuild | **Not required** for this browser-only FE tip; future native builds must retain platform branches |
+| Platform isolation | Web → Get more Stars + store links; iOS → StoreKit; Android → catalog / Coming soon billing; unrecognized native → balance-only |
 | Pending Android | Native push + Google Play Billing remain separate future tasks |
-| Merged | [#500](https://github.com/perielad2-netizen/FashionRise/pull/500) → `main` @ **`31e0edc3`** (impl `cb4bf659`) |
-| Deployed? | **No** — STOP for Technical PM **deployment** authorization |
-| Exact next action | FE-only tip deploy after PM OK (rollback = previous `current` symlink) |
+| Docs tip | [#502](https://github.com/perielad2-netizen/FashionRise/pull/502) |
+| Exact next action | **STOP** — milestone CLOSED. Next product work = Android native push / Play Billing when PM authorizes (separate PRs). |
 
 ## LIVE — iOS profile card + keyboard chat (2026-11-24 Asia/Jerusalem)
 
