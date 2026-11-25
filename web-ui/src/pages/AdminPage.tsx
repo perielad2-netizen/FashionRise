@@ -379,7 +379,7 @@ function AdminShell() {
 
       <main className={styles.main}>
         <header className={styles.header}>
-          <div className={styles.headerTop}>
+          <div className={styles.headerBar}>
             <button
               type="button"
               className={styles.menuToggle}
@@ -389,21 +389,59 @@ function AdminShell() {
             >
               Menu
             </button>
-            <div>
+            <div className={styles.headerCopy}>
               <h1>{SECTIONS.find((s) => s.id === section)?.label ?? 'Admin'}</h1>
               <p>
-                Business intelligence · Asia/Jerusalem · {rangeLabel} · Updated {generated ?? '—'}
+                Asia/Jerusalem · {rangeLabel} · Updated {generated ?? '—'}
               </p>
             </div>
             <button type="button" className={styles.refresh} onClick={() => void load()}>
               Refresh
             </button>
           </div>
+        </header>
 
-          <div className={styles.globalFilters} aria-label="Global filters">
+        <div className={styles.globalFilters} aria-label="Global filters">
+          {/* Mobile: compact selects so chips never sticky-overlap KPIs */}
+          <div className={styles.filterSelects}>
+            <label className={styles.filterSelect}>
+              <span className={styles.filterLabel}>Audience</span>
+              <select
+                className={styles.select}
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+                aria-label="Audience"
+              >
+                {AUDIENCES.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                    {a.id === 'unclassified' && unclassified != null ? ` (${fmt(unclassified)})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.filterSelect}>
+              <span className={styles.filterLabel}>Range</span>
+              <select
+                className={styles.select}
+                value={range}
+                onChange={(e) => setRange(e.target.value as AdminRangeKey)}
+                aria-label="Range"
+              >
+                {RANGES.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* Desktop / wide tablet: chip rows */}
+          <div className={styles.filterChips}>
             <div className={styles.filterGroup}>
               <span className={styles.filterLabel}>Audience</span>
-              <div className={styles.chipRow}>
+              <div className={styles.chipRow} role="group" aria-label="Audience">
                 {AUDIENCES.map((a) => (
                   <button
                     key={a.id}
@@ -419,7 +457,7 @@ function AdminShell() {
             </div>
             <div className={styles.filterGroup}>
               <span className={styles.filterLabel}>Range</span>
-              <div className={styles.chipRow}>
+              <div className={styles.chipRow} role="group" aria-label="Range">
                 {RANGES.map((r) => (
                   <button
                     key={r.id}
@@ -433,7 +471,7 @@ function AdminShell() {
               </div>
             </div>
           </div>
-        </header>
+        </div>
 
         {unclassified != null && unclassified > 0 && audience === 'customers' ? (
           <div className={styles.banner} role="status">
