@@ -22,6 +22,7 @@
 | Build / SW / Vite flags | Production build + SW safety + prod Vite asserts **ok** |
 | Native rebuild | **Not required** for this browser-only FE tip; future native builds must retain platform branches |
 | Pending Android | Native push + Google Play Billing remain separate future tasks |
+| Merged | [#500](https://github.com/perielad2-netizen/FashionRise/pull/500) → `main` @ **`31e0edc3`** (impl `cb4bf659`) |
 | Deployed? | **No** — STOP for Technical PM **deployment** authorization |
 | Exact next action | FE-only tip deploy after PM OK (rollback = previous `current` symlink) |
 
