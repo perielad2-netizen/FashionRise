@@ -3,9 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Admin #503 (`05e93b26`) + #504 (`6abc0d10`) merged; not deployed
+**Last updated:** 2026-11-26 00:30 Asia/Jerusalem — Admin Overview mobile filter UX hotfix FE **`2d11789a`** live (Admin 2.0 prod tip `78771a0b` / Alembic **044**; grants fail-closed)
 
-## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## LIVE — Admin Overview mobile filter UX hotfix (2026-11-26 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** FE tip |
+| Problem | Sticky header included Audience/Range chip rows → chips floated over KPIs / Needs attention on mobile scroll (“frozen” filters) |
+| Fix | Slim sticky title bar only; filters stay in document flow; narrow screens use compact Audience/Range selects; desktop keeps chip rows |
+| FE SHA | **`2d11789a`** |
+| Release | `/var/www/fashionrise/releases/2d11789a-admin-mobile-filters` |
+| Previous FE | `/var/www/fashionrise/releases/78771a0b-admin20-503-504` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/78771a0b-admin20-503-504 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Backend / Alembic | Unchanged (`78771a0b` / **044**) |
+| Exact next action | Hard-refresh `/admin` on phone; confirm filters no longer overlay cards. Financial grants still fail-closed until separately authorized. |
+
+## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — DEPLOYED (prod tip `78771a0b`)
 
 | Field | Value |
 | --- | --- |
