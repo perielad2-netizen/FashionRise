@@ -3,26 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 #503 final acceptance corrections (not deployed)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 PR #503 merged to main (`05e93b26`); not deployed
 
-## DRAFT — FashionRise Admin 2.0 foundation + final acceptance (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
 
 | Field | Value |
 | --- | --- |
-| Status | **DRAFT** — Final acceptance corrections applied; **STOP** — not approved for merge / migration / deploy |
+| Status | **MERGED to `main`** — production tip deploy + Alembic **043** still **pending authorization** |
+| Merged SHA | **`05e93b26`** (merge of tip `c0b62d9c` / implementation `06ddd250`) |
+| Merged at | 2026-11-25 23:55 Asia/Jerusalem (`2026-11-25T21:55:16Z`) |
 | Design doc | [`docs/ADMIN-2.0-BUSINESS-INTELLIGENCE.md`](./ADMIN-2.0-BUSINESS-INTELLIGENCE.md) |
-| Baseline main | **`f3967dbf`** |
-| Pre-correction SHA | **`27fa5361`** (Technical PM source inspection) |
-| PM-amendments SHA | **`19e900e0`** |
-| Final acceptance SHA | **`06ddd250`** |
+| Baseline main (pre-merge) | **`f3967dbf`** |
 | Final acceptance | Gross/refund/net no double-subtraction · Jerusalem calendar-day registration trend · classification identity-map refresh · reserved username blocked on invite register + Google auto-username |
-| Scope | Audience-scoped analytics · Jerusalem date ranges · Production-only revenue · honest Stars unavailable · classification confirm/concurrency · auth reservation · customer pagination · Enabled Accounts terminology · AI status verify · nginx allowlist proposal · expanded tests |
-| Migration | Alembic **043** — disposable **042→043→042→043** verified; **not applied to production** |
-| Mutations | Classification PATCH only (audited); **no** wallet grants / payment gates / native changes / prod classification backfill |
-| Admin Stars grants | Separate stacked PR **#504** — synchronize after this amend |
-| Verification | Admin suite **47+** · IAP/wallet regression **ok** · FE AdminPage **9 passed** · `tsc`/`lint`/`build` **ok** · reserved username register blocked |
+| Migration on `main` | Alembic **043** present (`042 → 043`); **not applied to production** |
+| Combined chain (with #504) | **042 → 043 → 044** — **044** remains on PR **#504** until integrated |
+| Mutations on merge | Classification PATCH only (audited); **no** prod classification / wallet / payment / notification changes |
+| Admin Stars grants | Stacked PR **#504** notified to rebase onto merged `main` `05e93b26` |
+| Pre-merge verification | Tip full suite **1235 passed / 100 failed / 2 errors**; tip failure set vs baseline `f3967dbf`: **99 failed + 2 errors reproduce**; **1** flaky (`test_oldest_queue_tick_would_prefer_earlier_job`, outside #503 diff, passes 3/3 isolated) → **0 newly introduced deterministic failures**; admin/registration **103 passed**; required CI checks **none reported** / mergeable **CLEAN** |
 | Screenshots | **Not generated** |
-| Exact next action | Technical PM final review → authorize nginx allowlist + tip deploy; then #504; AI cost intelligence is a **separate** milestone |
+| Exact next action | #504 synchronize onto `05e93b26` → final integration approval → **joint** #503+#504 deploy (nginx allowlist + tip + migrations **043 then 044**); do **not** deploy or migrate production yet |
 
 ## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 
