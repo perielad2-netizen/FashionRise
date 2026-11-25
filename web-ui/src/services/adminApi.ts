@@ -141,6 +141,10 @@ export type AdminOverview = {
   charts?: {
     registrations_trend?: {
       kind: string
+      timezone?: string
+      grouping?: string
+      all_time_chart_capped_to_90_days?: boolean
+      cap_note?: string | null
       points?: Array<{ date: string; count: number }>
       empty?: boolean
       detail?: string

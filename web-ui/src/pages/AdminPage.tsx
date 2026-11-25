@@ -514,6 +514,17 @@ function AdminShell() {
                 <section className={styles.grid}>
                   <article className={styles.card}>
                     <h2>Registrations trend</h2>
+                    <p className={styles.kpiHint}>
+                      Asia/Jerusalem calendar days
+                      {overview?.charts?.registrations_trend?.all_time_chart_capped_to_90_days
+                        ? ' · All Time chart capped to last 90 days'
+                        : ''}
+                    </p>
+                    {overview?.charts?.registrations_trend?.cap_note ? (
+                      <p className={styles.note}>
+                        {overview.charts.registrations_trend.cap_note}
+                      </p>
+                    ) : null}
                     {trendPoints.length === 0 ? (
                       <p className={styles.empty}>No registrations in this audience/range.</p>
                     ) : (

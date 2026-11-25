@@ -36,6 +36,7 @@ from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
 from app.models.iap_purchase import (
     STATUS_ACTIVE,
+    STATUS_BLOCKED,
     STATUS_REFUND_REVERSED,
     STATUS_REFUNDED,
     STATUS_REVOKED,
@@ -328,14 +329,54 @@ def metric_dictionary() -> list[dict[str, Any]]:
             "id": "revenue.gross_list_price_usd",
             "name": "Gross estimated list-price revenue (Production)",
             "definition": (
-                "Sum of catalog USD list prices for IAP rows with environment=Production, "
-                "status in (active, refund_reversed), net Stars > 0, audience-scoped buyer."
+                "Sum of catalog USD list prices for credited Production IAP rows "
+                "(active / refunded / revoked / refund_reversed with stars_credited > 0). "
+                "Refunded sales stay in gross so refunds are subtracted once. "
+                "Blocked-before-credit excluded. Filtered by original purchase date "
+                "(current lifecycle state), not refund cash-flow timing."
             ),
             "source": "iap_purchases",
             "kind": "estimated",
             "period": "range",
             "audience_scoped": True,
-            "limitations": "Not Apple/Google proceeds. Unknown/Sandbox/Test envs excluded and counted separately.",
+            "limitations": (
+                "Not Apple/Google proceeds. Sandbox/unknown envs excluded separately. "
+                "Authoritative refund timestamps unavailable — reporting uses current status."
+            ),
+        },
+        {
+            "id": "revenue.refunds_list_price_usd",
+            "name": "Refunds estimated list-price (Production)",
+            "definition": (
+                "Catalog USD list prices for Production IAP rows currently status "
+                "refunded or revoked (originally credited). Subtracted once from gross."
+            ),
+            "source": "iap_purchases",
+            "kind": "estimated",
+            "period": "range",
+            "audience_scoped": True,
+        },
+        {
+            "id": "revenue.net_list_price_usd",
+            "name": "Net estimated list-price revenue (Production)",
+            "definition": "gross_list_price_usd − refunds_list_price_usd (floored at 0).",
+            "source": "iap_purchases",
+            "kind": "estimated",
+            "period": "range",
+            "audience_scoped": True,
+        },
+        {
+            "id": "charts.registrations_trend",
+            "name": "Registration trend (Asia/Jerusalem calendar days)",
+            "definition": (
+                "Daily new-user counts grouped with PostgreSQL "
+                "timezone('Asia/Jerusalem', created_at) — true local calendar days. "
+                "All Time chart capped to last 90 Jerusalem days."
+            ),
+            "source": "users.created_at",
+            "kind": "exact",
+            "period": "range",
+            "audience_scoped": True,
         },
         {
             "id": "stars.free_vs_paid_attribution",
@@ -393,37 +434,57 @@ def _registration_trend(
     audience: str,
     start: datetime | None,
     end: datetime,
-) -> list[dict[str, Any]]:
-    """Daily registration counts in range (Jerusalem calendar day labels). Real data only."""
+) -> dict[str, Any]:
+    """Daily registration counts grouped by Asia/Jerusalem calendar dates.
+
+    Uses PostgreSQL ``timezone('Asia/Jerusalem', created_at)`` so buckets are
+    true local calendar days (not UTC days relabeled). When the selected range
+    is All Time, the chart is capped to the last 90 Jerusalem days and labeled.
+    """
+    capped = False
     if start is None:
         # Cap all_time chart to last 90 Jerusalem days for query safety.
         local = _utc_now().astimezone(_JERUSALEM).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         start = local.replace(tzinfo=_JERUSALEM).astimezone(UTC) - timedelta(days=89)
-    # Bucket by Jerusalem date via timezone conversion in SQL is dialect-specific;
-    # use UTC day buckets labeled with Jerusalem date of the UTC midnight for honesty.
-    day = func.date_trunc("day", User.created_at)
+        capped = True
+    # Convert timestamptz → Asia/Jerusalem wall time, then truncate to local day.
+    jerusalem_day = func.date_trunc(
+        "day", func.timezone("Asia/Jerusalem", User.created_at)
+    )
     stmt = (
-        select(day, func.count())
+        select(jerusalem_day, func.count())
         .select_from(User)
         .where(_in_range(User.created_at, start, end))
-        .group_by(day)
-        .order_by(day.asc())
+        .group_by(jerusalem_day)
+        .order_by(jerusalem_day.asc())
     )
     filt = _audience_user_filter(audience)
     if filt is not None:
         stmt = stmt.where(filt)
     rows = db.execute(stmt).all()
-    out = []
+    points: list[dict[str, Any]] = []
     for bucket, cnt in rows:
         if bucket is None:
             continue
-        if getattr(bucket, "tzinfo", None) is None:
-            bucket = bucket.replace(tzinfo=UTC)
-        local_label = bucket.astimezone(_JERUSALEM).date().isoformat()
-        out.append({"date": local_label, "count": int(cnt or 0)})
-    return out
+        # date_trunc on timezone()-converted timestamp returns naive local midnight.
+        if hasattr(bucket, "date"):
+            local_label = bucket.date().isoformat()
+        else:
+            local_label = str(bucket)[:10]
+        points.append({"date": local_label, "count": int(cnt or 0)})
+    return {
+        "timezone": "Asia/Jerusalem",
+        "grouping": "asia_jerusalem_calendar_day",
+        "all_time_chart_capped_to_90_days": capped,
+        "cap_note": (
+            "All Time registration chart shows the last 90 Asia/Jerusalem calendar days only."
+            if capped
+            else None
+        ),
+        "points": points,
+    }
 
 
 def overview(
@@ -646,11 +707,17 @@ def overview(
     )
     reports_total = _count(db, select(func.count()).select_from(ContentReport))
 
-    # Revenue — Production env only; audience-scoped buyers; range by created_at.
+    # Revenue — Production env only; audience-scoped buyers; range by original
+    # purchase created_at (current lifecycle state, not refund cash-flow timing).
+    #
+    # Gross = catalog price of every credited Production sale (active, later
+    # refunded/revoked, or refund_reversed). Refunded rows remain in gross so
+    # refunds are not double-subtracted. Blocked-before-credit is excluded.
     purchase_stmt = select(
         IapPurchase.product_id,
         IapPurchase.stars_credited,
         IapPurchase.stars_clawed_back,
+        IapPurchase.stars_restored,
         IapPurchase.status,
         IapPurchase.environment,
         IapPurchase.created_at,
@@ -662,11 +729,21 @@ def overview(
     refund_list = Decimal("0.00")
     purchases_counted = 0
     refunds_counted = 0
+    blocked_before_credit = 0
     stars_bought_net = 0
     stars_clawed = 0
+    stars_restored_total = 0
     sandbox_excluded = 0
     unknown_env_excluded = 0
-    for product_id, credited, clawed, status, environment, _created in purchase_rows:
+    for (
+        product_id,
+        credited,
+        clawed,
+        restored,
+        status,
+        environment,
+        _created,
+    ) in purchase_rows:
         if _is_sandbox_env(environment):
             sandbox_excluded += 1
             continue
@@ -676,20 +753,39 @@ def overview(
         unit = _PRODUCT_USD.get(str(product_id or ""), Decimal(0))
         credited_i = int(credited or 0)
         clawed_i = int(clawed or 0)
-        if status in (STATUS_ACTIVE, STATUS_REFUND_REVERSED):
-            net = max(0, credited_i - clawed_i)
-            if net > 0:
-                purchases_counted += 1
-                stars_bought_net += net
-                if unit > 0:
-                    gross_list += unit
-        elif status in (STATUS_REFUNDED, STATUS_REVOKED):
+        restored_i = int(restored or 0)
+        st = str(status or "")
+
+        # ASN refund/revoke before credit — never a sale; exclude from gross/refunds.
+        if st == STATUS_BLOCKED or credited_i <= 0:
+            if st == STATUS_BLOCKED:
+                blocked_before_credit += 1
+            continue
+
+        # Original credited sale → gross (including rows later refunded/revoked).
+        if st in (
+            STATUS_ACTIVE,
+            STATUS_REFUNDED,
+            STATUS_REVOKED,
+            STATUS_REFUND_REVERSED,
+        ):
+            purchases_counted += 1
+            if unit > 0:
+                gross_list += unit
+
+        if st in (STATUS_REFUNDED, STATUS_REVOKED):
             refunds_counted += 1
             stars_clawed += clawed_i
             if unit > 0:
                 refund_list += unit
+        elif st in (STATUS_ACTIVE, STATUS_REFUND_REVERSED):
+            # Net Stars still attributable after clawback / restore.
+            stars_bought_net += max(0, credited_i - clawed_i + restored_i)
+            stars_restored_total += restored_i
 
-    net_list = max(Decimal("0.00"), gross_list - refund_list)
+    net_list = gross_list - refund_list
+    if net_list < 0:
+        net_list = Decimal("0.00")
 
     # Wallet snapshot (audience-scoped finite wallets).
     wallet_stmt = select(func.coalesce(func.sum(User.ai_stars), 0)).where(
@@ -937,11 +1033,16 @@ def overview(
             "net_list_price_usd": float(net_list),
             "purchases_counted": purchases_counted,
             "refunds_counted": refunds_counted,
+            "blocked_before_credit_excluded": blocked_before_credit,
+            "stars_restored_in_range": stars_restored_total,
             "sandbox_purchases_excluded": sandbox_excluded,
             "unknown_environment_excluded": unknown_env_excluded,
             "kind": "estimated",
             "period": "range",
             "audience_scoped": True,
+            "reporting_basis": (
+                "current_lifecycle_state_grouped_by_original_purchase_date"
+            ),
             "verified_actual_transaction_amounts": {
                 "kind": "unavailable",
                 "detail": "Store transaction price FX not persisted on iap_purchases.",
@@ -952,7 +1053,11 @@ def overview(
             },
             "note": (
                 "Estimated catalog list prices for environment=Production only. "
-                "Sandbox/Test/unknown environments excluded and counted separately. "
+                "Gross includes every credited Production sale (active, refunded, revoked, "
+                "refund_reversed) so refunds are subtracted once — not double-counted. "
+                "Blocked-before-credit is excluded. Rows are filtered by original purchase "
+                "created_at (current lifecycle state), not refund cash-flow timing. "
+                "Sandbox/Test/unknown environments excluded separately. "
                 "Not Apple/Google net proceeds. Administrative grants never count as revenue."
             ),
             "product_catalog": [
@@ -975,8 +1080,14 @@ def overview(
                 "kind": "exact",
                 "period": "range",
                 "audience_scoped": True,
-                "points": registrations_trend,
-                "empty": len(registrations_trend) == 0,
+                "timezone": registrations_trend["timezone"],
+                "grouping": registrations_trend["grouping"],
+                "all_time_chart_capped_to_90_days": registrations_trend[
+                    "all_time_chart_capped_to_90_days"
+                ],
+                "cap_note": registrations_trend["cap_note"],
+                "points": registrations_trend["points"],
+                "empty": len(registrations_trend["points"]) == 0,
             },
             "revenue_trend": {
                 "kind": "unavailable",
@@ -1272,10 +1383,16 @@ def set_classification(
     if len(reason_clean) < 3:
         raise ValueError("A meaningful reason is required (min 3 characters)")
 
-    # Lock row to prevent conflicting concurrent classification updates.
-    locked = db.scalar(select(User).where(User.id == target.id).with_for_update())
+    # Lock row and refresh identity-map state so optimistic checks see DB truth.
+    locked = db.scalar(
+        select(User)
+        .where(User.id == target.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if locked is None:
         raise ValueError("User not found")
+    db.refresh(locked)
 
     from_c = _classification_of(locked)
     if expected_classification:

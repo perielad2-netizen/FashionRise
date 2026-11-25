@@ -17,11 +17,17 @@ from app.models.ai_job import AIJob
 from app.models.garment_design import GarmentDesign
 from app.models.iap_purchase import (
     STATUS_ACTIVE,
+    STATUS_BLOCKED,
+    STATUS_REFUND_REVERSED,
     STATUS_REFUNDED,
+    STATUS_REVOKED,
     IapPurchase,
 )
 from app.models.user import User
-from app.services.admin_analytics import set_classification
+from app.services.admin_analytics import (
+    ConflictClassificationError,
+    set_classification,
+)
 
 
 @pytest.fixture()
@@ -78,8 +84,14 @@ def _add_purchase(
     environment: str = "Production",
     status: str = STATUS_ACTIVE,
     stars: int = 50,
+    clawed: int = 0,
+    restored: int = 0,
     created_at: datetime | None = None,
 ) -> IapPurchase:
+    credited = 0 if status == STATUS_BLOCKED else stars
+    clawed_v = clawed
+    if status in (STATUS_REFUNDED, STATUS_REVOKED) and clawed_v == 0 and credited > 0:
+        clawed_v = credited
     row = IapPurchase(
         user_id=user.id,
         platform="ios",
@@ -87,8 +99,9 @@ def _add_purchase(
         transaction_id=f"txn-{uuid.uuid4()}",
         environment=environment,
         status=status,
-        stars_credited=stars,
-        stars_clawed_back=0,
+        stars_credited=credited,
+        stars_clawed_back=clawed_v,
+        stars_restored=restored,
     )
     db.add(row)
     db.flush()
@@ -121,6 +134,37 @@ def test_reserved_username_case_insensitive():
     assert is_reserved_admin_username("PeriShilat")
     assert is_reserved_admin_username("YANIVPRBK")
     assert not is_reserved_admin_username("someone_else")
+
+
+def test_register_rejects_reserved_admin_username(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """No account-creation path may claim a reserved admin username."""
+    from app.core.config import get_settings
+    from app.services import invitation_service
+
+    monkeypatch.setenv("REGISTRATION_ENABLED", "true")
+    monkeypatch.setenv("REGISTRATION_MODE", "invite_only")
+    get_settings.cache_clear()
+    try:
+        for name in ("yanivprbk", "PeriShilat", "SHILATPERI"):
+            inv = invitation_service.create_invitation(
+                db_session, email=f"{name.lower()}@example.com", expires_in_hours=72
+            )
+            r = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": f"{name.lower()}@example.com",
+                    "username": name,
+                    "password": "StrongPass123!",
+                    "display_name": name,
+                    "invitation_code": inv.plaintext_token,
+                },
+            )
+            assert r.status_code in (409, 400, 422), r.text
+            assert db_session.query(User).filter(User.username.ilike(name)).count() == 0
+    finally:
+        get_settings.cache_clear()
 
 
 def test_classification_does_not_grant_admin(db_session: Session):
@@ -335,7 +379,85 @@ def test_refund_accounting(client: TestClient, db_session: Session):
     body = r.json()
     assert body["revenue"]["refunds_counted"] >= 1
     assert body["revenue"]["refunds_list_price_usd"] >= 5.99
-    assert body["revenue"]["purchases_counted"] == 0
+    # Refunded credited sale remains in gross; net zeros after one refund.
+    assert body["revenue"]["purchases_counted"] >= 1
+    assert body["revenue"]["gross_list_price_usd"] == pytest.approx(5.99)
+    assert body["revenue"]["net_list_price_usd"] == pytest.approx(0.0)
+
+
+def test_gross_refund_net_no_double_subtraction(
+    client: TestClient, db_session: Session
+):
+    """Two $5.99 Production purchases, one fully refunded → 11.98 / 5.99 / 5.99."""
+    admin = _user(db_session, username="yanivprbk")
+    buyer = _user(db_session, username="buyer_pair", classification="CUSTOMER")
+    _add_purchase(
+        db_session, buyer, environment="Production", status=STATUS_ACTIVE, stars=50
+    )
+    _add_purchase(
+        db_session, buyer, environment="Production", status=STATUS_REFUNDED, stars=50
+    )
+    r = client.get(
+        "/api/v1/admin/overview?audience=customers&range=all_time",
+        headers=_auth(admin),
+    )
+    assert r.status_code == 200
+    rev = r.json()["revenue"]
+    assert rev["gross_list_price_usd"] == pytest.approx(11.98)
+    assert rev["refunds_list_price_usd"] == pytest.approx(5.99)
+    assert rev["net_list_price_usd"] == pytest.approx(5.99)
+    assert rev["purchases_counted"] == 2
+    assert rev["refunds_counted"] == 1
+    assert rev["reporting_basis"] == (
+        "current_lifecycle_state_grouped_by_original_purchase_date"
+    )
+
+
+def test_refund_reversed_counts_as_active_sale(
+    client: TestClient, db_session: Session
+):
+    admin = _user(db_session, username="yanivprbk")
+    buyer = _user(db_session, username="buyer_rev", classification="CUSTOMER")
+    _add_purchase(
+        db_session,
+        buyer,
+        environment="Production",
+        status=STATUS_REFUND_REVERSED,
+        stars=50,
+        clawed=50,
+        restored=50,
+    )
+    r = client.get(
+        "/api/v1/admin/overview?audience=customers&range=all_time",
+        headers=_auth(admin),
+    )
+    rev = r.json()["revenue"]
+    assert rev["gross_list_price_usd"] == pytest.approx(5.99)
+    assert rev["refunds_list_price_usd"] == pytest.approx(0.0)
+    assert rev["net_list_price_usd"] == pytest.approx(5.99)
+    assert r.json()["stars"]["stars_purchased_net"] == 50
+
+
+def test_blocked_before_credit_excluded_from_revenue(
+    client: TestClient, db_session: Session
+):
+    admin = _user(db_session, username="yanivprbk")
+    buyer = _user(db_session, username="buyer_block", classification="CUSTOMER")
+    _add_purchase(
+        db_session, buyer, environment="Production", status=STATUS_BLOCKED, stars=50
+    )
+    _add_purchase(
+        db_session, buyer, environment="Production", status=STATUS_ACTIVE, stars=50
+    )
+    r = client.get(
+        "/api/v1/admin/overview?audience=customers&range=all_time",
+        headers=_auth(admin),
+    )
+    rev = r.json()["revenue"]
+    assert rev["gross_list_price_usd"] == pytest.approx(5.99)
+    assert rev["net_list_price_usd"] == pytest.approx(5.99)
+    assert rev["blocked_before_credit_excluded"] >= 1
+    assert rev["purchases_counted"] == 1
 
 
 def test_lifetime_revenue_beyond_50_display_rows(client: TestClient, db_session: Session):
@@ -492,6 +614,54 @@ def test_classification_concurrency_conflict(client: TestClient, db_session: Ses
     assert r.status_code == 409
 
 
+def test_classification_refreshes_stale_identity_map(db_session: Session):
+    """Locked query must see DB truth even if the identity-map object is stale."""
+    from sqlalchemy import text
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    admin = _user(db_session, username="yanivprbk", is_admin=True)
+    target = _user(db_session, username="stale_map", classification="UNCLASSIFIED")
+
+    # Concurrent update flushed to DB, but leave a stale identity-map value.
+    db_session.execute(
+        text("UPDATE users SET account_classification = 'CUSTOMER' WHERE id = :id"),
+        {"id": target.id},
+    )
+    db_session.flush()
+    set_committed_value(target, "account_classification", "UNCLASSIFIED")
+    assert target.account_classification == "UNCLASSIFIED"
+
+    with pytest.raises(ConflictClassificationError):
+        set_classification(
+            db_session,
+            target=target,
+            actor=admin,
+            to_classification="INTERNAL_TESTER",
+            reason="stale_check",
+            expected_classification="UNCLASSIFIED",
+        )
+    # Authorization unchanged regardless of classification conflict.
+    db_session.refresh(target)
+    assert target.is_admin is False
+
+
+def test_classification_never_changes_is_admin(client: TestClient, db_session: Session):
+    admin = _user(db_session, username="yanivprbk")
+    target = _user(
+        db_session, username="perm_user", classification="UNCLASSIFIED", is_admin=False
+    )
+    r = client.patch(
+        f"/api/v1/admin/customers/{target.id}/classification",
+        headers=_auth(admin),
+        json={"classification": "ADMIN", "reason": "label_only"},
+    )
+    assert r.status_code == 200
+    db_session.refresh(target)
+    assert target.account_classification == "ADMIN"
+    assert target.is_admin is False
+    assert user_is_admin(target) is False
+
+
 def test_classification_dry_run_no_writes(client: TestClient, db_session: Session):
     admin = _user(db_session, username="yanivprbk")
     target = _user(db_session, username="maybe_customer")
@@ -566,3 +736,103 @@ def test_wallet_aggregation_audience_scoped(client: TestClient, db_session: Sess
     # Only customer wallets in sum (admin may also be unclassified).
     assert r.json()["stars"]["wallet_balance_sum"] >= 100
     assert r.json()["stars"]["wallet_balance_sum_period"] == "snapshot"
+
+
+# ── Registration timezone ──────────────────────────────────────────────
+
+
+def test_registration_trend_jerusalem_midnight_boundary(
+    client: TestClient, db_session: Session
+):
+    """UTC evening that is already next calendar day in Asia/Jerusalem."""
+    from datetime import UTC, timedelta
+    from zoneinfo import ZoneInfo
+
+    admin = _user(db_session, username="yanivprbk")
+    jerusalem = ZoneInfo("Asia/Jerusalem")
+    # Winter date (IST, UTC+2) — avoid DST edge for this case.
+    local_midnight = datetime(2025, 1, 15, 0, 0, 0, tzinfo=jerusalem)
+    before = local_midnight - timedelta(minutes=1)  # 14 Jan Jerusalem
+    after = local_midnight + timedelta(minutes=1)  # 15 Jan Jerusalem
+
+    u_before = _user(db_session, username="reg_before", classification="CUSTOMER")
+    u_after = _user(db_session, username="reg_after", classification="CUSTOMER")
+    u_before.created_at = before.astimezone(UTC)
+    u_after.created_at = after.astimezone(UTC)
+    db_session.commit()
+
+    start = (local_midnight - timedelta(days=1)).astimezone(UTC).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    end = (local_midnight + timedelta(days=2)).astimezone(UTC).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    r = client.get(
+        "/api/v1/admin/overview",
+        headers=_auth(admin),
+        params={
+            "audience": "customers",
+            "range": "custom",
+            "start": start,
+            "end": end,
+        },
+    )
+    assert r.status_code == 200
+    trend = r.json()["charts"]["registrations_trend"]
+    assert trend["timezone"] == "Asia/Jerusalem"
+    assert trend["grouping"] == "asia_jerusalem_calendar_day"
+    assert trend["all_time_chart_capped_to_90_days"] is False
+    by_date = {p["date"]: p["count"] for p in trend["points"]}
+    assert by_date.get("2025-01-14", 0) >= 1
+    assert by_date.get("2025-01-15", 0) >= 1
+
+
+def test_registration_trend_all_time_cap_labeled(
+    client: TestClient, db_session: Session
+):
+    admin = _user(db_session, username="yanivprbk")
+    r = client.get(
+        "/api/v1/admin/overview?audience=all&range=all_time",
+        headers=_auth(admin),
+    )
+    trend = r.json()["charts"]["registrations_trend"]
+    assert trend["all_time_chart_capped_to_90_days"] is True
+    assert "90" in (trend.get("cap_note") or "")
+
+
+def test_registration_trend_dst_spring_forward(
+    client: TestClient, db_session: Session
+):
+    """Israel DST spring-forward morning — local calendar day must not collapse."""
+    from datetime import UTC, timedelta
+    from zoneinfo import ZoneInfo
+
+    admin = _user(db_session, username="yanivprbk")
+    jerusalem = ZoneInfo("Asia/Jerusalem")
+    # Israel typically springs forward late March; use 2025-03-28 local.
+    day_a = datetime(2025, 3, 27, 12, 0, 0, tzinfo=jerusalem)
+    day_b = datetime(2025, 3, 28, 12, 0, 0, tzinfo=jerusalem)
+    ua = _user(db_session, username="dst_a", classification="CUSTOMER")
+    ub = _user(db_session, username="dst_b", classification="CUSTOMER")
+    ua.created_at = day_a.astimezone(UTC)
+    ub.created_at = day_b.astimezone(UTC)
+    db_session.commit()
+
+    r = client.get(
+        "/api/v1/admin/overview",
+        headers=_auth(admin),
+        params={
+            "audience": "all",
+            "range": "custom",
+            "start": day_a.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "end": (day_b + timedelta(days=1))
+            .astimezone(UTC)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    )
+    assert r.status_code == 200
+    trend = r.json()["charts"]["registrations_trend"]
+    assert trend["all_time_chart_capped_to_90_days"] is False
+    by_date = {p["date"]: p["count"] for p in trend["points"]}
+    assert by_date.get("2025-03-27", 0) >= 1
+    assert by_date.get("2025-03-28", 0) >= 1

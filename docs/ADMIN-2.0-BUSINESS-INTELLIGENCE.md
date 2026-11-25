@@ -63,13 +63,18 @@ Social UI distinguishes **actions by audience** vs **engagement received by audi
 ## 4. Revenue & Stars honesty
 
 - Gross / refunds / net = **estimated catalog list-price USD** for Production verified purchases only.  
+- **Gross** includes every credited Production sale (`active` / `refunded` / `revoked` / `refund_reversed` with `stars_credited > 0`) so refunds are subtracted **once** (no double-subtraction).  
+- **Refunds** = catalog price of rows currently `refunded` or `revoked`. **Net** = gross − refunds (floored at 0).  
+- `blocked` (ASN before credit) is excluded from gross and refunds.  
+- Reporting basis: **current lifecycle state grouped by original purchase `created_at`** — not refund cash-flow timing (authoritative historical refund timestamps unavailable).  
 - Not labeled as actual money received / store proceeds (those fields = unavailable).  
 - Sandbox + unknown environments excluded and counted separately.  
 - Customer lifetime revenue sums **all** eligible Production rows (independent of 50-row purchase display).  
-- Administrative Stars grants: **unavailable / separate PR** — never revenue.  
+- Administrative Stars grants: **unavailable / separate PR #504** — never revenue.  
 - Free vs paid consumption: **unavailable** (no historical debit amounts).  
 - Starting balance shown = **today’s config**, not historical grants issued.  
-- Unlimited wallets remain in AI usage even when Stars = 0.
+- Unlimited wallets remain in AI usage even when Stars = 0.  
+- Registration trend: PostgreSQL `timezone('Asia/Jerusalem', created_at)` calendar-day buckets (not UTC days relabeled). All Time chart capped to last 90 Jerusalem days and labeled.
 
 ---
 
@@ -96,6 +101,7 @@ Migration: Alembic **043** (CHECK constraints included) — **not executed in pr
 | Check | Result |
 | --- | --- |
 | Public/invite registration claims reserved admin username | **Blocked** (case-insensitive Conflict) |
+| Google OAuth auto-register claims reserved username | **Blocked** — `_unique_username` skips reserved names |
 | Profile username change to allowlist | **N/A** — `ProfileUpdate` has no username field |
 | Case variants bypass reservation | Covered by normalize-lower |
 | Inactive/deleted admin token | `get_current_user` → 401; `require_admin` re-checks `is_active` |
