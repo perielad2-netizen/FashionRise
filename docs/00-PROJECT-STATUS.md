@@ -3,22 +3,29 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:55 Asia/Jerusalem — Admin AI financial intelligence + classification select UX fix; sync **disabled** until credentials verified
+**Last updated:** 2026-11-26 00:59 Asia/Jerusalem — AI financial intelligence tip **LIVE** (`208357df`); sync still **OFF**; classification select UX shipped
 
-## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
+## LIVE — Admin OpenAI + FASHN AI financial intelligence (migration 045) (2026-11-26 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **Implemented** — Admin 2.0 Phase D provider cost surfaces; provider sync **fail-closed OFF** |
-| Branch | `cursor/admin-ai-financial-intel-77c6` |
-| Alembic | **045** revises **044** — `provider_pricing_versions`, `fashn_prediction_costs`, `ai_provider_operations`, `openai_cost_daily`, `fashn_credit_snapshots`, `operator_expense_records`, `provider_sync_runs` |
-| OpenAI | `GET /v1/organization/costs` sync client; project vs org-unattributed separation; idempotent daily upsert |
+| Status | **LIVE** — per-op provider ledger + Admin income/expense KPIs; provider sync **fail-closed OFF** |
+| Merged PR | **#512** → `main` tip **`208357df`** (`208357df72e272fb3e5de1a2386902f237b17904`) |
+| Deployed FE SHA | **`208357df`** · `/var/www/fashionrise/releases/208357df-admin-ai-financial` |
+| Deployed BE SHA | **`208357df`** (`/opt/fashionrise/src`; `backend/REVISION`) |
+| Previous FE | `/var/www/fashionrise/releases/34b8dd92-admin-customers-toolbar` (**preserved**) |
+| Public `/version.json` | `{"app":"208357df","sha":"208357df","builtAt":"2026-11-25T22:57:22.726Z"}` |
+| Alembic | **044 → 045** applied; head **`045`** |
+| Tables | `provider_pricing_versions`, `fashn_prediction_costs`, `ai_provider_operations`, `openai_cost_daily`, `fashn_credit_snapshots`, `operator_expense_records`, `provider_sync_runs` |
+| OpenAI | `GET /v1/organization/costs` sync client; project vs org-unattributed separation; idempotent daily upsert; per-request usage → estimated USD until Costs sync |
 | FASHN | `GET /v1/credits` balance snapshots; `x-fashn-credits-used` ledger (idempotent per prediction); missing header → **unavailable** (not zero) |
 | Admin UI | Revenue → income vs expenses (operating mode); AI & Costs → actual vs estimated provider cards, by feature/classification, daily OpenAI trend when synced |
-| Sync flags (default) | `OPENAI_COST_SYNC_ENABLED=false` · `FASHN_CREDIT_SYNC_ENABLED=false` · worker tick respects interval + gates |
-| Safety | No paid AI generations in tests; admin key never used for image generation; secrets redacted from sync errors; no auto top-up |
+| Sync flags (prod) | `OPENAI_COST_SYNC_ENABLED=false` · `FASHN_CREDIT_SYNC_ENABLED=false` · `FASHN_OPERATOR_CREDIT_USD` unset/`0` until invoice rate known |
+| Health | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` **active**; `/health` **ok** |
+| Preserve | `/var/backups/fashionrise/ai-financial-045-preserve-20261125T225539Z/` |
+| Classification UX | Select ink + **Selected:** readout; Submit visually disabled until reason (≥3) + confirm; drawer-local errors (fixes blank Android dropdown + “submitted but stayed UNCLASSIFIED”) |
 | Credential setup | See **Credential setup (AI financial sync)** below — do **not** enable sync until keys + project id verified |
-| Exact next action | Merge → apply Alembic **045** on prod → deploy FE+BE with sync flags **left false** → separately authorize credential setup + sync enable |
+| Exact next action | **STOP for sync.** Separate authorization to set OpenAI Admin key / FASHN rate and flip sync flags. Operators can re-submit classifications with reason+confirm on the new FE. |
 
 ### Credential setup (AI financial sync)
 
@@ -3610,10 +3617,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Web Stars purchase policy):** Technical PM review of draft **web-only Stars purchase restriction** PR. After merge: FE-only tip deploy (no native rebuild). Confirm browser Stars shop shows App Store link + Google Play Coming soon; iOS/Android shells unchanged. Do **not** enable Play Billing or flip payment gates in this change.
-
-
-1. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing.
+0. **Exact next action (AI financial sync):** Tip **`208357df`** is LIVE with sync **OFF**. Authorize OpenAI Admin Costs key + optional `OPENAI_BILLING_PROJECT_ID` + `FASHN_OPERATOR_CREDIT_USD` from invoice, then flip `OPENAI_COST_SYNC_ENABLED` / `FASHN_CREDIT_SYNC_ENABLED` independently. Do **not** enable sync without that credential check.
+1. **Exact next action (Admin classification):** Hard-refresh Admin Customers; re-submit classifications with reason (≥3) + confirm — blank select / silent non-submit fixed on tip `208357df`.
+2. **Exact next action (Stars grants):** Still fail-closed until `ADMIN_STARS_GRANT_ACTOR_IDS` authorized.
+3. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing.
 2. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
 3. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
 4. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.

@@ -189,4 +189,4 @@ Unavailable (honest gaps): platform/country acquisition, D7 retention, DAU/WAU, 
 
 ## 11. Exact next action
 
-Merge financial-intelligence PR → apply Alembic **045** → deploy with sync flags **false** → separately authorize OpenAI admin key + FASHN credit sync enablement.
+**LIVE** tip **`208357df`** (PR #512): Alembic **045** applied; FE+BE deployed; sync flags remain **false**. Next: separately authorize OpenAI Admin Costs key + FASHN operator credit USD, then enable sync flags independently.
