@@ -110,3 +110,72 @@ def test_overview_excludes_sandbox_iap_from_revenue(client: TestClient, db_sessi
     assert body["revenue"]["gross_list_price_usd"] == 0
     assert body["stars"]["stars_purchased_net"] == 0
     assert body["revenue"]["sandbox_purchases_excluded"] >= 1
+
+
+def test_overview_counts_completed_magic_not_succeeded(client: TestClient, db_session: Session):
+    from app.models.ai_job import AIJob
+
+    admin = _user(db_session, username="yanivprbk")
+    designer = _user(db_session, username="magic_user")
+    for status in ("completed", "succeeded"):
+        db_session.add(
+            AIJob(
+                id=uuid.uuid4(),
+                user_id=designer.id,
+                design_id=None,
+                job_type="sketch_polish",
+                status=status,
+                input_data={},
+                result_data={"stars_debited": True} if status == "completed" else {},
+            )
+        )
+    db_session.commit()
+    r = client.get("/api/v1/admin/overview", headers=_auth(admin))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ai_usage"]["magic_completed"] >= 1
+    assert body["ai_usage"]["status_semantics"] == "completed"
+
+
+def test_classification_patch_and_does_not_grant_admin(client: TestClient, db_session: Session):
+    admin = _user(db_session, username="yanivprbk")
+    target = _user(db_session, username="shopper_one")
+    assert target.is_admin is False
+    r = client.patch(
+        f"/api/v1/admin/customers/{target.id}/classification",
+        headers=_auth(admin),
+        json={"classification": "CUSTOMER", "reason": "manual_review", "note": "real signup"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["classification"] == "CUSTOMER"
+    db_session.refresh(target)
+    assert target.account_classification == "CUSTOMER"
+    assert target.is_admin is False
+
+
+def test_customers_list_forbidden_for_non_admin(client: TestClient, db_session: Session):
+    u = _user(db_session, username="nobody2")
+    r = client.get("/api/v1/admin/customers", headers=_auth(u))
+    assert r.status_code == 403
+
+
+def test_classification_dry_run_no_writes(client: TestClient, db_session: Session):
+    admin = _user(db_session, username="yanivprbk")
+    target = _user(db_session, username="maybe_customer")
+    before = target.account_classification
+    r = client.get("/api/v1/admin/classification/dry-run", headers=_auth(admin))
+    assert r.status_code == 200
+    body = r.json()
+    assert "actionable_suggestions" in body
+    assert "Dry-run" in body["note"]
+    db_session.refresh(target)
+    assert target.account_classification == before
+
+
+def test_metric_dictionary(client: TestClient, db_session: Session):
+    admin = _user(db_session, username="yanivprbk")
+    r = client.get("/api/v1/admin/metrics/dictionary", headers=_auth(admin))
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert any(i["id"] == "ai.magic_completed" for i in items)

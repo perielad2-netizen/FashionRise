@@ -49,6 +49,7 @@ from app.models.competition import (
     LoginStreak,
     StarPayout,
 )
+from app.models.account_classification_event import AccountClassificationEvent
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow

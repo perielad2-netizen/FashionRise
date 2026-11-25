@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction **CLOSED** (FE tip `e0ee7bed`)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 foundation draft (not deployed)
+
+## DRAFT — FashionRise Admin 2.0 foundation (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+
+| Field | Value |
+| --- | --- |
+| Status | **DRAFT** Phase A+B — STOP for Technical PM review before merge / migration / deploy |
+| Design doc | [`docs/ADMIN-2.0-BUSINESS-INTELLIGENCE.md`](./ADMIN-2.0-BUSINESS-INTELLIGENCE.md) |
+| Baseline main | **`f3967dbf`** |
+| Scope | Correct AI job status counting · account classification (independent of admin) · Overview / Customers / Revenue / AI / Community / Dictionary · responsive shell |
+| Migration | Alembic **043** `account_classification` + audit events — **not applied to production** |
+| Mutations | Classification PATCH only (audited); **no** wallet grants / payment gates / native changes |
+| Prod tip (unchanged) | FE `/var/www/fashionrise/releases/e0ee7bed-web-stars-restriction` · `/version.json` → **`e0ee7bed`** |
+| Pending Android | Native push + Google Play Billing remain separate |
+| Exact next action | PM review draft PR → approve 043 on disposable DB → classification dry-run → authorize deploy |
 
 ## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 

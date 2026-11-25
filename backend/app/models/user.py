@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,18 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Admin 2.0 customer classification — independent of is_admin / permissions.
+    # Defaults UNCLASSIFIED; never auto-promotes to CUSTOMER without operator action.
+    account_classification: Mapped[str] = mapped_column(
+        String(32), default="UNCLASSIFIED", nullable=False, server_default="UNCLASSIFIED"
+    )
+    account_classification_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_classification_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    account_classification_updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # Public email registration sets False until ownership is verified.
     # Invite + Google paths set True. ORM default True keeps legacy test/script
     # User() constructors and existing accounts (migration 028 backfill) working.
