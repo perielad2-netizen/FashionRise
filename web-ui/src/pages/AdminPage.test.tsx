@@ -376,14 +376,16 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByText('@alice'))
 
     const dialog = await screen.findByRole('dialog', { name: /Customer detail/i })
-    fireEvent.change(within(dialog).getByDisplayValue('UNCLASSIFIED'), {
+    fireEvent.change(within(dialog).getByLabelText(/Proposed classification/i), {
       target: { value: 'CUSTOMER' },
     })
+    expect(within(dialog).getByText(/Selected:\s*CUSTOMER/i)).toBeInTheDocument()
     fireEvent.change(within(dialog).getByPlaceholderText(/Why this classification/i), {
       target: { value: 'manual review confirmed' },
     })
     const submit = within(dialog).getByRole('button', { name: /Submit classification/i })
     expect(submit).toBeDisabled()
+    expect(within(dialog).getByText(/Check the confirmation box/i)).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('checkbox'))
     expect(submit).not.toBeDisabled()
     patchAdminClassification.mockResolvedValue({

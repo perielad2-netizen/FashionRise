@@ -315,16 +315,28 @@ def test_income_vs_expenses_labels_and_no_double_count():
         "openai": {"project_costs": {"kind": "actual", "amount_usd": 10.0}},
         "fashn": {"estimated_consumption_usd": {"kind": "estimated", "amount_usd": 5.0}},
         "operator_expenses_actual_usd": {"kind": "unavailable"},
+        "by_feature": [
+            {"provider": "openai", "feature": "magic", "estimated_cost_usd": 8.0},
+        ],
     }
     block = build_income_vs_expenses(
-        revenue_gross=20.0, revenue_refunds=0.0, revenue_net=20.0, ai_financial=ai
+        revenue_gross=20.0,
+        revenue_refunds=0.0,
+        revenue_net=20.0,
+        ai_financial=ai,
+        stars_purchased_net=100,
+        successful_generations=10,
+        paying_customers=2,
     )
+    # Actual OpenAI preferred — do not also add the 8.0 estimate into expenses.
+    assert block["summary"]["openai_expenses_usd"]["amount_usd"] == 10.0
+    assert block["summary"]["total_expenses_usd"]["amount_usd"] == 15.0
+    assert block["summary"]["net_earnings_usd"]["amount_usd"] == 5.0
+    assert block["summary"]["avg_cost_per_generation_usd"]["amount_usd"] == 1.5
+    assert block["summary"]["reconciliation_openai"]["difference_usd"] == 2.0
     op = block["modes"]["operating_consumption"]
     assert op["expenses"]["total_operating_usd"]["amount_usd"] == 15.0
-    assert op["estimated_contribution_margin_usd"]["amount_usd"] == 5.0
-    assert op["estimated_contribution_margin_usd"]["kind"] == "estimated"
     cash = block["modes"]["documented_cash"]
-    # FASHN estimated must not appear in cash mode expenses total.
     assert "fashn_estimated_consumption_usd" not in cash["expenses"]
 
 

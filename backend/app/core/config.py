@@ -451,6 +451,9 @@ class Settings(BaseSettings):
     fashn_credit_sync_enabled: bool = False
     fashn_credit_sync_timeout_seconds: float = 20.0
     fashn_low_credits_threshold: int = 50
+    # Actual purchased USD per FASHN credit (operator-confirmed). Empty/0 → documented estimate only.
+    # Example: if 100 credits cost $7.50 → 0.075. Never invent; leave unset until known.
+    fashn_operator_credit_usd: float = 0.0
     # Shared sync throttle for AI worker / cron ticks (seconds).
     ai_cost_sync_interval_seconds: float = 3600.0
 

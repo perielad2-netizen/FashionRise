@@ -219,6 +219,29 @@ export type AdminOverview = {
     }>
   }
   income_vs_expenses?: {
+    summary?: {
+      total_income_usd?: { kind: string; amount_usd?: number | null }
+      openai_expenses_usd?: { kind: string; amount_usd?: number | null; detail?: string | null }
+      fashn_expenses_usd?: { kind: string; amount_usd?: number | null }
+      other_operating_expenses_usd?: { kind: string; amount_usd?: number | null }
+      total_expenses_usd?: { kind: string; amount_usd?: number | null }
+      net_earnings_usd?: { kind: string; amount_usd?: number | null; detail?: string }
+      profit_margin_pct?: { kind: string; value?: number | null }
+      avg_cost_per_generation_usd?: { kind: string; amount_usd?: number | null }
+      cost_per_paying_customer_usd?: { kind: string; amount_usd?: number | null }
+      provider_cost_per_star_purchased_usd?: {
+        kind: string
+        amount_usd?: number | null
+        detail?: string
+      }
+      reconciliation_openai?: {
+        kind: string
+        openai_actual_usd?: number
+        openai_estimated_ops_usd?: number
+        difference_usd?: number
+        detail?: string
+      }
+    }
     modes?: {
       operating_consumption?: {
         label?: string

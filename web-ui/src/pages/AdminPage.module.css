@@ -841,10 +841,60 @@ th {
   border-radius: 10px;
   border: 1px solid var(--admin-line);
   padding: 8px 10px;
-  font: inherit;
+  /* Do not inherit bold label weight — Android WebView often paints selected
+     <select> text blank when font-weight stays 600. */
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--admin-ink);
+  -webkit-text-fill-color: var(--admin-ink);
   background: #fff;
   width: 100%;
   box-sizing: border-box;
+}
+
+.field select {
+  appearance: auto;
+}
+
+.field select option {
+  color: #1a1520;
+  background: #fff;
+  font-weight: 500;
+}
+
+.selectedValue {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--admin-ink);
+}
+
+.formHint {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--admin-warn);
+}
+
+.formError {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #fecdd3;
+  background: #fff1f2;
+  color: #9f1239;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--admin-muted);
+  border-color: var(--admin-line);
+  background: #f3f0f2;
 }
 
 .periodTag {
@@ -909,8 +959,19 @@ th {
   border: 1px solid var(--admin-line);
   border-radius: 12px;
   padding: 8px 12px;
-  font: inherit;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--admin-ink);
+  -webkit-text-fill-color: var(--admin-ink);
   background: #fff;
+  appearance: auto;
+}
+
+.select option {
+  color: #1a1520;
+  background: #fff;
+  font-weight: 500;
 }
 
 .checkRow {

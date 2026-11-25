@@ -133,6 +133,7 @@ function AdminShell() {
   const [classNote, setClassNote] = useState('')
   const [classConfirm, setClassConfirm] = useState(false)
   const [classSaving, setClassSaving] = useState(false)
+  const [classFormError, setClassFormError] = useState<string | null>(null)
   const [dictionary, setDictionary] = useState<MetricDefinition[]>([])
   const [dryRunNote, setDryRunNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -233,6 +234,7 @@ function AdminShell() {
       setClassReason('')
       setClassNote('')
       setClassConfirm(false)
+      setClassFormError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load customer')
     }
@@ -263,11 +265,16 @@ function AdminShell() {
 
   async function submitClassification() {
     if (!selectedCustomer || !classConfirm) return
+    if (!classDraft) {
+      setClassFormError('Choose a proposed classification from the list.')
+      return
+    }
     if (classReason.trim().length < 3) {
-      setError('A meaningful reason (min 3 characters) is required.')
+      setClassFormError('A meaningful reason (min 3 characters) is required before submit.')
       return
     }
     setClassSaving(true)
+    setClassFormError(null)
     setError(null)
     try {
       const updated = await patchAdminClassification(selectedCustomer.id, {
@@ -282,9 +289,12 @@ function AdminShell() {
       setClassConfirm(false)
       setClassReason('')
       setClassNote('')
+      setClassFormError(null)
       void load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Classification update failed')
+      const msg = err instanceof Error ? err.message : 'Classification update failed'
+      setClassFormError(msg)
+      setError(msg)
     } finally {
       setClassSaving(false)
     }
@@ -749,96 +759,141 @@ function AdminShell() {
                     ))}
                   </div>
                 </article>
-                {overview.income_vs_expenses?.modes?.operating_consumption ? (
+                {overview.income_vs_expenses?.summary ? (
                   <article className={styles.card}>
                     <h2>
-                      Income vs expenses (operating) <PeriodTag label={rangeLabel} />
+                      Financial summary <PeriodTag label={rangeLabel} />
                     </h2>
                     <div className={styles.statList}>
                       <div className={styles.statRow}>
-                        <span>Net list-price income (est.)</span>
+                        <span>
+                          Total income{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.summary.total_income_usd?.kind,
+                            )}`}
+                          >
+                            {overview.income_vs_expenses.summary.total_income_usd?.kind}
+                          </span>
+                        </span>
+                        <span>
+                          {fmtMoney(overview.income_vs_expenses.summary.total_income_usd?.amount_usd)}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>
+                          OpenAI expenses{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.summary.openai_expenses_usd?.kind,
+                            )}`}
+                          >
+                            {overview.income_vs_expenses.summary.openai_expenses_usd?.kind}
+                          </span>
+                        </span>
                         <span>
                           {fmtMoney(
-                            overview.income_vs_expenses.modes.operating_consumption.income
-                              ?.net_list_price_usd?.amount_usd,
+                            overview.income_vs_expenses.summary.openai_expenses_usd?.amount_usd,
                           )}
                         </span>
                       </div>
                       <div className={styles.statRow}>
                         <span>
-                          OpenAI costs{' '}
+                          FASHN expenses{' '}
                           <span
                             className={`${styles.kind} ${kindBadge(
-                              overview.income_vs_expenses.modes.operating_consumption.expenses
-                                ?.openai_recorded_costs_usd?.kind,
+                              overview.income_vs_expenses.summary.fashn_expenses_usd?.kind,
+                            )}`}
+                          >
+                            {overview.income_vs_expenses.summary.fashn_expenses_usd?.kind}
+                          </span>
+                        </span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.summary.fashn_expenses_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>
+                          Other operating{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.summary.other_operating_expenses_usd?.kind,
                             )}`}
                           >
                             {
-                              overview.income_vs_expenses.modes.operating_consumption.expenses
-                                ?.openai_recorded_costs_usd?.kind
+                              overview.income_vs_expenses.summary.other_operating_expenses_usd
+                                ?.kind
                             }
                           </span>
                         </span>
                         <span>
                           {fmtMoney(
-                            overview.income_vs_expenses.modes.operating_consumption.expenses
-                              ?.openai_recorded_costs_usd?.amount_usd,
+                            overview.income_vs_expenses.summary.other_operating_expenses_usd
+                              ?.amount_usd,
                           )}
                         </span>
                       </div>
                       <div className={styles.statRow}>
                         <span>
-                          FASHN consumption{' '}
+                          Net earnings{' '}
                           <span
                             className={`${styles.kind} ${kindBadge(
-                              overview.income_vs_expenses.modes.operating_consumption.expenses
-                                ?.fashn_estimated_consumption_usd?.kind,
-                            )}`}
-                          >
-                            {
-                              overview.income_vs_expenses.modes.operating_consumption.expenses
-                                ?.fashn_estimated_consumption_usd?.kind
-                            }
-                          </span>
-                        </span>
-                        <span>
-                          {fmtMoney(
-                            overview.income_vs_expenses.modes.operating_consumption.expenses
-                              ?.fashn_estimated_consumption_usd?.amount_usd,
-                          )}
-                        </span>
-                      </div>
-                      <div className={styles.statRow}>
-                        <span>
-                          Contribution margin{' '}
-                          <span
-                            className={`${styles.kind} ${kindBadge(
-                              overview.income_vs_expenses.modes.operating_consumption
-                                .estimated_contribution_margin_usd?.kind === 'estimated_incomplete'
+                              overview.income_vs_expenses.summary.net_earnings_usd?.kind ===
+                                'estimated_incomplete'
                                 ? 'estimated'
-                                : overview.income_vs_expenses.modes.operating_consumption
-                                    .estimated_contribution_margin_usd?.kind,
+                                : overview.income_vs_expenses.summary.net_earnings_usd?.kind,
                             )}`}
                           >
-                            {
-                              overview.income_vs_expenses.modes.operating_consumption
-                                .estimated_contribution_margin_usd?.kind
-                            }
+                            {overview.income_vs_expenses.summary.net_earnings_usd?.kind}
                           </span>
                         </span>
                         <span>
                           {fmtMoney(
-                            overview.income_vs_expenses.modes.operating_consumption
-                              .estimated_contribution_margin_usd?.amount_usd,
+                            overview.income_vs_expenses.summary.net_earnings_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>Profit margin</span>
+                        <span>
+                          {overview.income_vs_expenses.summary.profit_margin_pct?.value == null
+                            ? '—'
+                            : `${overview.income_vs_expenses.summary.profit_margin_pct.value.toFixed(1)}%`}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>Avg cost / generation</span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.summary.avg_cost_per_generation_usd
+                              ?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>Cost / paying customer</span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.summary.cost_per_paying_customer_usd
+                              ?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>Provider cost / purchased Star</span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.summary
+                              .provider_cost_per_star_purchased_usd?.amount_usd,
                           )}
                         </span>
                       </div>
                     </div>
                     <p className={styles.note}>
-                      {
-                        overview.income_vs_expenses.modes.operating_consumption
-                          .estimated_contribution_margin_usd?.detail
-                      }
+                      Free Stars and administrative grants are never income. Actual vs estimated
+                      kinds stay explicit — missing values stay unavailable, never silent zeros.
                     </p>
                   </article>
                 ) : null}
@@ -1437,17 +1492,20 @@ function AdminShell() {
               <div className={styles.classConfirmBox}>
                 <p className={styles.kpiHint}>
                   Current: <strong>{selectedCustomer.classification}</strong>
-                  {classDraft !== selectedCustomer.classification
+                  {classDraft && classDraft !== selectedCustomer.classification
                     ? ` → Proposed: ${classDraft}`
                     : ''}
                 </p>
+                {classFormError ? <p className={styles.formError}>{classFormError}</p> : null}
                 <label className={styles.field}>
                   Proposed classification
                   <select
-                    value={classDraft}
+                    value={classDraft || selectedCustomer.classification}
+                    aria-label="Proposed classification"
                     onChange={(e) => {
                       setClassDraft(e.target.value)
                       setClassConfirm(false)
+                      setClassFormError(null)
                     }}
                   >
                     {CLASS_OPTIONS.map((c) => (
@@ -1457,13 +1515,20 @@ function AdminShell() {
                     ))}
                   </select>
                 </label>
+                <p className={styles.selectedValue} aria-live="polite">
+                  Selected: {classDraft || selectedCustomer.classification}
+                </p>
                 <label className={styles.field}>
                   Reason (required)
                   <input
                     value={classReason}
-                    onChange={(e) => setClassReason(e.target.value)}
+                    onChange={(e) => {
+                      setClassReason(e.target.value)
+                      setClassFormError(null)
+                    }}
                     placeholder="Why this classification?"
                     maxLength={500}
+                    autoComplete="off"
                   />
                 </label>
                 <label className={styles.field}>
@@ -1473,6 +1538,7 @@ function AdminShell() {
                     onChange={(e) => setClassNote(e.target.value)}
                     placeholder="Optional operator note"
                     maxLength={2000}
+                    autoComplete="off"
                   />
                 </label>
                 <label className={styles.checkRow}>
@@ -1481,14 +1547,28 @@ function AdminShell() {
                     checked={classConfirm}
                     onChange={(e) => setClassConfirm(e.target.checked)}
                   />
-                  I confirm changing {selectedCustomer.classification} → {classDraft}
+                  I confirm changing {selectedCustomer.classification} →{' '}
+                  {classDraft || '…'}
                 </label>
+                {!classConfirm ||
+                !classDraft ||
+                classDraft === selectedCustomer.classification ||
+                classReason.trim().length < 3 ? (
+                  <p className={styles.formHint}>
+                    {!classDraft || classDraft === selectedCustomer.classification
+                      ? 'Choose a different classification to enable submit.'
+                      : classReason.trim().length < 3
+                        ? 'Enter a reason (at least 3 characters), then confirm.'
+                        : 'Check the confirmation box to enable submit.'}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className={styles.refresh}
                   disabled={
                     classSaving ||
                     !classConfirm ||
+                    !classDraft ||
                     classDraft === selectedCustomer.classification ||
                     classReason.trim().length < 3
                   }

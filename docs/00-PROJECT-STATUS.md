@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:50 Asia/Jerusalem — Admin AI financial intelligence (OpenAI Costs + FASHN credits) implemented; sync **disabled** until credentials verified
+**Last updated:** 2026-11-26 01:55 Asia/Jerusalem — Admin AI financial intelligence + classification select UX fix; sync **disabled** until credentials verified
 
 ## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
 
@@ -32,18 +32,24 @@ Do **not** paste secrets into chat, commits, or Admin API responses.
 
 2. **FASHN credits**  
    - Uses existing `FASHN_API_KEY` for `GET https://api.fashn.ai/v1/credits` only when sync is enabled.  
-   - Optional: `FASHN_LOW_CREDITS_THRESHOLD=50` (dashboard alert).
+   - Optional: `FASHN_LOW_CREDITS_THRESHOLD=50` (dashboard alert).  
+   - Optional actual purchase rate: `FASHN_OPERATOR_CREDIT_USD=0.075` (USD per credit from your invoice; leave `0` until known).
 
 3. **Enable sync only after a dry check**  
    - Confirm env present on the API/worker host (values never logged).  
    - Flip independently: `OPENAI_COST_SYNC_ENABLED=true` and/or `FASHN_CREDIT_SYNC_ENABLED=true`.  
    - Optional: `AI_COST_SYNC_INTERVAL_SECONDS=3600` (default hourly throttle).  
    - Restart `fashionrise-api` + `fashionrise-ai-worker@{1..3}`.  
-   - Admin → AI & Costs should show sync status moving off `never_synced` / `skipped_disabled`.
+   - Admin → AI & Costs / Revenue financial summary should populate from snapshots.
 
 4. **Still unavailable without invoices**  
    - FASHN actual cash (no public invoice API) — use `operator_expense_records` / category `fashn_invoice` when an invoice is verified.  
    - Apple/Google net proceeds remain unavailable.
+
+### Admin classification UX (same tip)
+
+- Proposed classification select now forces readable ink color (Android blank-select fix) and shows **Selected: …** under the control.  
+- Submit stays visually disabled until reason (≥3 chars) + confirm; failures render inside the customer drawer.
 
 ## LIVE — Admin 2.0 + ADD-ONLY Stars grants joint deploy (#503+#504) (2026-11-25/26 Asia/Jerusalem)
 

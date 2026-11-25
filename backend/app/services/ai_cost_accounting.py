@@ -57,8 +57,13 @@ def _dec(value: Any) -> Decimal | None:
 def active_fashn_credit_rate(
     db: Session, *, at: datetime | None = None
 ) -> tuple[Decimal | None, uuid.UUID | None, bool]:
-    """Return (usd_per_credit, pricing_version_id, operator_confirmed)."""
+    """Return (usd_per_credit, pricing_version_id, operator_confirmed).
+
+    Prefer operator-confirmed DB pricing, then ``FASHN_OPERATOR_CREDIT_USD`` env,
+    then documented seed / soft cents estimate.
+    """
     when = at or _utcnow()
+    settings = get_settings()
     row = db.scalars(
         select(ProviderPricingVersion)
         .where(
@@ -76,12 +81,99 @@ def active_fashn_credit_rate(
         )
         .limit(1)
     ).first()
-    if row is None:
-        # Config soft fallback — still estimated, not cash.
-        settings = get_settings()
-        cents = int(getattr(settings, "fashn_try_on_estimate_cents", 8) or 8)
-        return Decimal(cents) / Decimal(100), None, False
-    return Decimal(row.unit_amount), row.id, bool(row.operator_confirmed)
+    if row is not None and bool(row.operator_confirmed):
+        return Decimal(row.unit_amount), row.id, True
+
+    env_rate = float(getattr(settings, "fashn_operator_credit_usd", 0) or 0)
+    if env_rate > 0:
+        return Decimal(str(env_rate)), (row.id if row else None), True
+
+    if row is not None:
+        return Decimal(row.unit_amount), row.id, False
+
+    cents = int(getattr(settings, "fashn_try_on_estimate_cents", 8) or 8)
+    return Decimal(cents) / Decimal(100), None, False
+
+
+# Soft catalog estimates (USD) for OpenAI image/edit ops when usage tokens absent.
+# Labeled estimated — reconciled against OpenAI Costs API actuals separately.
+_OPENAI_FEATURE_ESTIMATE_USD: dict[str, Decimal] = {
+    "magic": Decimal("0.055"),
+    "dual_magic": Decimal("0.055"),
+    "fitting_room": Decimal("0.08"),
+    "virtual_try_on": Decimal("0.055"),
+    "garment_realism": Decimal("0.08"),
+    "personal_croquis": Decimal("0.08"),
+    "fabric_ai": Decimal("0.04"),
+    "techpack": Decimal("0.10"),
+}
+
+
+def feature_for_job_type(job_type: str | None) -> str:
+    jt = (job_type or "").strip().lower()
+    if jt in ("sketch_polish", "sketch_clean"):
+        return "magic"
+    if jt == "fitting_room_try_on":
+        return "fitting_room"
+    if jt == "personal_try_on":
+        return "virtual_try_on"
+    if jt == "personal_garment_realism":
+        return "garment_realism"
+    if jt == "personal_croquis_generate":
+        return "personal_croquis"
+    if "fabric" in jt:
+        return "fabric_ai"
+    if "techpack" in jt:
+        return "techpack"
+    return jt or "unknown"
+
+
+def record_job_openai_estimate_best_effort(
+    db: Session,
+    *,
+    job_id: uuid.UUID | None,
+    user_id: uuid.UUID | None,
+    job_type: str | None,
+    final_status: str,
+    model: str | None = None,
+    estimated_cost_usd: Decimal | float | str | None = None,
+    provider_request_id: str | None = None,
+    provider: str | None = None,
+) -> None:
+    """Best-effort per-job OpenAI estimate — never raises into generation path.
+
+    Skips when the job was settled on FASHN (prediction ledger owns that cost).
+    Still records failed OpenAI attempts when ``final_status=failed`` and provider
+    is openai/unknown — failed billable requests must not be invisible.
+    """
+    try:
+        prov = (provider or "").strip().lower()
+        if "fashn" in prov:
+            return
+        feature = feature_for_job_type(job_type)
+        key = f"openai:job:{(job_id or uuid.uuid4())}:{final_status}"
+        est = _dec(estimated_cost_usd)
+        if est is None:
+            est = _OPENAI_FEATURE_ESTIMATE_USD.get(feature)
+        nested = db.begin_nested()
+        try:
+            record_openai_operation(
+                db,
+                idempotency_key=key,
+                feature=feature,
+                final_status=final_status,
+                user_id=user_id,
+                job_id=job_id,
+                provider_request_id=provider_request_id,
+                model=model,
+                estimated_cost_usd=est,
+                image_units=1 if est is not None else None,
+            )
+            nested.commit()
+        except Exception:  # noqa: BLE001
+            nested.rollback()
+    except Exception:  # noqa: BLE001
+        log.exception("OpenAI job cost ledger write failed (non-fatal)")
 
 
 def record_fashn_prediction(
@@ -784,6 +876,9 @@ def build_income_vs_expenses(
     revenue_refunds: float,
     revenue_net: float,
     ai_financial: dict[str, Any],
+    stars_purchased_net: int | None = None,
+    successful_generations: int | None = None,
+    paying_customers: int | None = None,
 ) -> dict[str, Any]:
     """Two reporting modes: operating consumption vs documented cash."""
     openai_project = ai_financial.get("openai", {}).get("project_costs", {})
@@ -792,6 +887,12 @@ def build_income_vs_expenses(
         if openai_project.get("kind") == "actual"
         else None
     )
+    # Prefer OpenAI actual when present; otherwise surface per-op estimates separately.
+    openai_est_ops = 0.0
+    for row in ai_financial.get("by_feature") or []:
+        if isinstance(row, dict) and row.get("provider") == PROVIDER_OPENAI:
+            openai_est_ops += float(row.get("estimated_cost_usd") or 0)
+
     fashn_est = ai_financial.get("fashn", {}).get("estimated_consumption_usd", {})
     fashn_est_usd = (
         float(fashn_est.get("amount_usd") or 0)
@@ -803,26 +904,114 @@ def build_income_vs_expenses(
         float(operator.get("amount_usd") or 0) if operator.get("kind") == "actual" else None
     )
 
-    operating_expenses = None
-    if openai_actual is not None or fashn_est_usd is not None:
-        operating_expenses = float(
-            (openai_actual or 0.0) + (fashn_est_usd or 0.0)
-        )
+    # Prefer actual OpenAI for operating total; do not also add OpenAI estimates.
+    openai_expense = openai_actual
+    openai_expense_kind = "actual" if openai_actual is not None else "unavailable"
+    openai_estimate_only = None
+    if openai_actual is None and openai_est_ops > 0:
+        openai_estimate_only = openai_est_ops
+        openai_expense = openai_est_ops
+        openai_expense_kind = "estimated"
 
-    contribution = None
+    operating_expenses = None
+    if openai_expense is not None or fashn_est_usd is not None:
+        operating_expenses = float((openai_expense or 0.0) + (fashn_est_usd or 0.0))
+        if operator_usd is not None:
+            operating_expenses += operator_usd
+
+    net_earnings = None
+    margin_pct = None
     contribution_kind = "unavailable"
     if operating_expenses is not None:
-        contribution = float(revenue_net) - operating_expenses
+        net_earnings = float(revenue_net) - operating_expenses
         contribution_kind = "estimated"
-        # Incomplete if either leg missing.
-        if openai_actual is None or fashn_est_usd is None:
+        if openai_expense_kind != "actual" or fashn_est_usd is None:
             contribution_kind = "estimated_incomplete"
+        if revenue_net > 0:
+            margin_pct = (net_earnings / float(revenue_net)) * 100.0
 
     cash_out = None
     if openai_actual is not None or operator_usd is not None:
         cash_out = float((openai_actual or 0.0) + (operator_usd or 0.0))
 
+    gens = int(successful_generations or 0)
+    payers = int(paying_customers or 0)
+    stars_net = int(stars_purchased_net or 0)
+    avg_cost_per_gen = (
+        (operating_expenses / gens) if operating_expenses is not None and gens > 0 else None
+    )
+    cost_per_customer = (
+        (operating_expenses / payers) if operating_expenses is not None and payers > 0 else None
+    )
+    cost_per_star = (
+        (operating_expenses / stars_net) if operating_expenses is not None and stars_net > 0 else None
+    )
+
+    # Reconciliation: when both actual OpenAI and per-op estimates exist, show delta.
+    reconciliation = {
+        "kind": "unavailable",
+        "detail": "Requires OpenAI Costs API sync plus per-operation estimates in range.",
+    }
+    if openai_actual is not None and openai_est_ops > 0:
+        reconciliation = {
+            "kind": "estimated",
+            "openai_actual_usd": openai_actual,
+            "openai_estimated_ops_usd": openai_est_ops,
+            "difference_usd": float(openai_actual) - float(openai_est_ops),
+            "detail": (
+                "Difference = actual billed OpenAI − sum of per-operation estimates. "
+                "Do not add both into expenses."
+            ),
+        }
+
     return {
+        "summary": {
+            "total_income_usd": {"kind": "estimated", "amount_usd": revenue_net},
+            "openai_expenses_usd": {
+                "kind": openai_expense_kind,
+                "amount_usd": openai_expense,
+                "detail": (
+                    "Actual Costs API when synced; otherwise per-op estimates only."
+                    if openai_estimate_only is not None
+                    else None
+                ),
+            },
+            "fashn_expenses_usd": {
+                "kind": "estimated" if fashn_est_usd is not None else "unavailable",
+                "amount_usd": fashn_est_usd,
+            },
+            "other_operating_expenses_usd": {
+                "kind": "actual" if operator_usd is not None else "unavailable",
+                "amount_usd": operator_usd,
+            },
+            "total_expenses_usd": {
+                "kind": "estimated" if operating_expenses is not None else "unavailable",
+                "amount_usd": operating_expenses,
+            },
+            "net_earnings_usd": {
+                "kind": contribution_kind,
+                "amount_usd": net_earnings,
+                "detail": "Not accounting profit. Free Stars and admin grants are not income.",
+            },
+            "profit_margin_pct": {
+                "kind": contribution_kind if margin_pct is not None else "unavailable",
+                "value": margin_pct,
+            },
+            "avg_cost_per_generation_usd": {
+                "kind": "estimated" if avg_cost_per_gen is not None else "unavailable",
+                "amount_usd": avg_cost_per_gen,
+            },
+            "cost_per_paying_customer_usd": {
+                "kind": "estimated" if cost_per_customer is not None else "unavailable",
+                "amount_usd": cost_per_customer,
+            },
+            "provider_cost_per_star_purchased_usd": {
+                "kind": "estimated" if cost_per_star is not None else "unavailable",
+                "amount_usd": cost_per_star,
+                "detail": "Operating AI cost ÷ net purchased Stars in range (not free/admin grants).",
+            },
+            "reconciliation_openai": reconciliation,
+        },
         "modes": {
             "operating_consumption": {
                 "label": "Operating consumption & estimated contribution margin",
@@ -846,8 +1035,8 @@ def build_income_vs_expenses(
                 },
                 "expenses": {
                     "openai_recorded_costs_usd": {
-                        "kind": "actual" if openai_actual is not None else "unavailable",
-                        "amount_usd": openai_actual,
+                        "kind": openai_expense_kind,
+                        "amount_usd": openai_expense,
                     },
                     "fashn_estimated_consumption_usd": {
                         "kind": "estimated" if fashn_est_usd is not None else "unavailable",
@@ -857,18 +1046,22 @@ def build_income_vs_expenses(
                         "kind": "unavailable",
                         "detail": "No FASHN invoice API — use operator invoice rows.",
                     },
+                    "other_operating_usd": {
+                        "kind": "actual" if operator_usd is not None else "unavailable",
+                        "amount_usd": operator_usd,
+                    },
                     "total_operating_usd": {
                         "kind": "estimated" if operating_expenses is not None else "unavailable",
                         "amount_usd": operating_expenses,
                         "detail": (
-                            "OpenAI actual (when synced) + FASHN estimated consumption. "
-                            "Not accounting profit."
+                            "OpenAI (actual preferred; else estimates) + FASHN estimated "
+                            "+ operator expenses. Never sums actual+estimate for same provider."
                         ),
                     },
                 },
                 "estimated_contribution_margin_usd": {
                     "kind": contribution_kind,
-                    "amount_usd": contribution,
+                    "amount_usd": net_earnings,
                     "detail": (
                         "Net estimated catalog revenue minus operating AI costs. "
                         "Not accounting profit. Incomplete when any expense leg is missing."
@@ -899,7 +1092,8 @@ def build_income_vs_expenses(
                 },
                 "note": (
                     "Do not mix consumption-based FASHN estimates into cash mode. "
-                    "Store commissions must not be subtracted twice when using net proceeds."
+                    "Store commissions must not be subtracted twice when using net proceeds. "
+                    "Administrative Stars grants are never income."
                 ),
             },
         },

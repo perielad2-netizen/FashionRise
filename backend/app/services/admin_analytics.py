@@ -1168,11 +1168,21 @@ def overview(
         audience_filter=aud_filt,
     )
     payload["ai_financial"] = ai_financial
+    successful_gens = int(
+        magic_in_range
+        + fitting_in_range
+        + try_on_in_range
+        + croquis_in_range
+        + techpack_completed_in_range
+    )
     payload["income_vs_expenses"] = build_income_vs_expenses(
         revenue_gross=float(gross_list),
         revenue_refunds=float(refund_list),
         revenue_net=float(net_list),
         ai_financial=ai_financial,
+        stars_purchased_net=int(stars_bought_net),
+        successful_generations=successful_gens,
+        paying_customers=int(paying_customers),
     )
     trend = ai_financial.get("daily_cost_trend") or {}
     payload["charts"]["ai_cost_trend"] = {
