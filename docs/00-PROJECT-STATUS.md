@@ -3,7 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction **CLOSED** (FE tip `e0ee7bed`)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Admin 2.0 #503 final acceptance corrections (not deployed)
+
+## DRAFT — FashionRise Admin 2.0 foundation + final acceptance (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+
+| Field | Value |
+| --- | --- |
+| Status | **DRAFT** — Final acceptance corrections applied; **STOP** — not approved for merge / migration / deploy |
+| Design doc | [`docs/ADMIN-2.0-BUSINESS-INTELLIGENCE.md`](./ADMIN-2.0-BUSINESS-INTELLIGENCE.md) |
+| Baseline main | **`f3967dbf`** |
+| Pre-correction SHA | **`27fa5361`** (Technical PM source inspection) |
+| PM-amendments SHA | **`19e900e0`** |
+| Final acceptance SHA | **`06ddd250`** |
+| Final acceptance | Gross/refund/net no double-subtraction · Jerusalem calendar-day registration trend · classification identity-map refresh · reserved username blocked on invite register + Google auto-username |
+| Scope | Audience-scoped analytics · Jerusalem date ranges · Production-only revenue · honest Stars unavailable · classification confirm/concurrency · auth reservation · customer pagination · Enabled Accounts terminology · AI status verify · nginx allowlist proposal · expanded tests |
+| Migration | Alembic **043** — disposable **042→043→042→043** verified; **not applied to production** |
+| Mutations | Classification PATCH only (audited); **no** wallet grants / payment gates / native changes / prod classification backfill |
+| Admin Stars grants | Separate stacked PR **#504** — synchronize after this amend |
+| Verification | Admin suite **47+** · IAP/wallet regression **ok** · FE AdminPage **9 passed** · `tsc`/`lint`/`build` **ok** · reserved username register blocked |
+| Screenshots | **Not generated** |
+| Exact next action | Technical PM final review → authorize nginx allowlist + tip deploy; then #504; AI cost intelligence is a **separate** milestone |
 
 ## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 

@@ -223,8 +223,15 @@ def _username_from_email(email: str) -> str:
 
 
 def _unique_username(db: Session, base: str) -> str:
+    from app.auth.admin import is_reserved_admin_username
+
     candidate = base
     for _ in range(24):
+        # Never auto-claim reserved admin usernames via Google registration.
+        if is_reserved_admin_username(candidate):
+            suffix = secrets.token_hex(2)
+            candidate = f"{base[:40]}_{suffix}"
+            continue
         exists = db.scalar(select(User.id).where(User.username == candidate))
         if exists is None:
             return candidate

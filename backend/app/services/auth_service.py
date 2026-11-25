@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth.admin import is_reserved_admin_username
 from app.core.config import get_settings
 from app.core.errors import (
     ConflictError,
@@ -104,6 +105,11 @@ def register_user(db: Session, data: UserRegister) -> RegisterResponse:
     username = data.username.strip()
     if not username:
         raise ValidationAppError("Username is required")
+    # Block public/invite registration from claiming reserved admin usernames
+    # (case-insensitive). Existing allowlisted accounts keep access via stable
+    # user id + is_admin / allowlist match — new signups cannot steal the name.
+    if is_reserved_admin_username(username):
+        raise ConflictError("Username already taken")
 
     if mode == "invite_only":
         return _register_invite_only(db, data, email_norm=email_norm, username=username)
