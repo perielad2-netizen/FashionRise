@@ -3,39 +3,36 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 00:20 Asia/Jerusalem — Admin 2.0 #503+#504 **LIVE** on production (`78771a0b`, Alembic **044**); financial grants still fail-closed
+**Last updated:** 2026-11-26 00:35 Asia/Jerusalem — Admin 2.0 milestone **COMPLETE** (financial actors live; first +1 grant deferred — no owner-approved finite test recipient)
 
-## LIVE — Admin 2.0 + ADD-ONLY Stars grants joint deploy (#503+#504) (2026-11-25/26 Asia/Jerusalem)
+## COMPLETE — Admin 2.0 operational milestone (#503+#504) (2026-11-26 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **LIVE** — analytics Admin 2.0 + grant ledger schema + nginx allowlist. **Stars grants NOT operational** (financial allowlist empty) |
-| Approved tip | **`78771a0b`** (`78771a0b3e86dce4999f26fa014334fdc1197929`) — #503 `05e93b26` + #504 `6abc0d10` + docs tip #507 only |
-| Deployed FE SHA | **`78771a0b`** |
-| Deployed BE SHA | **`78771a0b`** (`/opt/fashionrise/src` detached HEAD; `backend/REVISION`) |
-| FE release | `/var/www/fashionrise/releases/78771a0b-admin20-503-504` · symlink `current` |
-| Previous FE | `/var/www/fashionrise/releases/e0ee7bed-web-stars-restriction` (**preserved**) |
-| Public `/version.json` | `{"app":"78771a0b","sha":"78771a0b","builtAt":"2026-11-25T22:17:29.622Z"}` |
-| Alembic | **042 → 043 → 044** applied; head **`044`** |
-| Migration effects | All **69** accounts remain **`UNCLASSIFIED`**; **0** classification events; **0** grant ledger rows; wallet checksum **`69\|3000509`** unchanged vs pre-migrate |
-| DB backup | `/var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/fashionrise_beta.dump` · **211 MB** · `pg_restore -l` **425** TOC lines · pre checksum `users-stars-checksum-pre.txt` |
-| Preserve bundle | Same dir — nginx sites-available copy, prior BE tree tarball, `.env` (root-only), `ROLLBACK.sh`, FE prior path |
-| Nginx | Admin allowlist expanded (overview, reports, metrics dictionary, customers, customer detail, classification + dry-run + options, grants config/history, per-user grants, idempotency). **Deny fallback is plain prefix** `location /api/v1/admin/ { return 403; }` (**not** `^~`). Regex locations **quoted** so `{36}` quantifiers parse. Authorization forwarded. Methods limited per route. |
-| Cloudflare | Origin pull (AOP) unchanged; edge probes: allowlisted admin paths → **401** unauth; unknown `/api/v1/admin/*` → **403**; no unrestricted admin prefix. No CF WAF rule changes required for this allowlist. |
-| Health | `fashionrise-api` + `fashionrise-ai-worker@{1..3}` **active**; `/health` **ok**; Alembic current **044** |
-| Financial auth | **`ADMIN_STARS_GRANT_ACTOR_IDS` unset/empty** — fail-closed. Admin JWT grant POST → **403** Financial admin required. Ordinary customer → **403** Admin access required. Unauth → **401**. |
-| Admin API smoke (minted short-lived `is_admin` JWT; no browser session UI) | Overview `customers`/`all` **200** (unavailable markers present); customers `customers` **0** items (all unclassified); customers `all` **69**; pagination **200**; detail **200** UNCLASSIFIED; reports/dictionary/options/dry-run/grants config+history **200**; dry-run suggestions only (**0** events written) |
-| Browser authenticated Admin UI | **Not exercised** in this run (no interactive operator session). API verification above stands in for read paths. |
-| Deployment-induced wallet mutations | **0** |
-| Administrative grants created | **0** |
-| Existing app smoke | Gallery **200**; auth/me **401**; auth/stars **401**; IAP apple status **200**; push capability/vapid **200**; web Stars copy still “Stars can only” + App Store/Play; native configs **unchanged** |
-| Vite gates preserved | Registration UI **false**; Magic/Front-Back/Dual Magic **true**; croquis notice SHA256 match prior tip; SW safety **ok** |
-| Rollback FE | `ln -sfn /var/www/fashionrise/releases/e0ee7bed-web-stars-restriction /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
-| Rollback BE (app only; keep Alembic **044**) | `tar -C /opt/fashionrise/src -xzf /var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/backend-src-working-tree.tgz && systemctl restart fashionrise-api fashionrise-ai-worker@{1..3}` |
-| Rollback nginx | `cp -a /var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/nginx-sites-available.fashionrise.app.conf /etc/nginx/sites-available/fashionrise.app && nginx -t && systemctl reload nginx` |
-| Do **not** | Auto-downgrade **044**; restore DB dump over newer customer writes without separate recovery authorization; set `ADMIN_STARS_GRANT_ACTOR_IDS` or perform live grants without new PM OK |
-| Known limitations | Stars Grants UI visible to admins but mutations fail-closed; all accounts still UNCLASSIFIED until operators classify; no interactive browser Admin UI session in this deploy; pre-deploy BE tree had local uncommitted drift on `f34bd487` branch — replaced by clean `78771a0b` |
-| Exact next action | **STOP.** Separate authorization required to (1) set `ADMIN_STARS_GRANT_ACTOR_IDS` owner UUIDs and (2) run a controlled live grant validation. Do not classify production accounts or grant Stars until then. |
+| Status | **COMPLETE / OPERATIONAL** — Admin analytics live; financial grant **authorization enabled** for owner admins; **no production grant executed** in this completion pass |
+| Docs deploy record | PR [#508](https://github.com/perielad2-netizen/FashionRise/pull/508) **MERGED** @ **`2e154ce9`** (`2026-11-25T22:30:08Z`) |
+| BE SHA | **`78771a0b`** · Alembic **`044`** |
+| FE SHA | **`2d11789a`** (mobile filter UX hotfix) · release `2d11789a-admin-mobile-filters` · prior Admin tip `78771a0b-admin20-503-504` preserved |
+| Public `/version.json` | `{"app":"2d11789a","sha":"2d11789a",…}` |
+| Authenticated Admin API | Overview / customers / detail / reports / dictionary / classification options+dry-run / grants config+history — all **200** with owner admin JWT |
+| Financial actors | **`ADMIN_STARS_GRANT_ACTOR_IDS`** = `54880c4a-1ef1-42c7-aebe-e1afd42e9aef` (**PeriShilat**) + `ac3621dd-1673-418e-a727-c34626c5dc38` (**yanivprbk**) — verified existing owner-admin UUIDs only |
+| Financial auth verify | After API restart: both owners `user_can_grant_stars=True`; idempotency reconcile **200** `not_found`; ordinary customer overview/grant/reconcile **403**; synthetic non-allowlisted admin UUID **cannot** grant |
+| First live +1 grant | **Deferred** — no explicitly owner-approved **finite-wallet** test recipient named. Leave for owner to perform manually against an approved finite account; then confirm balance / ledger / idempotency replay |
+| Ledger / wallets | `admin_stars_grants` **0** · classification events **0** · wallet checksum still **`69\|3000509`** (unchanged by this completion pass) |
+| Nginx / CF | Admin allowlist live (plain prefix deny, quoted UUID regexes); AOP unchanged |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/78771a0b-admin20-503-504 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` (or `e0ee7bed-web-stars-restriction` for pre-Admin tip) |
+| Exact next action | Owner: pick a finite-wallet test recipient → perform one **+1** Stars grant from Admin UI → confirm balance/ledger/idempotency. Optionally classify accounts. Open PR [#509](https://github.com/perielad2-netizen/FashionRise/pull/509) for FE filter hotfix merge to `main`. |
+
+## LIVE — Admin 2.0 + ADD-ONLY Stars grants joint deploy (#503+#504) (2026-11-25/26 Asia/Jerusalem) — superseded by COMPLETE above
+
+| Field | Value |
+| --- | --- |
+| Status | Historical deploy record — see **COMPLETE** section for current operational state |
+| Approved tip | **`78771a0b`** — #503 `05e93b26` + #504 `6abc0d10` + docs tip #507 |
+| Alembic | **042 → 043 → 044** |
+| DB backup | `/var/backups/fashionrise/admin20-503-504-preserve-20261125T221345Z/fashionrise_beta.dump` · **211 MB** |
+| Preserve / ROLLBACK | Same dir · `ROLLBACK.sh` |
+| Note | Financial allowlist was empty at initial deploy; owner UUIDs configured in the COMPLETE pass |
 
 ## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — DEPLOYED (see LIVE above)
 
