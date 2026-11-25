@@ -51,6 +51,15 @@ from app.models.competition import (
 )
 from app.models.account_classification_event import AccountClassificationEvent
 from app.models.admin_stars_grant import AdminStarsGrant
+from app.models.ai_cost_accounting import (
+    AiProviderOperation,
+    FashnCreditSnapshot,
+    FashnPredictionCost,
+    OpenAiCostDaily,
+    OperatorExpenseRecord,
+    ProviderPricingVersion,
+    ProviderSyncRun,
+)
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow
@@ -60,7 +69,14 @@ from app.models.user_profile import UserProfile
 __all__ = [
     "AIJob",
     "AdminStarsGrant",
+    "AiProviderOperation",
     "BodyMeasurementProfile",
+    "FashnCreditSnapshot",
+    "FashnPredictionCost",
+    "OpenAiCostDaily",
+    "OperatorExpenseRecord",
+    "ProviderPricingVersion",
+    "ProviderSyncRun",
     "ColorPalette",
     "CompetitionAward",
     "CompetitionGroup",

@@ -150,7 +150,93 @@ export type AdminOverview = {
       detail?: string
     }
     revenue_trend?: { kind: string; detail?: string }
-    ai_cost_trend?: { kind: string; detail?: string }
+    ai_cost_trend?: {
+      kind: string
+      detail?: string
+      points?: Array<{ date: string; openai_actual_usd?: number }>
+      scope_label?: string
+    }
+  }
+  ai_financial?: {
+    currency?: string
+    note?: string
+    sync?: {
+      openai_cost_sync_enabled?: boolean
+      fashn_credit_sync_enabled?: boolean
+      openai?: { kind?: string; status?: string; detail?: string; error_detail?: string | null }
+      fashn?: { kind?: string; status?: string; detail?: string; error_detail?: string | null }
+    }
+    openai?: {
+      project_costs?: { kind: string; amount_usd?: number; detail?: string; scope_label?: string }
+      organization_unattributed?: {
+        kind: string
+        amount_usd?: number | null
+        detail?: string | null
+        scope_label?: string
+      }
+    }
+    fashn?: {
+      balance?: {
+        kind: string
+        detail?: string | null
+        credits_total?: number
+        credits_subscription?: number
+        credits_on_demand?: number
+        estimated_value_usd?: number | null
+        captured_at?: string | null
+      }
+      credits_consumed_actual?: {
+        kind: string
+        value?: number
+        predictions?: number
+        unavailable_predictions?: number
+      }
+      estimated_consumption_usd?: { kind: string; amount_usd?: number; detail?: string }
+      actual_cash_expenditure?: { kind: string; detail?: string }
+    }
+    by_provider?: Array<{
+      provider: string
+      actual_usd?: number | null
+      actual_kind?: string
+      estimated_usd?: number | null
+      estimated_kind?: string
+      credits_actual?: number
+      scope_label?: string
+    }>
+    by_feature?: Array<{
+      provider: string
+      feature: string
+      successful_operations: number
+      estimated_cost_usd: number
+      credits_consumed?: number | null
+      cost_kind: string
+    }>
+    by_customer_classification?: Array<{
+      classification: string
+      operations: number
+      estimated_cost_usd: number
+      cost_kind: string
+    }>
+  }
+  income_vs_expenses?: {
+    modes?: {
+      operating_consumption?: {
+        label?: string
+        income?: Record<string, { kind: string; amount_usd?: number; detail?: string }>
+        expenses?: Record<string, { kind: string; amount_usd?: number | null; detail?: string }>
+        estimated_contribution_margin_usd?: {
+          kind: string
+          amount_usd?: number | null
+          detail?: string
+        }
+      }
+      documented_cash?: {
+        label?: string
+        income?: Record<string, { kind: string; amount_usd?: number; detail?: string }>
+        expenses?: Record<string, { kind: string; amount_usd?: number | null; detail?: string }>
+        note?: string
+      }
+    }
   }
   needs_attention?: Array<{
     id: string

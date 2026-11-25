@@ -749,6 +749,99 @@ function AdminShell() {
                     ))}
                   </div>
                 </article>
+                {overview.income_vs_expenses?.modes?.operating_consumption ? (
+                  <article className={styles.card}>
+                    <h2>
+                      Income vs expenses (operating) <PeriodTag label={rangeLabel} />
+                    </h2>
+                    <div className={styles.statList}>
+                      <div className={styles.statRow}>
+                        <span>Net list-price income (est.)</span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.modes.operating_consumption.income
+                              ?.net_list_price_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>
+                          OpenAI costs{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.modes.operating_consumption.expenses
+                                ?.openai_recorded_costs_usd?.kind,
+                            )}`}
+                          >
+                            {
+                              overview.income_vs_expenses.modes.operating_consumption.expenses
+                                ?.openai_recorded_costs_usd?.kind
+                            }
+                          </span>
+                        </span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.modes.operating_consumption.expenses
+                              ?.openai_recorded_costs_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>
+                          FASHN consumption{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.modes.operating_consumption.expenses
+                                ?.fashn_estimated_consumption_usd?.kind,
+                            )}`}
+                          >
+                            {
+                              overview.income_vs_expenses.modes.operating_consumption.expenses
+                                ?.fashn_estimated_consumption_usd?.kind
+                            }
+                          </span>
+                        </span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.modes.operating_consumption.expenses
+                              ?.fashn_estimated_consumption_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                      <div className={styles.statRow}>
+                        <span>
+                          Contribution margin{' '}
+                          <span
+                            className={`${styles.kind} ${kindBadge(
+                              overview.income_vs_expenses.modes.operating_consumption
+                                .estimated_contribution_margin_usd?.kind === 'estimated_incomplete'
+                                ? 'estimated'
+                                : overview.income_vs_expenses.modes.operating_consumption
+                                    .estimated_contribution_margin_usd?.kind,
+                            )}`}
+                          >
+                            {
+                              overview.income_vs_expenses.modes.operating_consumption
+                                .estimated_contribution_margin_usd?.kind
+                            }
+                          </span>
+                        </span>
+                        <span>
+                          {fmtMoney(
+                            overview.income_vs_expenses.modes.operating_consumption
+                              .estimated_contribution_margin_usd?.amount_usd,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    <p className={styles.note}>
+                      {
+                        overview.income_vs_expenses.modes.operating_consumption
+                          .estimated_contribution_margin_usd?.detail
+                      }
+                    </p>
+                  </article>
+                ) : null}
               </section>
             ) : null}
 
@@ -773,7 +866,12 @@ function AdminShell() {
                     </div>
                     <div className={styles.statRow}>
                       <span>Try-On in range</span>
-                      <span>{fmt(overview.ai_usage.try_on_completed)}</span>
+                      <span>
+                        {fmt(
+                          overview.ai_usage.try_on_completed ??
+                            overview.ai_usage.try_on_completed_in_range,
+                        )}
+                      </span>
                     </div>
                     <div className={styles.statRow}>
                       <span>Croquis in range</span>
@@ -806,10 +904,139 @@ function AdminShell() {
                     </div>
                   </div>
                   <p className={styles.note}>
-                    Provider cash costs: unavailable until authoritative billing import (Phase D).
                     Unlimited wallets remain in AI usage even when they consume no Stars.
                   </p>
                 </article>
+                <article className={styles.card}>
+                  <h2>
+                    Provider costs <PeriodTag label="actual vs estimated" />
+                  </h2>
+                  <div className={styles.statList}>
+                    <div className={styles.statRow}>
+                      <span>
+                        OpenAI project{' '}
+                        <span
+                          className={`${styles.kind} ${kindBadge(
+                            overview.ai_financial?.openai?.project_costs?.kind,
+                          )}`}
+                        >
+                          {overview.ai_financial?.openai?.project_costs?.kind || 'unavailable'}
+                        </span>
+                      </span>
+                      <span>
+                        {fmtMoney(overview.ai_financial?.openai?.project_costs?.amount_usd)}
+                      </span>
+                    </div>
+                    <div className={styles.statRow}>
+                      <span>
+                        FASHN credits (actual){' '}
+                        <span
+                          className={`${styles.kind} ${kindBadge(
+                            overview.ai_financial?.fashn?.credits_consumed_actual?.kind,
+                          )}`}
+                        >
+                          {overview.ai_financial?.fashn?.credits_consumed_actual?.kind ||
+                            'unavailable'}
+                        </span>
+                      </span>
+                      <span>
+                        {fmt(overview.ai_financial?.fashn?.credits_consumed_actual?.value)}
+                      </span>
+                    </div>
+                    <div className={styles.statRow}>
+                      <span>
+                        FASHN est. USD{' '}
+                        <span
+                          className={`${styles.kind} ${kindBadge(
+                            overview.ai_financial?.fashn?.estimated_consumption_usd?.kind,
+                          )}`}
+                        >
+                          {overview.ai_financial?.fashn?.estimated_consumption_usd?.kind ||
+                            'unavailable'}
+                        </span>
+                      </span>
+                      <span>
+                        {fmtMoney(
+                          overview.ai_financial?.fashn?.estimated_consumption_usd?.amount_usd,
+                        )}
+                      </span>
+                    </div>
+                    <div className={styles.statRow}>
+                      <span>
+                        FASHN balance{' '}
+                        <span
+                          className={`${styles.kind} ${kindBadge(
+                            overview.ai_financial?.fashn?.balance?.kind,
+                          )}`}
+                        >
+                          {overview.ai_financial?.fashn?.balance?.kind || 'unavailable'}
+                        </span>
+                      </span>
+                      <span>{fmt(overview.ai_financial?.fashn?.balance?.credits_total)}</span>
+                    </div>
+                  </div>
+                  <p className={styles.note}>{overview.ai_financial?.note}</p>
+                  <p className={styles.note}>
+                    Sync: OpenAI{' '}
+                    {overview.ai_financial?.sync?.openai_cost_sync_enabled ? 'enabled' : 'disabled'}{' '}
+                    ({overview.ai_financial?.sync?.openai?.status || 'never_synced'}); FASHN{' '}
+                    {overview.ai_financial?.sync?.fashn_credit_sync_enabled ? 'enabled' : 'disabled'}{' '}
+                    ({overview.ai_financial?.sync?.fashn?.status || 'never_synced'}).
+                  </p>
+                </article>
+                {(overview.ai_financial?.by_feature || []).length > 0 ? (
+                  <article className={styles.card}>
+                    <h2>
+                      Cost by feature <PeriodTag label="estimated" />
+                    </h2>
+                    <div className={styles.statList}>
+                      {(overview.ai_financial?.by_feature || []).map((row) => (
+                        <div
+                          className={styles.statRow}
+                          key={`${row.provider}:${row.feature}`}
+                        >
+                          <span>
+                            {row.provider}/{row.feature} ({fmt(row.successful_operations)} ops)
+                          </span>
+                          <span>{fmtMoney(row.estimated_cost_usd)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+                {(overview.ai_financial?.by_customer_classification || []).length > 0 ? (
+                  <article className={styles.card}>
+                    <h2>
+                      Cost by classification <PeriodTag label="estimated" />
+                    </h2>
+                    <div className={styles.statList}>
+                      {(overview.ai_financial?.by_customer_classification || []).map((row) => (
+                        <div className={styles.statRow} key={row.classification}>
+                          <span>
+                            {row.classification} ({fmt(row.operations)} ops)
+                          </span>
+                          <span>{fmtMoney(row.estimated_cost_usd)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+                {(overview.charts?.ai_cost_trend?.points || []).length > 0 ? (
+                  <article className={styles.card}>
+                    <h2>
+                      Daily OpenAI costs <PeriodTag label="actual · global" />
+                    </h2>
+                    <div className={styles.statList}>
+                      {(overview.charts?.ai_cost_trend?.points || []).map((p) => (
+                        <div className={styles.statRow} key={p.date}>
+                          <span>{p.date}</span>
+                          <span>{fmtMoney(p.openai_actual_usd)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className={styles.note}>{overview.charts?.ai_cost_trend?.scope_label}</p>
+                  </article>
+                ) : null}
               </section>
             ) : null}
           </>

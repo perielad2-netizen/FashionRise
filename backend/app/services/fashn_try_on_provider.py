@@ -210,6 +210,9 @@ class FashnTryOnV16Adapter:
         model_bytes = _ensure_rgb_jpegish_png(photo_png)
         prediction_ids: list[str] = []
         credits_used = 0
+        credits_header_present = False
+        credits_from_headers = 0
+        prediction_credit_details: list[dict[str, Any]] = []
         exp = v16_experiment if isinstance(v16_experiment, dict) else {}
         exp_mode = normalize_v16_mode(exp.get("mode"))
         exp_seg = normalize_v16_segmentation_free(exp.get("segmentation_free"))
@@ -244,7 +247,7 @@ class FashnTryOnV16Adapter:
                         num_samples=exp_samples,
                     )
                     prediction_ids.append(pred_id)
-                    status_body, used = self._poll(
+                    status_body, used, hdr_present, hdr_credits = self._poll(
                         client,
                         base=base,
                         api_key=api_key,
@@ -253,6 +256,19 @@ class FashnTryOnV16Adapter:
                         interval=interval,
                     )
                     credits_used += used
+                    if hdr_present:
+                        credits_header_present = True
+                        credits_from_headers += int(hdr_credits or 0)
+                    prediction_credit_details.append(
+                        {
+                            "prediction_id": pred_id,
+                            "credits_header_present": hdr_present,
+                            "credits_from_header": int(hdr_credits)
+                            if hdr_present and hdr_credits is not None
+                            else None,
+                            "settlement_credits": int(used),
+                        }
+                    )
                     out = status_body.get("output")
                     if not isinstance(out, list) or not out:
                         raise ProviderNotAvailableError("FASHN completed with empty output")
@@ -282,6 +298,9 @@ class FashnTryOnV16Adapter:
             "fashn_calls": prepared.fashn_calls,
             "prediction_ids": prediction_ids,
             "credits_used": credits_used or prepared.fashn_calls,
+            "credits_header_present": credits_header_present,
+            "credits_from_headers": credits_from_headers if credits_header_present else None,
+            "prediction_credit_details": prediction_credit_details,
             "actual_cost_cents": estimate_fashn_cost_cents(
                 fashn_calls=credits_used or prepared.fashn_calls
             ),
@@ -384,7 +403,7 @@ class FashnTryOnV16Adapter:
         prediction_id: str,
         timeout: float,
         interval: float,
-    ) -> tuple[dict[str, Any], int]:
+    ) -> tuple[dict[str, Any], int, bool, int | None]:
         deadline = time.monotonic() + max(5.0, timeout)
         last: dict[str, Any] = {}
         while time.monotonic() < deadline:
@@ -424,14 +443,19 @@ class FashnTryOnV16Adapter:
 
             status = str(last.get("status") or "")
             if status == "completed":
-                used = 0
                 hdr = resp.headers.get("x-fashn-credits-used")
-                if hdr:
+                hdr_present = bool(hdr is not None and str(hdr).strip() != "")
+                hdr_credits: int | None = None
+                if hdr_present:
                     try:
-                        used = max(0, int(float(hdr)))
+                        hdr_credits = max(0, int(float(str(hdr).strip())))
                     except ValueError:
-                        used = 0
-                return last, used or 1
+                        hdr_present = False
+                        hdr_credits = None
+                # Settlement fallback unchanged (1 credit) when header missing —
+                # financial ledger records unavailable separately via meta.
+                settlement = int(hdr_credits) if hdr_credits is not None else 1
+                return last, settlement, hdr_present, hdr_credits
             if status == "failed":
                 err_obj = last.get("error") if isinstance(last.get("error"), dict) else {}
                 name = str(err_obj.get("name") or "FashnError")

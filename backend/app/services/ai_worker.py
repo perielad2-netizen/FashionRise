@@ -144,4 +144,11 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
     magic_n = run_magic_worker_tick(db, limit=limit)
     croquis_n = run_croquis_worker_tick(db, limit=min(4, limit))
     tech_n = run_techpack_worker_tick(db, limit=2)
+    # Provider financial sync (OpenAI costs / FASHN credits) — gated off by default.
+    try:
+        from app.services.ai_cost_sync_worker import run_cost_sync_tick
+
+        run_cost_sync_tick(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("AI cost sync tick failed (non-fatal)")
     return magic_n + croquis_n + tech_n
