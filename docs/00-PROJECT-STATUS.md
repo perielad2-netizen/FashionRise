@@ -3,22 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — PR #504 final integration ready on main (not deployed)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Admin #503 (`05e93b26`) + #504 (`6abc0d10`) merged; not deployed
 
-## READY — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
+## MERGED — Admin ADD-ONLY Stars grants (PR #504) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
 
 | Field | Value |
 | --- | --- |
-| Status | **READY TO MERGE** onto `main` after #503 (`05e93b26`); **STOP** — no production deploy / migration / live grants |
-| Base | Merged `main` **`05e93b26`** (+ docs tip **`02cc2598`**) |
-| Branch | `cursor/admin-positive-only-stars-grants-77c6` |
-| Final integration tip (pre-merge) | see branch HEAD after push |
-| Design | Positive-only ADD; `FinancialAdminUser`; pending isolation; read-only reconcile; uncertain-retry preserves key (4xx on retry ≠ proof of earlier failure); authoritative current wallet; deduped grant history |
-| Migration chain | **042 → 043 → 044** — 043 on main; 044 this PR; disposable verify only; **never** downgrade live ledger |
-| Nginx | Proposed allowlist includes `GET …/stars/grants/idempotency/{key}` |
-| Verification (this pass) | Grants+admin+wallet+IAP **147 passed**; FE grant/Admin **34 passed**; `tsc`/`lint`/`build`+SW **ok**; nginx reconcile path present; **no screenshots** |
-| Production prerequisites | Authorize nginx admin allowlist · tip deploy · Alembic **043 then 044** · set `ADMIN_STARS_GRANT_ACTOR_IDS` · then live grants |
-| Exact next action | Merge #504 → joint #503+#504 deploy authorization |
+| Status | **MERGED to `main`** — production tip deploy + Alembic **043/044** still **pending authorization** |
+| Merged SHA | **`6abc0d10`** (merge of tip `896eb1f6` / integration fix `2ffc478a`) |
+| Merged at | 2026-11-26 00:01 Asia/Jerusalem (`2026-11-25T22:01:10Z`) |
+| Prior #503 merge | **`05e93b26`** |
+| Docs tip after #503 | **`02cc2598`** |
+| Migration on `main` | **042 → 043 → 044** present; **not applied to production** |
+| Design | Positive-only ADD; uncertain-retry preserves key; authoritative current wallet; read-only reconcile; FinancialAdminUser UUID allowlist |
+| Pre-merge verification | BE **147 passed**; FE **34 passed**; `tsc`/`lint`/`build`+SW **ok**; nginx reconcile path documented |
+| Production prerequisites | 1) nginx admin allowlist (incl. grant + reconcile) 2) tip FE/BE deploy 3) Alembic **043 then 044** 4) set `ADMIN_STARS_GRANT_ACTOR_IDS` 5) then live grants |
+| Exact next action | **STOP for joint #503+#504 production deployment authorization** — do not migrate or grant yet |
 
 
 ## MERGED — FashionRise Admin 2.0 foundation (PR #503) (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
@@ -37,7 +37,7 @@
 | Admin Stars grants | Stacked PR **#504** notified to rebase onto merged `main` `05e93b26` |
 | Pre-merge verification | Tip full suite **1235 passed / 100 failed / 2 errors**; tip failure set vs baseline `f3967dbf`: **99 failed + 2 errors reproduce**; **1** flaky (`test_oldest_queue_tick_would_prefer_earlier_job`, outside #503 diff, passes 3/3 isolated) → **0 newly introduced deterministic failures**; admin/registration **103 passed**; required CI checks **none reported** / mergeable **CLEAN** |
 | Screenshots | **Not generated** |
-| Exact next action | #504 synchronize onto `05e93b26` → final integration approval → **joint** #503+#504 deploy (nginx allowlist + tip + migrations **043 then 044**); do **not** deploy or migrate production yet |
+| Exact next action | **#504 merged (`6abc0d10`)** — joint #503+#504 production deploy (nginx allowlist + tip + migrations **043 then 044**) pending authorization |
 
 ## CLOSED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
 
