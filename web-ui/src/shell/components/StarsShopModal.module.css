@@ -385,7 +385,8 @@
   color: #fde68a;
 }
 
-.webStoreHeading {
+/* Beat `.section h3` (uppercase label style) — keep display heading sentence case. */
+.webStorePanel .webStoreHeading {
   margin: 0 0 8px;
   font-family: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
   font-size: 1.45rem;

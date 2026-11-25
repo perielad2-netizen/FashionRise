@@ -58,6 +58,15 @@ export function StarsShopModal({ open, onClose }: Props) {
   const nativeIos = isNativeIosStarsShop()
   const nativeAndroid = isNativeAndroidShell()
   const isWebRuntime = !isNativeShell()
+  /** Native shell that is neither iOS nor Android — never treat as browser store promo. */
+  const unrecognizedNative = isNativeShell() && !nativeIos && !nativeAndroid
+  const shopPlatform = nativeIos
+    ? 'ios'
+    : nativeAndroid
+      ? 'android'
+      : isWebRuntime
+        ? 'web'
+        : 'native-unknown'
   const costLine = `Magic: ${costs.magic} Stars · Model: ${costs.croquis} Stars · Fabric: ${costs.fabric} Stars · PDF: ${costs.pdf} Stars`
 
   const [packages, setPackages] = useState<StarPackage[]>([])
@@ -119,7 +128,7 @@ export function StarsShopModal({ open, onClose }: Props) {
           // Native Android keeps current catalog preview; Play Billing is a future task.
           await reloadAndroidCatalog()
         } else {
-          // Browser / mobile browser / installed PWA — balance only; no purchase APIs.
+          // Browser/PWA or unrecognized native — balance only; never init purchase APIs.
           setPackages([])
           setIapProducts([])
           setIapStatus(null)
@@ -141,7 +150,7 @@ export function StarsShopModal({ open, onClose }: Props) {
 
   async function onNativeBuy(productId: string) {
     // Hard boundary: StoreKit purchase only on Capacitor iOS.
-    if (!nativeIos || isWebRuntime || nativeAndroid) return
+    if (!nativeIos || isWebRuntime || nativeAndroid || unrecognizedNative) return
     if (purchaseLock.current || busy) return
     purchaseLock.current = true
     setBusy(true)
@@ -198,7 +207,7 @@ export function StarsShopModal({ open, onClose }: Props) {
         aria-modal="true"
         aria-label="Stars shop"
         data-testid="stars-shop-modal"
-        data-platform={nativeIos ? 'ios' : nativeAndroid ? 'android' : 'web'}
+        data-platform={shopPlatform}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={styles.handle} aria-hidden />
@@ -333,7 +342,7 @@ export function StarsShopModal({ open, onClose }: Props) {
               </ul>
             </section>
           </>
-        ) : (
+        ) : isWebRuntime ? (
           <>
             <p className={styles.hint}>
               Stars power your AI fashion creations. Your balance works the same on web and in the
@@ -381,6 +390,7 @@ export function StarsShopModal({ open, onClose }: Props) {
                             href={store.href}
                             target="_blank"
                             rel="noopener noreferrer"
+                            aria-label="Open FashionRise on the Apple App Store"
                             data-testid={`stars-store-link-${store.id}`}
                           >
                             Open
@@ -400,6 +410,17 @@ export function StarsShopModal({ open, onClose }: Props) {
                 </ul>
               </div>
             </section>
+          </>
+        ) : (
+          <>
+            <p className={styles.hint} data-testid="stars-native-unknown-hint">
+              Stars power your AI fashion creations. Purchasing is available only in the FashionRise
+              iOS or Android app when enabled for your account.
+            </p>
+            <p className={styles.costs}>{costLine}</p>
+            <p className={styles.comingSoon} role="status">
+              In-app purchase is not available in this build.
+            </p>
           </>
         )}
 

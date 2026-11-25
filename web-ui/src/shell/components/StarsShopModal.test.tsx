@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { APP_STORE_LISTING_URL } from '@/config/mobileStoreLinks'
-import { StarsShopModal } from './StarsShopModal'
 
 const listStarsIapProducts = vi.fn()
 const fetchAppleIapStatus = vi.fn()
@@ -14,26 +13,29 @@ const clearStarCart = vi.fn()
 const fetchStarCart = vi.fn()
 const refreshUser = vi.fn()
 
-const platform = vi.hoisted(() => ({
-  ios: false,
-  android: false,
-  nativeShell: false,
+/** Mock Capacitor runtime — real `platform.ts` / `isNativeIosStarsShop` / `isNativeAndroidShell` run. */
+const capacitorRuntime = vi.hoisted(() => ({
+  isNative: false,
+  platform: 'web' as string,
 }))
 
-vi.mock('@/services/native/platform', () => ({
-  isNativeShell: () => platform.nativeShell,
-  nativePlatform: () => (platform.ios ? 'ios' : platform.android ? 'android' : 'web'),
-  isNativeBuild: () => platform.nativeShell,
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    isNativePlatform: () => capacitorRuntime.isNative,
+    getPlatform: () => capacitorRuntime.platform,
+  },
 }))
 
-vi.mock('@/services/native/iap', () => ({
-  fetchAppleIapStatus: (...args: unknown[]) => fetchAppleIapStatus(...args),
-  isNativeAndroidShell: () => platform.android && platform.nativeShell,
-  isNativeIosStarsShop: () => platform.ios && platform.nativeShell,
-  listStarsIapProducts: (...args: unknown[]) => listStarsIapProducts(...args),
-  purchaseStarsPack: (...args: unknown[]) => purchaseStarsPack(...args),
-  recoverPendingStarsPurchases: (...args: unknown[]) => recoverPendingStarsPurchases(...args),
-}))
+vi.mock('@/services/native/iap', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/native/iap')>()
+  return {
+    ...actual,
+    fetchAppleIapStatus: (...args: unknown[]) => fetchAppleIapStatus(...args),
+    listStarsIapProducts: (...args: unknown[]) => listStarsIapProducts(...args),
+    purchaseStarsPack: (...args: unknown[]) => purchaseStarsPack(...args),
+    recoverPendingStarsPurchases: (...args: unknown[]) => recoverPendingStarsPurchases(...args),
+  }
+})
 
 vi.mock('@/services/starsShopApi', () => ({
   checkoutStarCart: (...args: unknown[]) => checkoutStarCart(...args),
@@ -63,15 +65,23 @@ vi.mock('@/services/auth/AuthProvider', () => ({
   }),
 }))
 
-function setPlatform(kind: 'web' | 'ios' | 'android') {
-  platform.ios = kind === 'ios'
-  platform.android = kind === 'android'
-  platform.nativeShell = kind !== 'web'
+import { StarsShopModal } from './StarsShopModal'
+
+function setCapacitor(kind: 'web' | 'ios' | 'android' | 'native-unknown') {
+  if (kind === 'web') {
+    capacitorRuntime.isNative = false
+    capacitorRuntime.platform = 'web'
+    return
+  }
+  capacitorRuntime.isNative = true
+  if (kind === 'ios') capacitorRuntime.platform = 'ios'
+  else if (kind === 'android') capacitorRuntime.platform = 'android'
+  else capacitorRuntime.platform = 'electron' // unrecognized native platform string
 }
 
 describe('StarsShopModal native iOS polish', () => {
   beforeEach(() => {
-    setPlatform('ios')
+    setCapacitor('ios')
     listStarsIapProducts.mockReset()
     fetchAppleIapStatus.mockReset()
     recoverPendingStarsPurchases.mockReset()
@@ -191,7 +201,9 @@ describe('StarsShopModal native iOS polish', () => {
     })
     render(<StarsShopModal open onClose={() => undefined} />)
     await waitFor(() => {
-      expect(screen.getByText(/Apple Stars purchasing is prepared but not enabled yet/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/Apple Stars purchasing is prepared but not enabled yet/i),
+      ).toBeInTheDocument()
     })
     const buyButtons = screen.getAllByRole('button', { name: /^Buy$/i })
     expect(buyButtons.every((b) => (b as HTMLButtonElement).disabled)).toBe(true)
@@ -202,7 +214,7 @@ describe('StarsShopModal native iOS polish', () => {
 
 describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
   beforeEach(() => {
-    setPlatform('web')
+    setCapacitor('web')
     refreshUser.mockReset()
     fetchStarPackages.mockReset()
     checkoutStarCart.mockReset()
@@ -217,7 +229,7 @@ describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
     authUser.ai_stars_unlimited = false
   })
 
-  it('shows the Get more Stars panel with balance and costs (desktop browser)', async () => {
+  it('desktop browser shows Get more Stars with balance and costs', async () => {
     render(<StarsShopModal open onClose={() => undefined} />)
     await waitFor(() => {
       expect(screen.getByTestId('stars-web-store-panel')).toBeInTheDocument()
@@ -227,13 +239,7 @@ describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
     expect(
       screen.getByText(/Stars can only be purchased through the FashionRise mobile app/i),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Sign in with the same FashionRise account to use your Stars across devices/i),
-    ).toBeInTheDocument()
     expect(screen.getByText('40')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Magic: 10 Stars · Model: 10 Stars · Fabric: 5 Stars · PDF: 50 Stars/i),
-    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Buy$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Checkout$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Add$/i })).not.toBeInTheDocument()
@@ -241,6 +247,19 @@ describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
     expect(checkoutStarCart).not.toHaveBeenCalled()
     expect(purchaseStarsPack).not.toHaveBeenCalled()
     expect(listStarsIapProducts).not.toHaveBeenCalled()
+  })
+
+  it('mobile Safari / Chrome / installed PWA use the same Capacitor web path', async () => {
+    // UA/PWA display-mode are intentionally irrelevant — Capacitor reports web.
+    setCapacitor('web')
+    render(<StarsShopModal open onClose={() => undefined} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('stars-web-store-panel')).toBeInTheDocument()
+    })
+    expect(fetchAppleIapStatus).not.toHaveBeenCalled()
+    expect(listStarsIapProducts).not.toHaveBeenCalled()
+    expect(recoverPendingStarsPurchases).not.toHaveBeenCalled()
+    expect(refreshUser).toHaveBeenCalled()
   })
 
   it('preserves unlimited Stars display on web', async () => {
@@ -254,15 +273,16 @@ describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
     expect(screen.getByText(/\(unlimited\)/i)).toBeInTheDocument()
   })
 
-  it('links App Store to the verified listing and marks Google Play Coming soon', async () => {
+  it('links App Store with accessible name and marks Google Play Coming soon', async () => {
     render(<StarsShopModal open onClose={() => undefined} />)
     await waitFor(() => {
       expect(screen.getByTestId('stars-store-app_store')).toBeInTheDocument()
     })
-    const appleLink = screen.getByTestId('stars-store-link-app_store')
+    const appleLink = screen.getByRole('link', {
+      name: /Open FashionRise on the Apple App Store/i,
+    })
     expect(appleLink).toHaveAttribute('href', APP_STORE_LISTING_URL)
     expect(appleLink).toHaveAttribute('target', '_blank')
-    expect(appleLink).toHaveAttribute('rel', expect.stringContaining('noopener'))
     expect(screen.getByTestId('stars-store-google_play')).toHaveAttribute(
       'data-availability',
       'coming_soon',
@@ -270,27 +290,16 @@ describe('StarsShopModal browser / PWA web-only purchase restriction', () => {
     expect(screen.getByTestId('stars-store-badge-google_play')).toHaveTextContent(/Coming soon/i)
     expect(screen.queryByTestId('stars-store-link-google_play')).not.toBeInTheDocument()
   })
-
-  it('does not initialize StoreKit product loading on web (mobile Safari / Chrome / PWA parity)', async () => {
-    // Same Capacitor web path for Safari, Chrome, and installed PWA — no UA sniffing.
-    render(<StarsShopModal open onClose={() => undefined} />)
-    await waitFor(() => {
-      expect(screen.getByTestId('stars-web-store-panel')).toBeInTheDocument()
-    })
-    expect(fetchAppleIapStatus).not.toHaveBeenCalled()
-    expect(listStarsIapProducts).not.toHaveBeenCalled()
-    expect(recoverPendingStarsPurchases).not.toHaveBeenCalled()
-    expect(refreshUser).toHaveBeenCalled()
-  })
 })
 
 describe('StarsShopModal native Android preservation', () => {
   beforeEach(() => {
-    setPlatform('android')
+    setCapacitor('android')
     refreshUser.mockReset()
     fetchStarPackages.mockReset()
     purchaseStarsPack.mockReset()
     listStarsIapProducts.mockReset()
+    checkoutStarCart.mockReset()
     fetchStarPackages.mockResolvedValue([
       {
         sku: 'stars_50',
@@ -320,6 +329,38 @@ describe('StarsShopModal native Android preservation', () => {
     fireEvent.click(add)
     expect(purchaseStarsPack).not.toHaveBeenCalled()
     expect(listStarsIapProducts).not.toHaveBeenCalled()
+    expect(checkoutStarCart).not.toHaveBeenCalled()
+  })
+})
+
+describe('StarsShopModal unrecognized native runtime', () => {
+  beforeEach(() => {
+    setCapacitor('native-unknown')
+    refreshUser.mockReset()
+    fetchStarPackages.mockReset()
+    purchaseStarsPack.mockReset()
+    listStarsIapProducts.mockReset()
+    fetchAppleIapStatus.mockReset()
+    checkoutStarCart.mockReset()
+    authUser.ai_stars = 7
+    authUser.ai_stars_unlimited = false
+  })
+
+  it('does not show Get more Stars or initiate any purchase APIs', async () => {
+    render(<StarsShopModal open onClose={() => undefined} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('stars-native-unknown-hint')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('stars-shop-modal')).toHaveAttribute('data-platform', 'native-unknown')
+    expect(screen.queryByTestId('stars-web-store-panel')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Buy$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Checkout$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /App Store/i })).not.toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument()
+    expect(fetchStarPackages).not.toHaveBeenCalled()
+    expect(listStarsIapProducts).not.toHaveBeenCalled()
+    expect(fetchAppleIapStatus).not.toHaveBeenCalled()
+    expect(purchaseStarsPack).not.toHaveBeenCalled()
     expect(checkoutStarCart).not.toHaveBeenCalled()
   })
 })

@@ -3,23 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction (DRAFT PR · not deployed)
+**Last updated:** 2026-11-25 Asia/Jerusalem — Web-only Stars purchase restriction MERGED (not deployed)
 
-## DRAFT — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem)
+## MERGED — Web-only Stars purchase restriction (2026-11-25 Asia/Jerusalem) — NOT DEPLOYED
 
 | Field | Value |
 | --- | --- |
 | Product decision | Browser/PWA must **not** offer Stars checkout; purchases only via native mobile stores |
 | Implementation | `StarsShopModal` web branch → **Get more Stars** panel; Capacitor `isNativeShell` / `isNativeIosStarsShop` / `isNativeAndroidShell` isolation |
-| App Store URL | Verified `https://apps.apple.com/app/id6832116469` (ASC Apple ID `6832116469`) |
+| Unrecognized native | Capacitor native shell that is neither iOS nor Android → balance-only safe UI (**no** web store promo, **no** payment) |
+| App Store URL | Verified `https://apps.apple.com/app/id6832116469` (ASC Apple ID `6832116469`); Open link `aria-label` descriptive |
 | Google Play | **Coming soon** (closed testing — no public listing link) |
-| Native iOS | Unchanged StoreKit / Capgo path (`stars_50` / `stars_150` / `stars_500`) |
+| Native iOS | Unchanged StoreKit / Capgo path (`stars_50` / `stars_150` / `stars_500`); disabled gates respected |
 | Native Android | Unchanged catalog preview; Play Billing **not** added |
 | Payment gates | **Unchanged** — no production IAP / checkout env flips |
+| Baseline test compare | `d3bdb570` vs PR: **0 newly introduced deterministic failures**; Techpack PDF validity desktop case is **flaky** on both revisions |
+| Focused Stars/IAP | **25 passed** (Capacitor-mocked platform helpers) |
+| Build / SW / Vite flags | Production build + SW safety + prod Vite asserts **ok** |
 | Native rebuild | **Not required** for this browser-only FE tip; future native builds must retain platform branches |
 | Pending Android | Native push + Google Play Billing remain separate future tasks |
-| Deployed? | **No** — STOP for Technical PM review before merge/FE tip |
-| Exact next action | PM review draft PR → merge → FE-only tip deploy (rollback = previous `current` symlink) |
+| Deployed? | **No** — STOP for Technical PM **deployment** authorization |
+| Exact next action | FE-only tip deploy after PM OK (rollback = previous `current` symlink) |
 
 ## LIVE — iOS profile card + keyboard chat (2026-11-24 Asia/Jerusalem)
 
@@ -3892,7 +3896,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-11-25 | **Web-only Stars purchase restriction (DRAFT · not deployed):** browser/PWA Stars shop replaces cart/checkout with **Get more Stars** panel; Capacitor native iOS StoreKit + Android catalog preserved; App Store URL verified `id6832116469`; Google Play Coming soon; no payment-gate / native-config / deploy changes; STOP for Technical PM. |
+| 2026-11-25 | **Web-only Stars purchase restriction MERGED (not deployed):** PR #500 · browser/PWA **Get more Stars** panel · unrecognized native fail-closed · App Store `id6832116469` · Google Play Coming soon · baseline compare 0 new deterministic fails · STOP for FE tip deploy authorization. |
 | 2026-11-01 | **#135 Create My Croquis V5 photo-faithful proportions DEPLOYED:** tip `faa7d91d` / `faa7d91d47be433e6cfa771d5c8f9a1b744545b4` · croquis-lineart-v5 · image1 geometry / image2 style-only · no elongated silhouette · BE 42 mocked · **0** paid calls · next: Try On Person. |
 | 2026-11-01 | **#135 Create My Croquis house-style mannequin v4 DEPLOYED:** tip  /  · prompt croquis-lineart-v4 · style ref female-straight · no garment rendering · BE 42 mocked · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis P0 TypeError hotfix DEPLOYED:** tip  /  · SDK unexpected keyword  caused false recon at 17:02Z · fix  + lease≥timeout+120 + prompt v3 + FE poll · held reservation released $0 · mocked BE 42 / FE 7 · **0** paid calls. |
