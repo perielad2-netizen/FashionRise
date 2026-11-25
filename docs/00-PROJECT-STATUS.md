@@ -3,7 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 00:30 Asia/Jerusalem — Admin Overview mobile filter UX hotfix FE **`2d11789a`** live (Admin 2.0 prod tip `78771a0b` / Alembic **044**; grants fail-closed)
+**Last updated:** 2026-11-26 00:40 Asia/Jerusalem — Admin Customers toolbar UX FE **`34b8dd92`** live (labeled Classification/Sort; compact search; Audience/Range legend)
+
+## LIVE — Admin Customers toolbar UX (2026-11-26 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** FE tip |
+| Fixes | Oversized search (`flex:1` column stretch) · unlabeled Classification/Sort selects · Audience/Range meaning unclear / hard to read on iOS |
+| FE SHA | **`34b8dd92`** · release `34b8dd92-admin-customers-toolbar` |
+| Previous FE | `2d11789a-admin-mobile-filters` |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/2d11789a-admin-mobile-filters /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Exact next action | Hard-refresh `/admin` → Customers; confirm compact search + labeled filters |
 
 ## LIVE — Admin Overview mobile filter UX hotfix (2026-11-26 Asia/Jerusalem)
 
