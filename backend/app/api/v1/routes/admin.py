@@ -95,7 +95,11 @@ def admin_customers(
     _admin: AdminUser,
     db: Session = Depends(get_db),
     q: Optional[str] = Query(default=None, max_length=120),
-    classification: Optional[str] = Query(default=None),
+    classification: Optional[str] = Query(
+        default=None,
+        max_length=200,
+        description="One classification or comma-separated multi-select",
+    ),
     audience: str = Query(default="all"),
     limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
