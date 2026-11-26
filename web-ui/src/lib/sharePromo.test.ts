@@ -57,13 +57,13 @@ describe('sharePromo', () => {
     delete (navigator as any).canShare
   })
 
-  it('builds a store-aligned FashionRise caption with a single site URL', () => {
+  it('builds a store-aligned FashionRise caption that points to App Store / Play search', () => {
     const caption = buildShareCaption({ kind: 'look' })
     expect(caption).toContain('Created with FashionRise')
     expect(caption).toContain('AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.')
-    expect(caption).toContain(FASHIONRISE_PUBLIC_URL)
+    expect(caption).toContain('Search for FashionRise on the App Store and Google Play')
+    expect(caption).not.toContain(FASHIONRISE_PUBLIC_URL)
     expect(caption).not.toContain('Search Google for FashionRise')
-    expect(caption.split(FASHIONRISE_PUBLIC_URL).length - 1).toBe(1)
   })
 
   it('omits the look title from the public caption', () => {
@@ -73,7 +73,7 @@ describe('sharePromo', () => {
     expect(caption.split('\n')).toEqual([
       'Created with FashionRise',
       'AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.',
-      FASHIONRISE_PUBLIC_URL,
+      'Search for FashionRise on the App Store and Google Play',
     ])
   })
 
@@ -127,7 +127,8 @@ describe('sharePromo', () => {
     }
     expect(args.text).toContain('Created with FashionRise')
     expect(args.text).toContain('AI fashion studio')
-    expect(args.text).toContain(FASHIONRISE_PUBLIC_URL)
+    expect(args.text).toContain('App Store and Google Play')
+    expect(args.text).not.toContain(FASHIONRISE_PUBLIC_URL)
     expect((args as { url?: string }).url).toBeUndefined()
     expect(args.files?.[0]).toContain('file://')
     expect(args.dialogTitle).toMatch(/Share your look/i)

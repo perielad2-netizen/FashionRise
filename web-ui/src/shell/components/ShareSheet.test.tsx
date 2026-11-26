@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShareSheet } from './ShareSheet'
-import { FASHIONRISE_PUBLIC_URL } from '@/lib/sharePromo'
+import { FASHIONRISE_STORE_SEARCH_CTA } from '@/lib/sharePromo'
 
 describe('ShareSheet', () => {
   beforeEach(() => {
@@ -52,7 +52,8 @@ describe('ShareSheet', () => {
     })
     const copied = String(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0])
     expect(copied).toContain('Created with FashionRise')
-    expect(copied).toContain(FASHIONRISE_PUBLIC_URL)
+    expect(copied).toContain(FASHIONRISE_STORE_SEARCH_CTA)
+    expect(copied).not.toContain('https://fashionrise.app')
     expect(fetchMock).toHaveBeenCalled()
   })
 
