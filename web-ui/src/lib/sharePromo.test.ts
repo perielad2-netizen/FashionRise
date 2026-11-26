@@ -57,11 +57,13 @@ describe('sharePromo', () => {
     delete (navigator as any).canShare
   })
 
-  it('builds a Created with FashionRise caption that points people to Google search', () => {
+  it('builds a store-aligned FashionRise caption with a single site URL', () => {
     const caption = buildShareCaption({ kind: 'look' })
     expect(caption).toContain('Created with FashionRise')
-    expect(caption).toContain('Search Google for FashionRise')
+    expect(caption).toContain('AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.')
     expect(caption).toContain(FASHIONRISE_PUBLIC_URL)
+    expect(caption).not.toContain('Search Google for FashionRise')
+    expect(caption.split(FASHIONRISE_PUBLIC_URL).length - 1).toBe(1)
   })
 
   it('omits the look title from the public caption', () => {
@@ -70,7 +72,7 @@ describe('sharePromo', () => {
     expect(caption.startsWith('Created with FashionRise')).toBe(true)
     expect(caption.split('\n')).toEqual([
       'Created with FashionRise',
-      'Search Google for FashionRise to design your own looks',
+      'AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.',
       FASHIONRISE_PUBLIC_URL,
     ])
   })
@@ -90,7 +92,8 @@ describe('sharePromo', () => {
     expect(share).toHaveBeenCalledTimes(1)
     const data = share.mock.calls[0][0] as ShareData
     expect(data.text).toContain('Created with FashionRise')
-    expect(data.text).toContain('Search Google for FashionRise')
+    expect(data.text).toContain('AI fashion studio')
+    expect(data.url).toBeUndefined()
   })
 
   it('requestShare asks for fallback when Web Share is missing on web', async () => {
@@ -123,6 +126,9 @@ describe('sharePromo', () => {
       dialogTitle?: string
     }
     expect(args.text).toContain('Created with FashionRise')
+    expect(args.text).toContain('AI fashion studio')
+    expect(args.text).toContain(FASHIONRISE_PUBLIC_URL)
+    expect((args as { url?: string }).url).toBeUndefined()
     expect(args.files?.[0]).toContain('file://')
     expect(args.dialogTitle).toMatch(/Share your look/i)
   })
