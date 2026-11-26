@@ -25,7 +25,7 @@ describe('ShareSheet', () => {
     expect(screen.getByTestId('share-sheet')).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Share your look/i })).toBeTruthy()
     expect(screen.getByTestId('share-caption').textContent).toContain('Created with FashionRise')
-    expect(screen.getByTestId('share-caption').textContent).toContain('AI fashion studio')
+    expect(screen.getByTestId('share-caption').textContent).toContain('App Store & Google Play')
     expect(screen.getByTestId('share-primary')).toBeTruthy()
     expect(screen.queryByTestId('share-whatsapp')).toBeNull()
     expect(screen.queryByTestId('share-instagram')).toBeNull()

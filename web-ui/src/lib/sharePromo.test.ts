@@ -57,11 +57,11 @@ describe('sharePromo', () => {
     delete (navigator as any).canShare
   })
 
-  it('builds a store-aligned FashionRise caption that points to App Store / Play search', () => {
+  it('builds a short FashionRise caption that points to App Store / Play search', () => {
     const caption = buildShareCaption({ kind: 'look' })
-    expect(caption).toContain('Created with FashionRise')
-    expect(caption).toContain('AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.')
-    expect(caption).toContain('Search for FashionRise on the App Store and Google Play')
+    expect(caption).toBe(
+      'Created with FashionRise\nSearch FashionRise on the App Store & Google Play',
+    )
     expect(caption).not.toContain(FASHIONRISE_PUBLIC_URL)
     expect(caption).not.toContain('Search Google for FashionRise')
   })
@@ -69,11 +69,9 @@ describe('sharePromo', () => {
   it('omits the look title from the public caption', () => {
     const caption = buildShareCaption({ kind: 'look', title: 'Silk Wrap Dress' })
     expect(caption).not.toContain('Silk Wrap Dress')
-    expect(caption.startsWith('Created with FashionRise')).toBe(true)
     expect(caption.split('\n')).toEqual([
       'Created with FashionRise',
-      'AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.',
-      'Search for FashionRise on the App Store and Google Play',
+      'Search FashionRise on the App Store & Google Play',
     ])
   })
 
@@ -92,7 +90,7 @@ describe('sharePromo', () => {
     expect(share).toHaveBeenCalledTimes(1)
     const data = share.mock.calls[0][0] as ShareData
     expect(data.text).toContain('Created with FashionRise')
-    expect(data.text).toContain('AI fashion studio')
+    expect(data.text).toContain('App Store & Google Play')
     expect(data.url).toBeUndefined()
   })
 
@@ -126,8 +124,7 @@ describe('sharePromo', () => {
       dialogTitle?: string
     }
     expect(args.text).toContain('Created with FashionRise')
-    expect(args.text).toContain('AI fashion studio')
-    expect(args.text).toContain('App Store and Google Play')
+    expect(args.text).toContain('App Store & Google Play')
     expect(args.text).not.toContain(FASHIONRISE_PUBLIC_URL)
     expect((args as { url?: string }).url).toBeUndefined()
     expect(args.files?.[0]).toContain('file://')
