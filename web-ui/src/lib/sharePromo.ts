@@ -1,8 +1,8 @@
 /**
  * Share AI look results with attribution.
  *
- * Caption matches store listing short description (App Store / Google Play)
- * and tells people to search FashionRise in the stores — no website URL.
+ * Short caption: attribution + search FashionRise on App Store / Google Play
+ * — no website URL.
  * On Android/iOS we open the **system** share sheet via `@capacitor/share`.
  * On modern browsers we use `navigator.share`. The custom ShareSheet UI is
  * desktop/fallback only.
@@ -15,13 +15,9 @@ export const FASHIONRISE_PUBLIC_URL = (
   'https://fashionrise.app'
 ).replace(/\/$/, '')
 
-/** Same short line as Google Play / App Store listing (≤ 80 chars). */
-export const FASHIONRISE_STORE_SHORT_DESCRIPTION =
-  'AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.'
-
-/** CTA used in share captions instead of a bare website URL. */
+/** Compact store CTA for share captions (no website URL). */
 export const FASHIONRISE_STORE_SEARCH_CTA =
-  'Search for FashionRise on the App Store and Google Play'
+  'Search FashionRise on the App Store & Google Play'
 
 export type ShareKind = 'app' | 'look'
 
@@ -40,11 +36,7 @@ export type SharePayload = {
 
 /** Attribution caption for WhatsApp / Instagram / Facebook posts. */
 export function buildShareCaption(_payload: SharePayload = { kind: 'look' }): string {
-  return [
-    'Created with FashionRise',
-    FASHIONRISE_STORE_SHORT_DESCRIPTION,
-    FASHIONRISE_STORE_SEARCH_CTA,
-  ].join('\n')
+  return ['Created with FashionRise', FASHIONRISE_STORE_SEARCH_CTA].join('\n')
 }
 
 export function buildWhatsAppShareUrl(caption: string): string {

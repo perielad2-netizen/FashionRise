@@ -1,10 +1,9 @@
 # FashionRise social accounts (share AI looks)
 
-The in-app **Share your look** sheet posts AI Magic results with the caption
-**“Created with FashionRise”** + the store short description
-(**“AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.”**)
-plus **“Search for FashionRise on the App Store and Google Play”** (no website URL).
-Create the brand accounts below so Instagram / Facebook / WhatsApp posts reinforce the brand.
+The in-app **Share your look** sheet posts AI Magic results with a short caption:
+**“Created with FashionRise”** + **“Search FashionRise on the App Store & Google Play”**
+(no website URL). Create the brand accounts below so Instagram / Facebook / WhatsApp
+posts reinforce the brand.
 
 ## Recommended handles (claim early)
 
