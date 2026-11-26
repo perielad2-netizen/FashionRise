@@ -1,9 +1,9 @@
 /**
  * Share AI look results with attribution.
  *
- * Caption always includes “Created with FashionRise” and points people to the
- * public site. On Android/iOS we open the **system** share sheet via
- * `@capacitor/share` (WhatsApp, Instagram, etc.). On modern browsers we use
+ * Caption matches store listing short description (App Store / Google Play)
+ * and points to the public site once. On Android/iOS we open the **system**
+ * share sheet via `@capacitor/share`. On modern browsers we use
  * `navigator.share`. The custom ShareSheet UI is desktop/fallback only.
  */
 
@@ -14,8 +14,9 @@ export const FASHIONRISE_PUBLIC_URL = (
   'https://fashionrise.app'
 ).replace(/\/$/, '')
 
-export const FASHIONRISE_GOOGLE_SEARCH_URL =
-  'https://www.google.com/search?q=FashionRise'
+/** Same short line as Google Play / App Store listing (≤ 80 chars). */
+export const FASHIONRISE_STORE_SHORT_DESCRIPTION =
+  'AI fashion studio: sketch, Magic looks, models, try-on, fabrics & tech packs.'
 
 export type ShareKind = 'app' | 'look'
 
@@ -36,7 +37,7 @@ export type SharePayload = {
 export function buildShareCaption(_payload: SharePayload = { kind: 'look' }): string {
   return [
     'Created with FashionRise',
-    'Search Google for FashionRise to design your own looks',
+    FASHIONRISE_STORE_SHORT_DESCRIPTION,
     FASHIONRISE_PUBLIC_URL,
   ].join('\n')
 }
@@ -146,10 +147,11 @@ async function shareViaCapacitor(payload: SharePayload): Promise<NativeShareResu
   }
 
   try {
+    // Do not also pass `url` — caption already includes the site once.
+    // Passing both makes WhatsApp/etc. duplicate the link.
     await Share.share({
-      title: 'Created with FashionRise',
+      title: 'FashionRise',
       text,
-      url: FASHIONRISE_PUBLIC_URL,
       files: files.length > 0 ? files : undefined,
       dialogTitle: payload.kind === 'look' ? 'Share your look' : 'Share FashionRise',
     })
@@ -175,10 +177,10 @@ export async function shareNative(payload: SharePayload): Promise<NativeShareRes
   }
 
   const text = buildShareCaption(payload)
+  // Caption already includes the public URL once — omit separate `url`.
   const data: ShareData = {
-    title: 'Created with FashionRise',
+    title: 'FashionRise',
     text,
-    url: FASHIONRISE_PUBLIC_URL,
   }
   if (payload.imageUrl && canNativeShareFiles()) {
     try {
