@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:45 Asia/Jerusalem — Android **edge-to-edge UI regression fix** (revert #526 native insets) · RTDN live · public purchase **OFF**
+**Last updated:** 2026-11-27 12:50 Asia/Jerusalem — Android push/Settings + refund clawback + unlimited shop guard · public gates **OFF**
+
+## FIX — Android native push, Settings toggle, refund clawback, unlimited shop (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Native push root cause | Prod had **0** `native_push_devices` rows ever (Yaniv + owner). Capability `android_enabled=true` but client returned success without waiting for an FCM token; only Chrome Web Push delivered comments. Browser subscriptions **preserved**. |
+| Native push fix | Wait for FCM/APNs token before `granted`; surface `registration_failed`; Settings → **Notifications** toggle (shared `pushApi`/`nativePush`); Android plugin opens system notification settings when OS denied; R8 keeps for FCM + plugin |
+| Yaniv Play buy | Order `GPA.3387-8819-3710-21379` · purchase `11ae5adf-…` · Sandbox · confirm **200** · +50 · ack/consumed. Google Play Points error is **unrelated** to FashionRise credit (purchase succeeded). Wallet unlimited — balance 1000103 |
+| Unlimited shop | `google/apple status` sets `unlimited_wallet` + `purchasing_enabled=false` for unlimited accounts; Stars shop blocks Buy (“Not needed”) without changing entitlement. Confirm still recovers already-paid tokens |
+| Owner refund | Order `GPA.3369-0332-8762-49726` — Play `purchaseState=1` CANCELED but **no** cancel/void RTDN and empty `voidedpurchases.list`. Operator clawback via products.get → `stars_clawed_back=50` · wallet **999347** · status `refunded`. Durable fix: `reconcile_canceled_active_purchases` |
+| Gates / Alpha | Public `PURCHASING/CREDIT=false` · Alpha **114** + 15 testers preserved · layout/R8 preserved |
+| Exact next action | Ship one Internal AAB (FE+native) · BE deploy reconcile helper · Yaniv re-login → Settings Notifications On → verify native device row + background push |
 
 ## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
 

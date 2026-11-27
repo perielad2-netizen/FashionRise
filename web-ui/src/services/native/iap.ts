@@ -60,6 +60,8 @@ export type AppleIapStatus = {
   verification_configured: boolean
   /** True when the signed-in account is on IAP_APPLE_SANDBOX_TESTER_EMAILS. */
   sandbox_tester?: boolean
+  /** Unlimited wallets must not start new Store purchases. */
+  unlimited_wallet?: boolean
   products: Array<{ product_id: string; stars: number }>
 }
 
@@ -70,6 +72,8 @@ export type GoogleIapStatus = {
   verification_configured: boolean
   /** True when the signed-in account is on IAP_GOOGLE_LICENSE_TESTER_EMAILS. */
   license_tester?: boolean
+  /** Unlimited wallets must not start new Play purchases. */
+  unlimited_wallet?: boolean
   package_name?: string
   products: Array<{ product_id: string; stars: number }>
 }

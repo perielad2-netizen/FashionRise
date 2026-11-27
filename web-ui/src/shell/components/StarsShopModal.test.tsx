@@ -4,6 +4,7 @@ import { APP_STORE_LISTING_URL } from '@/config/mobileStoreLinks'
 
 const listStarsIapProducts = vi.fn()
 const fetchAppleIapStatus = vi.fn()
+const fetchGoogleIapStatus = vi.fn()
 const recoverPendingStarsPurchases = vi.fn()
 const purchaseStarsPack = vi.fn()
 const fetchStarPackages = vi.fn()
@@ -31,6 +32,7 @@ vi.mock('@/services/native/iap', async (importOriginal) => {
   return {
     ...actual,
     fetchAppleIapStatus: (...args: unknown[]) => fetchAppleIapStatus(...args),
+    fetchGoogleIapStatus: (...args: unknown[]) => fetchGoogleIapStatus(...args),
     listStarsIapProducts: (...args: unknown[]) => listStarsIapProducts(...args),
     purchaseStarsPack: (...args: unknown[]) => purchaseStarsPack(...args),
     recoverPendingStarsPurchases: (...args: unknown[]) => recoverPendingStarsPurchases(...args),
@@ -299,37 +301,67 @@ describe('StarsShopModal native Android preservation', () => {
     fetchStarPackages.mockReset()
     purchaseStarsPack.mockReset()
     listStarsIapProducts.mockReset()
+    fetchGoogleIapStatus.mockReset()
+    recoverPendingStarsPurchases.mockReset()
     checkoutStarCart.mockReset()
-    fetchStarPackages.mockResolvedValue([
+    recoverPendingStarsPurchases.mockResolvedValue({ recovered: 0, attempted: 0, state: 'idle' })
+    fetchGoogleIapStatus.mockResolvedValue({
+      platform: 'android',
+      purchasing_enabled: false,
+      credit_enabled: false,
+      verification_configured: true,
+      unlimited_wallet: false,
+      products: [{ product_id: 'stars_50', stars: 50 }],
+    })
+    listStarsIapProducts.mockResolvedValue([
       {
-        sku: 'stars_50',
-        name: 'Starter',
-        stars: 50,
-        price_usd_cents: 599,
+        productId: 'stars_50',
+        title: 'Starter',
         description: '50 Stars',
-        available: true,
+        priceString: '$5.99',
+        stars: 50,
       },
     ])
     authUser.ai_stars = 12
     authUser.ai_stars_unlimited = false
   })
 
-  it('does not show the web-only panel and keeps catalog preview without Play Billing', async () => {
+  it('does not show the web-only panel and keeps packages when Play Billing is gated off', async () => {
     render(<StarsShopModal open onClose={() => undefined} />)
     await waitFor(() => {
       expect(screen.getByTestId('stars-android-packages')).toBeInTheDocument()
     })
     expect(screen.getByTestId('stars-shop-modal')).toHaveAttribute('data-platform', 'android')
     expect(screen.queryByTestId('stars-web-store-panel')).not.toBeInTheDocument()
-    expect(screen.getByText(/Google Play Stars purchasing is not available yet/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Google Play Stars purchasing is prepared but not enabled yet/i),
+    ).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('Starter')).toBeInTheDocument()
-    const add = screen.getByRole('button', { name: /^Add$/i })
-    expect(add).toBeDisabled()
-    fireEvent.click(add)
+    const buy = screen.getByRole('button', { name: /^Buy$/i })
+    expect(buy).toBeDisabled()
+    fireEvent.click(buy)
     expect(purchaseStarsPack).not.toHaveBeenCalled()
-    expect(listStarsIapProducts).not.toHaveBeenCalled()
     expect(checkoutStarCart).not.toHaveBeenCalled()
+  })
+
+  it('blocks checkout for unlimited wallets without changing entitlement copy', async () => {
+    authUser.ai_stars_unlimited = true
+    fetchGoogleIapStatus.mockResolvedValue({
+      platform: 'android',
+      purchasing_enabled: false,
+      credit_enabled: false,
+      verification_configured: true,
+      unlimited_wallet: true,
+      products: [{ product_id: 'stars_50', stars: 50 }],
+    })
+    render(<StarsShopModal open onClose={() => undefined} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('stars-unlimited-block')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Not needed/i })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /Not needed/i }))
+    expect(purchaseStarsPack).not.toHaveBeenCalled()
   })
 })
 

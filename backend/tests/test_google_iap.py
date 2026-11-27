@@ -366,6 +366,69 @@ def test_rtdn_voided_clawback_idempotent(db_session: Session, monkeypatch: pytes
     assert int(user.ai_stars) == 0
 
 
+def test_reconcile_canceled_active_purchases(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+    from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
+
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "false")
+    get_settings.cache_clear()
+    user = _user(db_session, email="canceled-rec@fashionrise.app")
+    user.ai_stars = 80
+    db_session.commit()
+    purchase = IapPurchase(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        platform="android",
+        product_id="stars_50",
+        transaction_id="GPA.cancel-rec-1",
+        original_transaction_id="GPA.cancel-rec-1",
+        purchase_token="cancel-rec-token-1",
+        stars_credited=50,
+        stars_clawed_back=0,
+        status=STATUS_ACTIVE,
+        environment="Sandbox",
+    )
+    db_session.add(purchase)
+    db_session.commit()
+
+    monkeypatch.setattr(google_iap, "google_iap_configured", lambda: True)
+
+    class _V:
+        purchase_state = 1
+        environment = "Sandbox"
+
+        def __init__(self):
+            self.product_id = "stars_50"
+
+    monkeypatch.setattr(google_iap, "verify_product_purchase", lambda **_k: _V())
+    monkeypatch.setattr(google_iap, "is_canceled", lambda _v: True)
+    monkeypatch.setattr(google_iap, "is_pending", lambda _v: False)
+    monkeypatch.setattr(google_iap, "is_purchased", lambda _v: False)
+    real_execute = db_session.execute
+
+    def _execute(stmt, *args, **kwargs):
+        sql = str(getattr(stmt, "text", stmt))
+        if "pg_advisory_xact_lock" in sql:
+            return MagicMock()
+        return real_execute(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", _execute)
+
+    first = google_rtdn.reconcile_canceled_active_purchases(db_session)
+    assert first["ok"] is True
+    assert first["applied"] == 1
+    db_session.refresh(user)
+    db_session.refresh(purchase)
+    assert int(user.ai_stars) == 30
+    assert int(purchase.stars_clawed_back) == 50
+
+    # Fully clawed rows drop out of the scan; re-run must not claw again.
+    second = google_rtdn.reconcile_canceled_active_purchases(db_session)
+    assert second["applied"] == 0
+    assert second["scanned"] == 0
+    db_session.refresh(user)
+    assert int(user.ai_stars) == 30
+
+
 def test_reconcile_voided_purchases(db_session: Session, monkeypatch: pytest.MonkeyPatch):
     from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
 

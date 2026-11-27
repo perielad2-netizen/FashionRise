@@ -86,7 +86,9 @@ export function pushSupported(): boolean {
   )
 }
 
-export async function enableRunwayPush(): Promise<'granted' | 'denied' | 'unsupported' | 'disabled'> {
+export async function enableRunwayPush(): Promise<
+  'granted' | 'denied' | 'unsupported' | 'disabled' | 'registration_failed'
+> {
   if (isNativeShell()) {
     const result = await enableNativePush()
     // Fail-closed for auth / no-op skip — UI treats both as disabled.
@@ -166,13 +168,23 @@ export async function runwayPushIsEnabled(): Promise<boolean> {
  */
 export async function ensureDefaultRunwayPush(): Promise<{
   on: boolean
-  result: 'granted' | 'denied' | 'unsupported' | 'disabled' | 'skipped' | 'already'
+  result:
+    | 'granted'
+    | 'denied'
+    | 'unsupported'
+    | 'disabled'
+    | 'skipped'
+    | 'already'
+    | 'registration_failed'
 }> {
   if (isNativeShell()) {
     if (await runwayPushIsEnabled()) return { on: true, result: 'already' }
     const result = await syncNativePushAfterAuth()
     if (result === 'skipped' || result === 'unauthenticated') {
       return { on: false, result: result === 'skipped' ? 'skipped' : 'disabled' }
+    }
+    if (result === 'registration_failed') {
+      return { on: false, result: 'registration_failed' }
     }
     return { on: result === 'granted', result }
   }

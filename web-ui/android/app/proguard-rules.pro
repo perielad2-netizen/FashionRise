@@ -26,6 +26,8 @@
 # Firebase / FCM (when google-services.json is present).
 -keep class com.google.firebase.** { *; }
 -keep class com.google.android.gms.** { *; }
+-keep class com.capacitorjs.plugins.pushnotifications.** { *; }
+-keep class app.fashionrise.studio.NotificationSettingsPlugin { *; }
 -dontwarn com.google.firebase.**
 -dontwarn com.google.android.gms.**
 

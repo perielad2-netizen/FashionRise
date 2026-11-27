@@ -61,7 +61,9 @@ Connectivity check (no purchase): SA mints Android Publisher token · `oneTimePr
    `https://fashionrise.app/api/v1/shop/iap/google/notifications`  
    then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL **and** `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` to the push SA email.
 3. Optional backfill: call `reconcile_voided_purchases` (Voided Purchases API, ≤30 days).
-3. Nginx must allowlist `POST` on that path (see shop allowlist docs).
+4. If Console refunds show Play `purchaseState=1` but no cancel/void RTDN (common for Sandbox),
+   run `reconcile_canceled_active_purchases` (products.get backfill — durable `products-canceled:{token}`).
+5. Nginx must allowlist `POST` on that path (see shop allowlist docs).
 4. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
 
 Never trust client Stars/price. Credit only after `purchases.products.get` · purchaseState=Purchased · account bind · durable purchase-token idempotency · then client `consumePurchase`.

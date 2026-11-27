@@ -325,6 +325,11 @@ export function RunwayScreen({
             : 'Notifications blocked in browser settings',
         )
         setPushNeedsGesture(false)
+      } else if (result === 'registration_failed') {
+        setPushNotice(
+          'Could not register this device for push. Check Google Play Services, then retry from Settings.',
+        )
+        setPushNeedsGesture(false)
       } else if (result === 'unsupported') {
         setPushLocked(true)
         setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
@@ -391,6 +396,11 @@ export function RunwayScreen({
           isNativeShell()
             ? 'Notifications blocked in system settings'
             : 'Notifications blocked in browser settings',
+        )
+      } else if (result === 'registration_failed') {
+        setPushOn(false)
+        setPushNotice(
+          'Could not register this device for push. Check Google Play Services, then retry from Settings.',
         )
       } else if (result === 'disabled') {
         setPushOn(false)

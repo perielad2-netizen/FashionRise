@@ -34,6 +34,7 @@ vi.mock('@capacitor/push-notifications', () => ({
 
 import {
   _resetNativePushListenersForTests,
+  _setNativePushRegTimeoutForTests,
   setNativePushDesired,
   syncNativePushAfterAuth,
 } from './nativePush'
@@ -70,6 +71,16 @@ describe('nativePush', () => {
       '/push/native/devices',
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('returns registration_failed when no FCM token arrives', async () => {
+    _setNativePushRegTimeoutForTests(50)
+    apiRequest.mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+    const { PushNotifications } = await import('@capacitor/push-notifications')
+    vi.mocked(PushNotifications.register).mockResolvedValueOnce(undefined)
+    // Token stays empty; registration listener never fires in mock.
+    const result = await syncNativePushAfterAuth()
+    expect(result).toBe('registration_failed')
   })
 
   it('respects desired=false without prompting', async () => {
