@@ -4,6 +4,11 @@
  * Fail-closed: registration only runs when the authenticated API reports
  * platform enablement. Web Push (VAPID) stays unchanged for browser users.
  * Never request permission before auth; never register before auth.
+ *
+ * If OS permission is already granted and the user has not opted out, we
+ * automatically obtain + register the FCM/APNs token after login / resume.
+ * Settings is preference/visibility — not a mandatory second activation.
+ * "Enabled" requires successful backend registration for this account+device.
  */
 import { PushNotifications } from '@capacitor/push-notifications'
 import { apiRequest, getApiBaseUrl } from '@/services/api/client'
@@ -20,6 +25,7 @@ export type NativePushCapability = {
 export type NativePushDeviceRow = {
   id: string
   platform: 'android' | 'ios'
+  device_token: string
   created_at: string
   updated_at: string
 }
@@ -41,6 +47,7 @@ let regTimeoutMs = 20_000
 let listenersInstalled = false
 let lastRegistrationError: string | null = null
 let tokenWaiters: Array<(token: string | null) => void> = []
+let syncInFlight: Promise<NativePushSyncResult> | null = null
 
 function platformForApi(): 'android' | 'ios' | null {
   const p = nativePlatform()
@@ -116,6 +123,10 @@ export async function getNativePushCapability(): Promise<NativePushCapability> {
   return apiRequest<NativePushCapability>('/push/native/capability', { auth: false })
 }
 
+export async function listNativePushDevices(): Promise<NativePushDeviceRow[]> {
+  return apiRequest<NativePushDeviceRow[]>('/push/native/devices')
+}
+
 export async function registerNativePushDevice(input: {
   platform: 'android' | 'ios'
   device_token: string
@@ -178,7 +189,7 @@ async function installListeners(): Promise<void> {
       device_token: value,
       app_version: undefined,
     }).catch(() => {
-      /* server may be fail-closed */
+      /* server may be fail-closed — resume sync retries */
     })
   })
 
@@ -201,16 +212,40 @@ export function getLastNativePushRegistrationError(): string | null {
   return lastRegistrationError
 }
 
+async function deviceRegisteredOnBackend(
+  platform: 'android' | 'ios',
+  token: string,
+): Promise<boolean> {
+  try {
+    const devices = await listNativePushDevices()
+    return devices.some(
+      (d) => d.platform === platform && (d.device_token || '').trim() === token,
+    )
+  } catch {
+    return false
+  }
+}
+
 /**
- * After login / bootstrap: register only when authenticated + platform enabled + desired.
- * Does not prompt if the OS already denied; requests permission only when desired.
- * Waits for an FCM/APNs token before returning granted — empty token is registration_failed.
+ * After login / bootstrap / resume: register when authenticated + platform enabled
+ * + not opted out. If OS permission is already granted, do **not** require a second
+ * in-app enable — obtain and register the FCM/APNs token automatically.
+ * Waits for a token and confirms backend registration before returning granted.
  */
 export async function syncNativePushAfterAuth(): Promise<NativePushSyncResult> {
+  if (syncInFlight) return syncInFlight
+  syncInFlight = syncNativePushAfterAuthInner().finally(() => {
+    syncInFlight = null
+  })
+  return syncInFlight
+}
+
+async function syncNativePushAfterAuthInner(): Promise<NativePushSyncResult> {
   if (!isNativeShell()) return 'unsupported'
   const platform = platformForApi()
   if (!platform) return 'unsupported'
   if (!tokenStore.get()?.accessToken) return 'unauthenticated'
+  // Explicit opt-out only — default is auto-register when OS permission is granted.
   if (!isNativePushDesired()) return 'skipped'
 
   let capability: NativePushCapability
@@ -226,6 +261,7 @@ export async function syncNativePushAfterAuth(): Promise<NativePushSyncResult> {
   await ensureAndroidChannels()
 
   let perm = await PushNotifications.checkPermissions()
+  // Already granted in OS settings (e.g. Yaniv) — do not force another in-app prompt.
   if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
     perm = await PushNotifications.requestPermissions()
   }
@@ -244,7 +280,12 @@ export async function syncNativePushAfterAuth(): Promise<NativePushSyncResult> {
   try {
     await registerNativePushDevice({ platform, device_token: token })
   } catch {
-    return 'disabled'
+    return 'registration_failed'
+  }
+
+  // Confirm backend has this account+device — never report enabled from local cache alone.
+  if (!(await deviceRegisteredOnBackend(platform, token))) {
+    return 'registration_failed'
   }
   return 'granted'
 }
@@ -311,6 +352,10 @@ export async function nativePushPermissionState(): Promise<
   }
 }
 
+/**
+ * True only when OS granted, user not opted out, and backend has this device
+ * registered for the current authenticated account.
+ */
 export async function nativePushIsEnabled(): Promise<boolean> {
   if (!isNativeShell()) return false
   if (!isNativePushDesired()) return false
@@ -322,7 +367,10 @@ export async function nativePushIsEnabled(): Promise<boolean> {
     const enabled = platform === 'android' ? capability.android_enabled : capability.ios_enabled
     if (!enabled) return false
     const perm = await PushNotifications.checkPermissions()
-    return perm.receive === 'granted' && Boolean(readStoredToken())
+    if (perm.receive !== 'granted') return false
+    const token = readStoredToken()
+    if (!token) return false
+    return deviceRegisteredOnBackend(platform, token)
   } catch {
     return false
   }
@@ -334,6 +382,7 @@ export function _resetNativePushListenersForTests(): void {
   lastRegistrationError = null
   tokenWaiters = []
   regTimeoutMs = 20_000
+  syncInFlight = null
 }
 
 /** Test helper */

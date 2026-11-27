@@ -79,8 +79,16 @@ export async function bootstrapNativeShell(): Promise<void> {
     })
   }
 
-  // Native push is fail-closed until operator flags + FCM/APNs are ready.
+  // Native push: auto-register when OS permission is granted and user has not
+  // opted out (Settings is preference — not a second mandatory activation).
+  // Retry safely on resume for transient FCM / network failures.
   void syncNativePushAfterAuth().catch(() => {
-    /* ignore — Runway UI surfaces unsupported/disabled */
+    /* ignore — Settings toggle surfaces unsupported/disabled */
+  })
+  void App.addListener('appStateChange', ({ isActive }) => {
+    if (!isActive) return
+    void syncNativePushAfterAuth().catch(() => {
+      /* ignore — transient; next resume retries */
+    })
   })
 }

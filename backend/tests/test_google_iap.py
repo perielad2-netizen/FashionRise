@@ -366,10 +366,15 @@ def test_rtdn_voided_clawback_idempotent(db_session: Session, monkeypatch: pytes
     assert int(user.ai_stars) == 0
 
 
-def test_reconcile_canceled_active_purchases(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+def test_reconcile_canceled_active_purchases_delegates_and_respects_apply_gate(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """Legacy path must not claw from products.get alone or bypass apply=false."""
     from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
+    from app.services import google_play_reconcile
 
     monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "false")
+    monkeypatch.setenv("IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY", "false")
     get_settings.cache_clear()
     user = _user(db_session, email="canceled-rec@fashionrise.app")
     user.ai_stars = 80
@@ -392,41 +397,68 @@ def test_reconcile_canceled_active_purchases(db_session: Session, monkeypatch: p
 
     monkeypatch.setattr(google_iap, "google_iap_configured", lambda: True)
 
+    order = google_iap.GooglePlayOrder(
+        order_id="GPA.cancel-rec-1",
+        purchase_token="cancel-rec-token-1",
+        state="REFUNDED",
+        create_time=None,
+        last_event_time=None,
+        product_ids=("stars_50",),
+        has_full_refund_event=True,
+        has_partial_refund_events=False,
+        has_cancellation_event=False,
+        refund_reason="OTHER",
+        refund_total_currency="ILS",
+        refund_total_units="19",
+        refund_total_nanos=0,
+        points_details=None,
+        raw={},
+    )
+    monkeypatch.setattr(google_iap, "get_order", lambda *_a, **_k: order)
+
     class _V:
         purchase_state = 1
         environment = "Sandbox"
-
-        def __init__(self):
-            self.product_id = "stars_50"
+        product_id = "stars_50"
 
     monkeypatch.setattr(google_iap, "verify_product_purchase", lambda **_k: _V())
     monkeypatch.setattr(google_iap, "is_canceled", lambda _v: True)
     monkeypatch.setattr(google_iap, "is_pending", lambda _v: False)
     monkeypatch.setattr(google_iap, "is_purchased", lambda _v: False)
+
+    # Apply OFF → dry-run; products.get canceled alone must not deduct.
+    dry = google_rtdn.reconcile_canceled_active_purchases(db_session)
+    assert dry["ok"] is True
+    assert dry["delegated_to"] == "google_play_reconcile"
+    assert dry["dry_run"] is True
+    assert dry["applied"] == 0
+    db_session.refresh(user)
+    assert int(user.ai_stars) == 80
+
+    monkeypatch.setenv("IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY", "true")
+    get_settings.cache_clear()
     real_execute = db_session.execute
 
     def _execute(stmt, *args, **kwargs):
         sql = str(getattr(stmt, "text", stmt))
-        if "pg_advisory_xact_lock" in sql:
+        if "pg_advisory_xact_lock" in sql or "pg_try_advisory_xact_lock" in sql:
             return MagicMock()
         return real_execute(stmt, *args, **kwargs)
 
     monkeypatch.setattr(db_session, "execute", _execute)
 
-    first = google_rtdn.reconcile_canceled_active_purchases(db_session)
-    assert first["ok"] is True
-    assert first["applied"] == 1
+    applied = google_rtdn.reconcile_canceled_active_purchases(db_session)
+    assert applied["dry_run"] is False
+    assert applied["stars_recovered"] == 50
     db_session.refresh(user)
     db_session.refresh(purchase)
     assert int(user.ai_stars) == 30
     assert int(purchase.stars_clawed_back) == 50
 
-    # Fully clawed rows drop out of the scan; re-run must not claw again.
-    second = google_rtdn.reconcile_canceled_active_purchases(db_session)
-    assert second["applied"] == 0
-    assert second["scanned"] == 0
-    db_session.refresh(user)
-    assert int(user.ai_stars) == 30
+    # Admin snapshot must read Postgres only (no live Play).
+    snap = google_play_reconcile.admin_reconciliation_snapshot(db_session)
+    assert snap["kind"] == "persisted"
+    assert snap["source"] == "postgresql"
 
 
 def test_reconcile_voided_purchases(db_session: Session, monkeypatch: pytest.MonkeyPatch):

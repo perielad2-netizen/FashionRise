@@ -28,6 +28,7 @@ vi.mock('@capacitor/push-notifications', () => ({
     checkPermissions: vi.fn(async () => ({ receive: 'granted' })),
     requestPermissions: vi.fn(async () => ({ receive: 'granted' })),
     register: vi.fn(async () => undefined),
+    createChannel: vi.fn(async () => undefined),
     removeAllListeners: vi.fn(async () => undefined),
   },
 }))
@@ -35,6 +36,7 @@ vi.mock('@capacitor/push-notifications', () => ({
 import {
   _resetNativePushListenersForTests,
   _setNativePushRegTimeoutForTests,
+  nativePushIsEnabled,
   setNativePushDesired,
   syncNativePushAfterAuth,
 } from './nativePush'
@@ -56,21 +58,34 @@ describe('nativePush', () => {
     expect(apiRequest).toHaveBeenCalledWith('/push/native/capability', { auth: false })
   })
 
-  it('registers after auth when Android is enabled', async () => {
-    apiRequest.mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
-    localStorage.setItem('fr.nativePush.token', 'fcm-token-abcdefghijklmnopqrstuv')
-    apiRequest.mockResolvedValueOnce({
-      id: '1',
-      platform: 'android',
-      created_at: '2026-11-13T00:00:00Z',
-      updated_at: '2026-11-13T00:00:00Z',
-    })
+  it('auto-registers when OS permission is already granted (no second activation)', async () => {
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false }) // capability
+      .mockResolvedValueOnce({
+        id: '1',
+        platform: 'android',
+        device_token: token,
+        created_at: '2026-11-13T00:00:00Z',
+        updated_at: '2026-11-13T00:00:00Z',
+      }) // POST register
+      .mockResolvedValueOnce([
+        {
+          id: '1',
+          platform: 'android',
+          device_token: token,
+          created_at: '2026-11-13T00:00:00Z',
+          updated_at: '2026-11-13T00:00:00Z',
+        },
+      ]) // GET confirm
     const result = await syncNativePushAfterAuth()
     expect(result).toBe('granted')
     expect(apiRequest).toHaveBeenCalledWith(
       '/push/native/devices',
       expect.objectContaining({ method: 'POST' }),
     )
+    expect(apiRequest).toHaveBeenCalledWith('/push/native/devices')
   })
 
   it('returns registration_failed when no FCM token arrives', async () => {
@@ -88,5 +103,30 @@ describe('nativePush', () => {
     const result = await syncNativePushAfterAuth()
     expect(result).toBe('skipped')
     expect(apiRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not report enabled from local token alone without backend registration', async () => {
+    localStorage.setItem('fr.nativePush.token', 'fcm-token-abcdefghijklmnopqrstuv')
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockResolvedValueOnce([]) // no devices on backend
+    expect(await nativePushIsEnabled()).toBe(false)
+  })
+
+  it('reports enabled only when backend has this account device token', async () => {
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockResolvedValueOnce([
+        {
+          id: '1',
+          platform: 'android',
+          device_token: token,
+          created_at: '2026-11-13T00:00:00Z',
+          updated_at: '2026-11-13T00:00:00Z',
+        },
+      ])
+    expect(await nativePushIsEnabled()).toBe(true)
   })
 })

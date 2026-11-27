@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   disableRunwayPush,
   enableRunwayPush,
+  ensureDefaultRunwayPush,
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { isNativeShell } from '@/services/native/platform'
@@ -11,7 +12,9 @@ import styles from './GlobalHeader.module.css'
 
 /**
  * Shared Notifications toggle for Settings (and reusable by Runway).
- * Uses pushApi → nativePush / Web Push — does not duplicate registration logic.
+ * Preference / visibility — not a mandatory second activation.
+ * If OS permission is already granted and the user has not opted out,
+ * auto-register FCM/APNs and confirm backend registration.
  */
 export function NotificationsSettingsToggle() {
   const [on, setOn] = useState(false)
@@ -38,8 +41,22 @@ export function NotificationsSettingsToggle() {
   }, [native])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let cancelled = false
+    void (async () => {
+      // Auto-activate when OS already granted (e.g. system settings) — no second prompt.
+      if (native) {
+        try {
+          await ensureDefaultRunwayPush()
+        } catch {
+          /* ignore — refresh still reports backend-confirmed state */
+        }
+      }
+      if (!cancelled) await refresh()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [native, refresh])
 
   const onToggle = useCallback(async () => {
     if (busy) return

@@ -203,108 +203,45 @@ def reconcile_voided_purchases(db: Session, *, lookback_days: int = 30) -> dict[
 
 
 def reconcile_canceled_active_purchases(db: Session, *, limit: int = 200) -> dict[str, Any]:
-    """Backfill clawbacks when Play ``products.get`` shows canceled but RTDN/voided missed.
+    """Legacy entrypoint — delegates to orders.get financial reconcile safety policy.
 
-    Sandbox / Console refunds sometimes set ``purchaseState=1`` without a Pub/Sub
-    cancel/void notification and without appearing in ``voidedpurchases.list``.
-    Scan active Android rows that still have unrecovered Stars and claw back when
-    Play confirms canceled (or 404). Idempotent via durable ``message_id``.
+    Must **not** claw back from products.get alone or bypass
+    ``IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY``. Mutations stay dry-run unless the
+    financial apply gate is explicitly true.
     """
+    from app.core.config import get_settings
+    from app.services import google_play_reconcile
+
     if not google_iap.google_iap_configured():
         raise ServiceUnavailableError("Google Play service account not configured")
 
-    cap = max(1, min(int(limit or 200), 500))
-    rows = list(
-        db.scalars(
-            select(IapPurchase)
-            .where(
-                IapPurchase.platform == "android",
-                IapPurchase.purchase_token.is_not(None),
-                IapPurchase.stars_credited > IapPurchase.stars_clawed_back,
-            )
-            .order_by(IapPurchase.created_at.asc())
-            .limit(cap)
-        ).all()
+    apply_enabled = bool(
+        getattr(get_settings(), "iap_google_financial_reconcile_apply", False)
     )
-
-    scanned = 0
-    applied = 0
-    duplicates = 0
-    skipped = 0
-    failed = 0
-
-    for purchase in rows:
-        scanned += 1
-        token = (purchase.purchase_token or "").strip()
-        if not token:
-            skipped += 1
-            continue
-        message_id = f"products-canceled:{token}"
-        existing = db.scalar(
-            select(IapGoogleNotification).where(IapGoogleNotification.message_id == message_id)
-        )
-        if existing is not None:
-            duplicates += 1
-            continue
-
-        try:
-            play_check = _assert_play_voided_or_canceled(
-                purchase_token=token,
-                product_id=purchase.product_id,
-                authoritative="products.get",
-            )
-        except Exception:  # noqa: BLE001
-            _log.exception("canceled_reconcile_play_check_failed purchase_id=%s", purchase.id)
-            failed += 1
-            continue
-
-        if not play_check.get("ok"):
-            skipped += 1
-            continue
-
-        row = IapGoogleNotification(
-            id=uuid.uuid4(),
-            message_id=message_id,
-            notification_type="canceled_reconcile",
-            package_name=google_iap.google_package_name(),
-            purchase_token=token,
-            order_id=purchase.transaction_id,
-            product_id=purchase.product_id,
-            processing_state="received",
-            audit_meta={
-                "source": "products.get_canceled_reconcile",
-                "play": play_check,
-            },
-        )
-        db.add(row)
-        try:
-            db.flush()
-        except IntegrityError:
-            db.rollback()
-            duplicates += 1
-            continue
-
-        _clawback_purchase(
-            db,
-            row,
-            purchase,
-            kind="CANCELED",
-            product_id_hint=purchase.product_id,
-            authoritative="products.get",
-        )
-        if row.processing_state == "applied":
-            applied += 1
-        else:
-            skipped += 1
-        db.commit()
-
+    cap = max(1, min(int(limit or 200), 200))
+    report = google_play_reconcile.reconcile_android_purchases(
+        db,
+        dry_run=not apply_enabled,
+        limit=cap,
+        persist=True,
+        advance_cursor=True,
+    )
+    counts = report.get("counts") or {}
+    applied = int(report.get("stars_recovered") or 0)
     return {
         "ok": True,
-        "scanned": scanned,
-        "applied": applied,
-        "duplicates": duplicates,
-        "skipped": skipped,
-        "failed": failed,
+        "delegated_to": "google_play_reconcile",
+        "dry_run": report.get("dry_run"),
+        "apply_enabled": apply_enabled,
+        "scanned": report.get("scanned"),
+        "applied": int(counts.get("recover_full") or 0) if not report.get("dry_run") else 0,
+        "stars_recovered": applied if not report.get("dry_run") else 0,
+        "duplicates": int(counts.get("already_recovered") or 0),
+        "skipped": int(counts.get("ok") or 0)
+        + int(counts.get("review") or 0)
+        + int(counts.get("wait") or 0),
+        "failed": int(counts.get("skip_error") or 0) + int(counts.get("skip_identity") or 0),
+        "counts": counts,
     }
 
 

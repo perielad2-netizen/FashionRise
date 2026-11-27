@@ -170,20 +170,13 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
         run_cost_sync_tick(db)
     except Exception:  # noqa: BLE001
         logger.exception("AI cost sync tick failed (non-fatal)")
-    # Google Play financial reconcile (orders.get). Dry-run unless apply flag is on.
+    # Google Play financial reconcile — hourly cluster tick (not every AI job tick).
+    # Interval + advisory lock + last-run live in google_play_reconcile_worker.
+    # Apply stays OFF unless IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true.
     try:
-        from app.core.config import get_settings
-        from app.services import google_play_reconcile
+        from app.services.google_play_reconcile_worker import run_google_play_reconcile_tick
 
-        settings = get_settings()
-        if bool(getattr(settings, "iap_google_financial_reconcile_enabled", True)):
-            google_play_reconcile.reconcile_android_purchases(
-                db,
-                dry_run=not bool(
-                    getattr(settings, "iap_google_financial_reconcile_apply", False)
-                ),
-                limit=int(getattr(settings, "iap_google_financial_reconcile_limit", 50) or 50),
-            )
+        run_google_play_reconcile_tick(db)
     except Exception:  # noqa: BLE001
         logger.exception("Google Play financial reconcile tick failed (non-fatal)")
     return magic_n + croquis_n + tech_n

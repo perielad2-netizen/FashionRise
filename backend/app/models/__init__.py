@@ -61,6 +61,11 @@ from app.models.ai_cost_accounting import (
     ProviderPricingVersion,
     ProviderSyncRun,
 )
+from app.models.google_play_reconcile import (
+    GooglePlayReconcileCursor,
+    GooglePlayReconcileFinding,
+    GooglePlayReconcileRun,
+)
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow
@@ -97,6 +102,9 @@ __all__ = [
     "GalleryItem",
     "GalleryLike",
     "GarmentDesign",
+    "GooglePlayReconcileCursor",
+    "GooglePlayReconcileFinding",
+    "GooglePlayReconcileRun",
     "GarmentTemplate",
     "LoginStreak",
     "MagicLookMeta",
