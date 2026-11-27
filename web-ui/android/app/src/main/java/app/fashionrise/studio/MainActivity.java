@@ -1,12 +1,5 @@
 package app.fashionrise.studio;
 
-import android.os.Bundle;
-
-import androidx.activity.EdgeToEdge;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
-
 import com.getcapacitor.BridgeActivity;
 
 /**
@@ -18,19 +11,10 @@ import com.getcapacitor.BridgeActivity;
  * "media capture supported" and skips the FashionRise-owned runtime
  * permission dialog that crashed when dismissed with Back.
  *
- * Android 15+: enable edge-to-edge via androidx EdgeToEdge (avoids deprecated
- * Window status/navigation bar color APIs) and apply system bar insets to the
- * content root so the WebView is not drawn under the status/nav bars.
+ * Do not call EdgeToEdge.enable() or pad {@code android.R.id.content} with
+ * system-bar insets here. Capacitor StatusBar overlays the WebView and the
+ * React shell already applies {@code env(safe-area-inset-*)} once. Native
+ * padding (PR #526) double-applied insets and surfaced a blank strip plus
+ * ActionBar/theme regressions on device.
  */
-public class MainActivity extends BridgeActivity {
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        EdgeToEdge.enable(this);
-        super.onCreate(savedInstanceState);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v, insets) -> {
-            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
-            return insets;
-        });
-    }
-}
+public class MainActivity extends BridgeActivity {}
