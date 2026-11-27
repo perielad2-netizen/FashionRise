@@ -12,8 +12,11 @@ import {
   recoverPendingStarsPurchases,
   startIapTransactionUpdateRecovery,
 } from './iap'
+import {
+  installNativePushInteractionListeners,
+  syncNativePushAfterAuth,
+} from './nativePush'
 import { isNativeShell, nativePlatform } from './platform'
-import { syncNativePushAfterAuth } from './nativePush'
 
 /** Soften native chrome once the SPA mounts. Safe no-op on web. */
 export async function bootstrapNativeShell(): Promise<void> {
@@ -67,6 +70,11 @@ export async function bootstrapNativeShell(): Promise<void> {
 
   // FashionRise-owned deep links + click guard (incl. Android Google OAuth handoff).
   void installNativeDeepLinkRouter()
+
+  // Push tap listeners before auth — cold-start intents are retained/queued.
+  void installNativePushInteractionListeners().catch(() => {
+    /* plugin unavailable on web */
+  })
 
   // Bounded Apple Stars recovery on resume (cooldown + credit gate inside recover).
   if (isNativeIosStarsShop()) {

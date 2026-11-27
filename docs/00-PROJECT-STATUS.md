@@ -3,7 +3,38 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 15:50 Asia/Jerusalem — VC 230 push registered · FCM accepted for Peri device · upsert race fix · GPA.3329 apply still pending
+**Last updated:** 2026-11-27 16:00 Asia/Jerusalem — push tap root cause (OPEN_URI) · GPA.3329 auto-recover applied · AAB >230 pending
+
+## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Device receipt | **Confirmed** 15:40 IL · SM-S921B VC **230** · title “FashionRise push test” · body runway tap copy · FashionRise icon · settings survived restart/re-login |
+| Tap | **FAILED** — notification did **not** open the app |
+| Tap root cause | FCM `click_action: "OPEN_URI"` with no MainActivity intent-filter → system tray cannot resolve Activity. Registration/delivery ≠ interaction. |
+| Fix (this branch) | BE: omit custom `click_action` (`build_fcm_message_body`) · FE: early `installNativePushInteractionListeners` + `notificationNavigation` pending dest until auth ready · regression tests · Android offset **140** (VC >230) |
+| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm` (same tap bug). Friend-request alerts: **no** push today (friends routes do not call `push_service`). |
+| Push operational? | **No** — await BE+AAB deploy and device tap → `/studio/runway` |
+| GPA.3329 apply | **DONE** via `run_google_play_reconcile_once.py --order-id … --authorize-apply-stars 50 --apply` · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` / would **0** · exactly one `orders_reconcile` applied · GPA.3393 still clawed once |
+| Persistent gates | purchasing **false** · credit **false** · reconcile apply **false** (unchanged) |
+| Permanent auto-apply | **Not safe to enable yet** — see readiness section below; needs separate PM approval |
+
+### Permanent hourly reconcile readiness (assessment only — NOT enabled)
+
+| Topic | Status |
+| --- | --- |
+| Candidate selection | Fair cursor + refunded/outstanding stars; order-scoped path proven |
+| Batch limits | Worker limit env present; keep bounded |
+| Cluster locking | Advisory lock + purchase-token lock + durable message id — OK |
+| Provider outages / retry | Dry-run path tolerates; apply must stay fail-closed on ambiguity |
+| Refund without revoke | Classifies `review` (no blind deduct) — keep |
+| Partial refunds | Needs explicit policy before unattended apply |
+| Insufficient balance / debt | `ai_stars_iap_debt` path exists; monitor alerts required before unattended |
+| Duplicate RTDN + reconcile | Idempotent message ids — OK for applied recoveries |
+| Historical unrecovered | Sandbox gap (no cancel RTDN) → reconcile is the fallback; backlog must be reviewed before blanket apply |
+| Ledger / audit | `iap_google_notifications` + purchase clawback fields; no separate stars ledger table |
+| Emergency disable | `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (current) |
+| **Verdict** | Detection + scoped apply OK. **Blockers for permanent ON:** ops alerts, partial-refund policy, debt/shortfall runbook, backlog review, dual-sign enablement. Do **not** flip persistent apply without PM approval. |
 
 ## LIVE — VC 230 push registration + controlled FCM test (2026-11-27 Asia/Jerusalem)
 
