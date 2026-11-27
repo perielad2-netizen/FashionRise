@@ -14,7 +14,7 @@
  * `syncNativePushAfterAuth` / `enableNativePush` — do not fork paths.
  */
 import { PushNotifications } from '@capacitor/push-notifications'
-import { apiRequest, getApiBaseUrl } from '@/services/api/client'
+import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { isNativeShell, nativePlatform } from './platform'
 import { sanitizePushDestination } from './pushDestination'
@@ -314,8 +314,22 @@ export function formatNativePushRegistrationFailureMessage(): string {
     }
     case 'token_timeout':
       return 'FCM token timed out. Update Google Play Services, stay online for ~30s, then retry from Settings.'
-    case 'backend_post':
-      return 'Got a device token but the server rejected registration. Sign in again and retry.'
+    case 'backend_post': {
+      const statusMatch = /^post_failed_(\d+|unknown)$/i.exec(d.code || '')
+      const status =
+        statusMatch && statusMatch[1] !== 'unknown' ? Number(statusMatch[1]) : NaN
+      const msg = (d.message || '').toLowerCase()
+      if (status === 401 || msg.includes('session expired')) {
+        return 'Got a device token but registration needs a valid session. Sign in again and retry.'
+      }
+      if (status === 403 || msg.includes('forbidden')) {
+        return 'Got a device token but the API gateway blocked device registration (HTTP 403). Retry after the server allowlist is updated — signing in again will not help.'
+      }
+      if (status === 0 || msg.includes('failed to fetch') || msg.includes('network')) {
+        return 'Got a device token but could not reach the registration API. Check network and retry.'
+      }
+      return 'Got a device token but the server rejected registration. Retry from Settings; sign in again only if you see a session error.'
+    }
     case 'backend_confirm':
       return 'Server did not confirm this device yet. Wait a moment and retry from Settings.'
     default:
@@ -423,7 +437,12 @@ async function syncNativePushAfterAuthInner(): Promise<NativePushSyncResult> {
   try {
     await registerNativePushDevice({ platform, device_token: token })
   } catch (err) {
-    setDiagnostic('backend_post', 'post_failed', sanitizePushError(err), token)
+    const status = err instanceof ApiError ? err.status : 0
+    const detail =
+      err instanceof ApiError
+        ? `HTTP ${status}: ${sanitizePushError(err.message || err)}`
+        : sanitizePushError(err)
+    setDiagnostic('backend_post', `post_failed_${status || 'unknown'}`, detail, token)
     return 'registration_failed'
   }
 

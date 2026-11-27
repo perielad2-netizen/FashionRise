@@ -3,7 +3,37 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 14:35 Asia/Jerusalem — #534 merged/deployed · GPA.3393 recovered 50 · AAB VC **230** · push still OPEN
+**Last updated:** 2026-11-27 15:15 Asia/Jerusalem — push root cause = nginx missing `/push/native/devices` · GPA.3329 dry-run recover_full 50 (apply OFF)
+
+## INVESTIGATE — Push nginx 403 + new refund GPA.3329 (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Device / FE | Internal AAB **VC 230** · tip **`0b197880`** · Settings ~14:55 IL / 12:55Z · notice *Got a device token but the server rejected registration* |
+| Push root cause | **Nginx allowlist gap** — only `GET /api/v1/push/native/capability` was allowlisted. `OPTIONS/POST/GET/DELETE /api/v1/push/native/devices` hit `location /api/ { return 403 }` (nginx HTML). Capacitor Origin `https://localhost` preflight failed → **POST never reached FastAPI** · access log: many `OPTIONS …/devices` **403** · zero POSTs · `native_push_devices=0` |
+| Not the cause | Auth/session · schema · FCM token (token stage succeeded) · feature flag (`android_enabled:true`) · outbound delivery gate |
+| Sign-in-again | **Not applicable** — gateway 403, not 401 |
+| Fix | **LIVE nginx** `location = /api/v1/push/native/devices` (`GET POST DELETE OPTIONS`) · backup `/root/nginx-fashionrise.app.bak-native-devices-20261127T130828Z` · smoke OPTIONS **200** CORS · unauth POST **401** FastAPI (not nginx 403) · docs `PROPOSED-NGINX-NATIVE-PUSH-ALLOWLIST.md` · FE classifies HTTP 403 vs 401 (no AAB for nginx fix) |
+| New refund | **`GPA.3329-8879-2128-29183`** · PeriShilat · `stars_50` · Sandbox · purchased **12:54:48Z** · wallet **999397** (expect **999347** after claw) · status **active** · clawed **0** |
+| Play / dry-run | `orders.get` **REFUNDED** · entitlement canceled · decision **`recover_full`** · would **50** · `apply_enabled=false` · stars_recovered **0** |
+| RTDN | `one_time_purchased` unmatched only — **no** cancel/void RTDN (same Sandbox gap as GPA.3393) |
+| Prior GPA.3393 | Still **refunded** / clawed **50** / exactly-once · do **not** re-apply |
+| Auto recover blocked by | **Configuration** — `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (detection works; application gated). Not an implementation defect for this order. |
+| Payments warning | Separate external Google Play payments-account issue — **no evidence** it caused push 403 or refund clawback skip |
+| Exact next action | Deploy nginx devices allowlist → device retest VC 230 · **PM authorize** scoped recover for GPA.3329 only · keep persistent apply/purchasing/credit **OFF** |
+
+### Controlled recovery procedure (GPA.3329 — awaiting approval)
+
+```bash
+cd /opt/fashionrise/src/backend
+sudo -u fashionriseapp env PYTHONPATH=/opt/fashionrise/src/backend \
+  /opt/fashionrise/.venv/bin/python scripts/run_google_play_recover_order.py \
+  --order-id GPA.3329-8879-2128-29183 \
+  --authorize-recovery-stars 50 \
+  --apply
+```
+
+Process-local `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY_ORDER_ID` only — never write host `.env` apply/purchasing/credit gates. Expect wallet **999397→999347** if no intervening activity; post dry-run `would_recover=0`.
 
 ## LIVE — PR #534 merge + scoped refund recover + AAB VC 230 (2026-11-27 Asia/Jerusalem)
 
