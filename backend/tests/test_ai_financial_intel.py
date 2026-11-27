@@ -402,3 +402,52 @@ def test_operator_expense_not_mixed_as_fashn_cash(db_session: Session):
     assert section["fashn"]["actual_cash_expenditure"]["kind"] == "unavailable"
     assert section["operator_expenses_actual_usd"]["kind"] == "actual"
     assert section["operator_expenses_actual_usd"]["amount_usd"] == 40.0
+
+
+def test_cost_sync_tick_skips_when_recent_db_success(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """Cluster gate: a recent successful sync skips another tick (all workers share DB)."""
+    from app.models.ai_cost_accounting import PROVIDER_OPENAI, ProviderSyncRun
+    from app.services import ai_cost_sync_worker as tick_mod
+
+    monkeypatch.setenv("AI_COST_SYNC_INTERVAL_SECONDS", "3600")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    tick_mod._last_tick_monotonic = None
+
+    db_session.add(
+        ProviderSyncRun(
+            id=uuid.uuid4(),
+            provider=PROVIDER_OPENAI,
+            sync_kind="organization_costs",
+            status="success",
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            rows_upserted=1,
+            meta={},
+        )
+    )
+    db_session.commit()
+
+    called = {"openai": 0, "fashn": 0}
+
+    def _no_openai(*_a, **_k):
+        called["openai"] += 1
+        raise AssertionError("should not call openai sync")
+
+    def _no_fashn(*_a, **_k):
+        called["fashn"] += 1
+        raise AssertionError("should not call fashn sync")
+
+    monkeypatch.setattr(tick_mod, "sync_openai_costs", _no_openai)
+    monkeypatch.setattr(tick_mod, "sync_fashn_credits", _no_fashn)
+    try:
+        result = tick_mod.run_cost_sync_tick(db_session, force=False)
+        assert result["skipped"] is True
+        assert result["reason"] == "interval_db"
+        assert called == {"openai": 0, "fashn": 0}
+    finally:
+        get_settings.cache_clear()
+        tick_mod._last_tick_monotonic = None
