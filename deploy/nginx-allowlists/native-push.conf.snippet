@@ -4,7 +4,7 @@
 #   location /api/ { return 403; }
 #
 # Apply / verify:
-#   scripts/assert_nginx_native_push_allowlist.sh /etc/nginx/sites-available/fashionrise.app
+#   deploy/nginx-allowlists/assert_native_push_allowlist.sh /etc/nginx/sites-available/fashionrise.app
 #   # or merge this snippet next to capability / web-push blocks, then:
 #   nginx -t && systemctl reload nginx
 #

@@ -75,7 +75,7 @@ Connectivity check (no purchase): SA mints Android Publisher token · `oneTimePr
    (process-local `APPLY_ORDER_ID` + cluster lock; same service as the hourly tick).
 5. Nginx must allowlist `POST` on that path (see shop allowlist docs).
 6. Native push nginx: keep `deploy/nginx-allowlists/native-push.conf.snippet` in the live
-   `fashionrise.app` allowlist; assert with `scripts/assert_nginx_native_push_allowlist.sh`.
+   `fashionrise.app` allowlist; assert with `deploy/nginx-allowlists/assert_native_push_allowlist.sh`.
 7. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
 8. External Play ops (15% fee program / payments bank verification) are separate from IAP reconcile and FCM.
 
