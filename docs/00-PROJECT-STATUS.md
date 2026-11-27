@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:24 Asia/Jerusalem — Android RTDN **test notification applied** · Internal AAB **VC 145** · public purchase **OFF**
+**Last updated:** 2026-11-27 11:28 Asia/Jerusalem — RTDN test **applied** · AAB VC **145** ready · Play API **cannot commit** Internal release · public purchase **OFF**
 
 ## LIVE — Android RTDN + release activate (2026-11-27 Asia/Jerusalem)
 
@@ -17,9 +17,20 @@
 | Gates | `PURCHASING=false` · `CREDIT=false` (Sandbox-only for allowlisted emails) |
 | FCM / Play | FCM validate auth OK · Play `purchases.products.get` auth OK · `/shop/iap/google/status` verification_configured |
 | Clawback | Post-lock `expire_all` + `populate_existing` (fresh Stars/clawed state) |
-| AAB | Codemagic build `6b0948fade2cb89d84d49e45` **finished** · `app-release.aab` **versionCode 145** / `1.0` ( > Alpha **114**) · closed track untouched · Internal only |
+| AAB | Codemagic `6b0948fade2cb89d84d49e45` · **VC 145** / `1.0` · sha256 `ef4b0174…0ae8c027` · Play SA can upload/edit but **commit=403** · Internal still **110** · Alpha **114** preserved · manual Console upload required |
 | RTDN rows | Test notification **received** `2026-11-27 11:23 Asia/Jerusalem` · `processing_state=applied` · `notification_type=test` · message_id `23636621182746101` · **0** wallet/purchase mutations |
-| Exact next action | Install Internal AAB (VC 145) · license-tester sandbox buy+refund · keep public gates OFF until validated |
+| Exact next action | Manual Play Console → **Internal testing** upload VC **145** (do not touch Alpha/closed) · install via Internal opt-in link · license-tester sandbox buy+refund · gates stay OFF |
+
+## READY — Android Internal VC 145 device validation (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Artifact | [Codemagic build 6b0948…](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0948fade2cb89d84d49e45) → download `app-release.aab` |
+| Play API | `fashionrise-play-billing@…` may create edit + upload AAB + draft Internal track; **`edits.commit` → 403** (needs Release permission) |
+| Preserve | Alpha closed track **VC 114** + 15 testers untouched · production empty |
+| Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` · license-tester emails only |
+| Install | After Console Internal release: Play Console → Testing → Internal testing → **Copy link** (opt-in URL) |
+| Device steps | 1) Open Internal link on license-tester Google account · 2) Install FashionRise · 3) Confirm app **1.0 (145)** · 4) Sign in with allowlisted FashionRise email · 5) Stars shop: sandbox buy `stars_50` then refund/void · 6) Confirm credit + clawback · 7) Leave public gates OFF |
 
 ## LIVE — Android App Links + Play Billing verify (gates OFF)
 
