@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 15:40 Asia/Jerusalem — #536 durable nginx SoT · auto-reconcile order-scoped plan for GPA.3329 · Play 15% / bank verify external
+**Last updated:** 2026-11-27 15:45 Asia/Jerusalem — #536+#537 merged · FE `ec595a0` · nginx devices LIVE+SoT · GPA.3329 auto-reconcile dry-run OK (apply pending)
+
+## LIVE — PR #536/#537 nginx devices + FE deploy (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PRs | **#536** MERGED (`f0d415da`) · **#537** MERGED (`ec595a04`) sparse-safe assert |
+| BE | `/opt/fashionrise/src` @ **`ec595a0`** · API restarted · reconcile once script deployed |
+| FE | `/var/www/fashionrise/releases/ec595a0-push-nginx-devices` · `/version.json` → **`ec595a0`** · assert-prod-vite-flags **pass** |
+| Nginx | LIVE devices allowlist · SoT `deploy/nginx-allowlists/native-push.conf.snippet` · assert **PASS** |
+| Smoke | OPTIONS devices **200** CORS · unauth POST **401** · unknown path **403** |
+| AAB | unchanged VC **230** (no native rebuild) |
+| Push status | **OPEN** — awaiting VC 230 device retest + DB row + gated delivery |
+| Refund | GPA.3329 dry-run via `run_google_play_reconcile_once.py --order-id` → `recover_full` would **50** · **apply not executed** |
+| Gates | purchasing **false** · credit **false** · reconcile apply **false** · native Android push **true** · reconcile enabled **true** |
 
 ## EXTERNAL OPS — Google Play payments (2026-11-27 Asia/Jerusalem)
 
