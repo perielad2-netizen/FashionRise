@@ -3,23 +3,31 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 10:15 Asia/Jerusalem — Android release readiness (FCM + Play Billing + App Links) implemented; credentials pending
+**Last updated:** 2026-11-27 10:00 Asia/Jerusalem — Android FCM **LIVE** on API (`fashionrise-e2f01`); Codemagic google-services inject pending env var
 
-## READY — Android release: FCM + Google Play Billing + App Links
+## LIVE — Android FCM backend enabled (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **Code complete** — fail-closed until owner credentials; closed testing track preserved |
-| Branch | `cursor/web-android-release-fcm-billing-77c6` |
-| Alembic | **046** — `iap_purchases.purchase_token` + `iap_google_notifications` |
-| FCM | Channels `fashionrise_social` · Android 13+ permission · Codemagic `google-services.json` inject · existing `/push/native/*` + FCM HTTP v1 |
-| Play Billing | Capgo + Billing Library **8.3.0** · server `purchases.products.get` · consume after credit · license-tester emails · RTDN webhook |
-| Products | `stars_50` / `stars_150` / `stars_500` (unchanged) |
-| Gates (default OFF) | `NATIVE_PUSH_ANDROID_ENABLED` · `IAP_GOOGLE_PURCHASING_ENABLED` · `IAP_GOOGLE_CREDIT_ENABLED` |
-| App Links | nginx `/.well-known` allow + host `assetlinks.json` (needs **Play App Signing SHA-256**) |
-| Codemagic | `fashionrise-android-play-internal` · `ANDROID_VERSION_CODE_OFFSET=30` |
+| Status | **LIVE (API)** — `NATIVE_PUSH_ANDROID_ENABLED=true` · project `fashionrise-e2f01` |
+| Capability | `GET /api/v1/push/native/capability` → `android_enabled: true` |
+| SA path | `/var/lib/fashionrise/secrets/fcm-firebase-sa.json` (mode 0640 · not in git) |
+| Env | `NATIVE_PUSH_FCM_PROJECT_ID=fashionrise-e2f01` · `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=<abs path>` |
+| Cursor secrets used | `FIREBASE_SERVICE_ACCOUNT_JSON` · `FIREBASE_PROJECT_ID` · `ANDROID_GOOGLE_SERVICES_JSON` (Codemagic only) |
+| Device delivery | Needs Internal AAB built with `ANDROID_GOOGLE_SERVICES_JSON` in Codemagic group `fashionrise_native` |
+| Untouched | Web Push · iOS APNs flags/credentials · generation keys |
+| Exact next action | Add `ANDROID_GOOGLE_SERVICES_JSON` to Codemagic `fashionrise_native` → run Play Internal AAB · Play Billing SA still pending |
+
+## READY — Android release: Play Billing + App Links (FCM API done)
+
+| Field | Value |
+| --- | --- |
+| Status | FCM API **on**; Play Billing + assetlinks SHA still owner-blocked |
+| Alembic | **046** applied |
+| Play Billing | Fail-closed until Play Developer SA + products + license testers |
+| App Links | `assetlinks.json` **200** — replace placeholder with **Play App Signing SHA-256** |
+| Codemagic | `fashionrise-android-play-internal` · offset **30** · injects `ANDROID_GOOGLE_SERVICES_JSON` |
 | Operator checklist | `docs/deploy/ANDROID-RELEASE-OPERATOR.md` |
-| Exact next action | Owner: Firebase `google-services.json` + FCM SA · Play SA + products · App Signing SHA-256 · RTDN Pub/Sub · then Internal AAB |
 
 ## LIVE — Real AI financial reporting activated (2026-11-27 Asia/Jerusalem)
 

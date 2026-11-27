@@ -6,19 +6,33 @@ Package: `app.fashionrise.studio` · Track: Play **Internal / closed testing** (
 
 ## A. Firebase native push (FCM)
 
-1. Firebase Console → add Android app `app.fashionrise.studio` (or confirm existing).
-2. Download `google-services.json`.
-3. Codemagic → team/group `fashionrise_native`:
-   - Secure file **or** env `GOOGLE_SERVICES_JSON` / path `CM_GOOGLE_SERVICES_JSON`.
-   - Workflow injects into `web-ui/android/app/google-services.json` before `bundleRelease` (never artifacts).
-4. Create GCP/Firebase service account with **Firebase Cloud Messaging Admin**.
-5. On API host only (outside repo), e.g. `/var/lib/fashionrise/secrets/fcm-sa.json`.
-6. Production `.env` (fail-closed until both flag + files):
-   - `NATIVE_PUSH_ANDROID_ENABLED=true`
-   - `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=/var/lib/fashionrise/secrets/fcm-sa.json`
-   - `NATIVE_PUSH_FCM_PROJECT_ID=<firebase-project-id>`
-7. Restart `fashionrise-api` + `fashionrise-ai-worker@{1..3}`.
-8. Smoke: signed-in Android build → Runway bell ON → capability `android_enabled=true` → like → tap opens `/studio…`.
+**Project:** `fashionrise-e2f01` · package `app.fashionrise.studio`
+
+### Production API (done when Cursor secrets are installed)
+
+| Env | Value |
+| --- | --- |
+| `NATIVE_PUSH_ANDROID_ENABLED` | `true` |
+| `NATIVE_PUSH_FCM_PROJECT_ID` | `fashionrise-e2f01` |
+| `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON` | absolute path to host file (e.g. `/var/lib/fashionrise/secrets/fcm-firebase-sa.json`) |
+
+Cursor secret `FIREBASE_SERVICE_ACCOUNT_JSON` is written to that host path only — never committed, never put in the Android APK/AAB.
+
+Public probe: `GET /api/v1/push/native/capability` → `android_enabled: true`.
+
+### Codemagic Android AAB (required before FCM works on device)
+
+Add to Codemagic env group **`fashionrise_native`** (variable, secret):
+
+| Variable | Source |
+| --- | --- |
+| `ANDROID_GOOGLE_SERVICES_JSON` | Cursor secret of the same name (client `google-services.json` only — **no** private key) |
+
+Optional aliases: secure file `CM_GOOGLE_SERVICES_JSON`, or legacy `GOOGLE_SERVICES_JSON`.
+
+Workflow `fashionrise-android-play-internal` injects the file into `web-ui/android/app/google-services.json`, validates project/package, builds the AAB, then deletes the file so it is not an artifact.
+
+Smoke after Internal install: signed-in → Runway bell ON → like → tap opens `/studio…`.
 
 Do **not** change Web Push or iOS APNs flags in this checklist.
 
