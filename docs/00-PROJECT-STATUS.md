@@ -3,21 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 16:05 Asia/Jerusalem — #540 MERGED · tap opens app confirmed · friend alerts shipping · GPA.3329 recovered · apply gate OFF
+**Last updated:** 2026-11-27 16:10 Asia/Jerusalem — #540/#541 MERGED · tap opens · friend alerts · reconcile readiness · apply OFF
 
-## LIVE — #540 merged · tap opens app · GPA.3329 auto-recover (2026-11-27 Asia/Jerusalem)
+## LIVE — Push + reconcile readiness (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR #540 | **MERGED** `2b9b0a38` · tip included tap-open BE/FE + VC 241 AAB docs |
-| Device | Controlled retest notification **received** and **tap opened FashionRise** (OPEN_URI removal validated) |
-| Destination | `/studio/runway` navigation **not yet confirmed** as absolute device proof (versionCode during latest test also unconfirmed) — do **not** claim full deep-link complete |
-| AAB | Internal **VC 241** available: `/var/www/fashionrise/artifacts/android/FashionRise-864bbc25-vc241-internal.aab` |
-| Deployed (pre-merge tip) | BE/FE already on tap-open tip; nginx devices allowlist preserved |
-| GPA.3329 | Scoped automated reconcile apply **DONE** · wallet **999397→999347** · clawed **50** · `orders_reconcile` · post dry-run `already_recovered` · GPA.3393 once · gates OFF |
-| Friend alerts | Settings promises friend alerts; producers for request/accept now wired to `notify_user` (this follow-up PR) |
-| Push operational? | **Partial** — open works; full workflow needs confirmed destination + real social-event device validation |
-| Permanent auto-apply | **OFF** — readiness work continues; separate PM approval required |
+| #540 | **MERGED** `2b9b0a38` — tap-open (no FCM `click_action`) + GPA.3329 docs · VC 241 AAB |
+| #541 | **MERGED** — friend request/accept → `notify_user` · dest `/studio/fashionrise?friends=1` · VC 252 AAB |
+| Tap | Device confirmed notification tap **opens** FashionRise (OPEN_URI removal validated) |
+| Destination | `/studio/runway` absolute device proof + installed `versionCode` during latest test **still unconfirmed** — do **not** claim full deep-link complete |
+| AAB | VC **241** tap-open · VC **252** friend alerts: `/var/www/fashionrise/artifacts/android/FashionRise-ba11fda2-vc252-internal.aab` |
+| Deployed | BE friend notify + FE `/version.json`=`ba11fda2` · nginx devices allowlist preserved |
+| GPA.3329 | Scoped automated reconcile apply **DONE** · wallet **999397→999347** · clawed **50** · `orders_reconcile` · post dry-run `already_recovered` · GPA.3393 once |
+| Backlog (read-only) | Android purchases **4** Sandbox · outstanding **50** on **active** `GPA.3387-…` (not refunded) · recoverable refund Stars **0** · debt **0** |
+| Gates | reconcile **ON** · apply **OFF** · purchasing **OFF** · credit **OFF** |
+| Ops doc | `docs/deploy/GOOGLE-PLAY-RECONCILE-OPERATOR.md` |
+| Push operational? | **Partial** — open works; needs confirmed destination + real social-event device validation |
+| Permanent auto-apply | **OFF** — readiness docs/tests in #542; separate PM approval required |
 
 ## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
 
