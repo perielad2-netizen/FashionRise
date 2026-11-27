@@ -1,5 +1,7 @@
 package app.fashionrise.studio;
 
+import android.os.Bundle;
+
 import com.getcapacitor.BridgeActivity;
 
 /**
@@ -17,4 +19,10 @@ import com.getcapacitor.BridgeActivity;
  * padding (PR #526) double-applied insets and surfaced a blank strip plus
  * ActionBar/theme regressions on device.
  */
-public class MainActivity extends BridgeActivity {}
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NotificationSettingsPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}

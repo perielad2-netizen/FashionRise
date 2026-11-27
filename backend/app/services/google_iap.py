@@ -255,11 +255,111 @@ def purchase_token_lock_key(purchase_token: str) -> int:
 
 
 @dataclass(frozen=True)
+class GooglePlayOrder:
+    """Authoritative Play ``orders.get`` financial snapshot."""
+
+    order_id: str
+    purchase_token: str | None
+    state: str
+    create_time: str | None
+    last_event_time: str | None
+    product_ids: tuple[str, ...]
+    has_full_refund_event: bool
+    has_partial_refund_events: bool
+    has_cancellation_event: bool
+    refund_reason: str | None
+    refund_total_currency: str | None
+    refund_total_units: str | None
+    refund_total_nanos: int | None
+    points_details: dict[str, Any] | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class VoidedGooglePurchase:
     purchase_token: str
     order_id: str | None
     voided_time_millis: int | None
     raw: dict[str, Any]
+
+
+def get_order(order_id: str, *, package_name: str | None = None) -> GooglePlayOrder:
+    """Call ``orders.get`` — financial truth for refunds (independent of RTDN).
+
+    Fail closed on transport / auth / missing payload. Never invent refund state.
+    """
+    oid = (order_id or "").strip()
+    if not oid:
+        raise ValidationAppError("order_id is required")
+    if not google_iap_configured():
+        raise ServiceUnavailableError("Google Play service account not configured")
+    pkg = (package_name or google_package_name()).strip()
+    if pkg != google_package_name():
+        raise ForbiddenError("Google package name mismatch")
+
+    url = (
+        "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{pkg}/orders/{oid}"
+    )
+    try:
+        bearer = _access_token()
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.get(url, headers={"Authorization": f"Bearer {bearer}"})
+    except httpx.HTTPError as exc:
+        _log.warning("google_orders_get_transport err=%s", type(exc).__name__)
+        raise ServiceUnavailableError("Google Play orders.get temporarily unavailable") from exc
+
+    if resp.status_code in (401, 403):
+        raise ServiceUnavailableError("Google Play Developer API authorization failed (orders.get)")
+    if resp.status_code == 404:
+        raise ForbiddenError("Google Play order not found")
+    if resp.status_code >= 400:
+        raise ServiceUnavailableError(f"Google Play orders.get HTTP {resp.status_code}")
+
+    try:
+        payload = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        raise ServiceUnavailableError("Google Play orders.get returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ServiceUnavailableError("Google Play orders.get malformed")
+
+    history = payload.get("orderHistory") if isinstance(payload.get("orderHistory"), dict) else {}
+    refund_event = history.get("refundEvent") if isinstance(history.get("refundEvent"), dict) else None
+    partials = history.get("partialRefundEvents") if isinstance(history.get("partialRefundEvents"), list) else []
+    cancel_event = history.get("cancellationEvent") if isinstance(history.get("cancellationEvent"), dict) else None
+
+    refund_details = (
+        refund_event.get("refundDetails") if refund_event and isinstance(refund_event.get("refundDetails"), dict) else {}
+    )
+    refund_total = refund_details.get("total") if isinstance(refund_details.get("total"), dict) else {}
+
+    product_ids: list[str] = []
+    for item in payload.get("lineItems") or []:
+        if isinstance(item, dict):
+            pid = str(item.get("productId") or "").strip()
+            if pid:
+                product_ids.append(pid)
+
+    points = payload.get("pointsDetails")
+    points_dict = points if isinstance(points, dict) else None
+
+    return GooglePlayOrder(
+        order_id=str(payload.get("orderId") or oid).strip(),
+        purchase_token=(str(payload.get("purchaseToken") or "").strip() or None),
+        state=str(payload.get("state") or "STATE_UNSPECIFIED").strip().upper(),
+        create_time=str(payload.get("createTime") or "").strip() or None,
+        last_event_time=str(payload.get("lastEventTime") or "").strip() or None,
+        product_ids=tuple(product_ids),
+        has_full_refund_event=refund_event is not None,
+        has_partial_refund_events=bool(partials),
+        has_cancellation_event=cancel_event is not None,
+        refund_reason=str(refund_event.get("refundReason") or "").strip() or None if refund_event else None,
+        refund_total_currency=str(refund_total.get("currencyCode") or "").strip() or None,
+        refund_total_units=str(refund_total.get("units")) if refund_total.get("units") is not None else None,
+        refund_total_nanos=int(refund_total["nanos"]) if isinstance(refund_total.get("nanos"), int) else None,
+        points_details=points_dict,
+        raw=payload,
+    )
 
 
 def list_voided_purchases(

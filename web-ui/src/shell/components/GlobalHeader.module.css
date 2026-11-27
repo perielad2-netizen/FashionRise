@@ -457,6 +457,74 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.notifBlock {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.notifRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notifTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: rgba(248, 243, 238, 0.95);
+}
+
+.notifHint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.62);
+}
+
+.notifSwitchOn,
+.notifSwitchOff {
+  min-width: 52px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.notifSwitchOn {
+  background: rgba(52, 211, 153, 0.22);
+  color: #bbf7d0;
+}
+
+.notifSwitchOff {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 243, 238, 0.78);
+}
+
+.notifSettingsLink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f9a8d4;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.notifNotice {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.72);
+}
+
 .aboutMeta {
   margin: 0;
   display: grid;

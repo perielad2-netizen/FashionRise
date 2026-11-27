@@ -75,14 +75,16 @@ def apple_shop_status(user: User | None = None) -> dict[str, Any]:
     When ``user`` is a designated sandbox tester, purchasing/credit flip on for
     that session even while public gates stay OFF.
     """
+    unlimited = bool(user is not None and ai_stars.user_has_unlimited_stars(user))
     return {
         "platform": "ios",
-        "purchasing_enabled": apple_iap.apple_purchasing_enabled_for(user),
+        "purchasing_enabled": apple_iap.apple_purchasing_enabled_for(user) and not unlimited,
         "credit_enabled": apple_iap.apple_credit_enabled_for(user),
         "verification_configured": apple_iap.apple_iap_configured(),
         "sandbox_tester": bool(
             user is not None and apple_iap.email_is_apple_sandbox_tester(user.email)
         ),
+        "unlimited_wallet": unlimited,
         "products": [
             {"product_id": pid, "stars": stars} for pid, stars in STARS_PRODUCTS.items()
         ],
@@ -91,14 +93,16 @@ def apple_shop_status(user: User | None = None) -> dict[str, Any]:
 
 def google_shop_status(user: User | None = None) -> dict[str, Any]:
     """Android Play Billing readiness (gates + configuration). No secrets."""
+    unlimited = bool(user is not None and ai_stars.user_has_unlimited_stars(user))
     return {
         "platform": "android",
-        "purchasing_enabled": google_iap.google_purchasing_enabled_for(user),
+        "purchasing_enabled": google_iap.google_purchasing_enabled_for(user) and not unlimited,
         "credit_enabled": google_iap.google_credit_enabled_for(user),
         "verification_configured": google_iap.google_iap_configured(),
         "license_tester": bool(
             user is not None and google_iap.email_is_google_license_tester(user.email)
         ),
+        "unlimited_wallet": unlimited,
         "package_name": google_iap.google_package_name(),
         "products": [
             {"product_id": pid, "stars": stars} for pid, stars in STARS_PRODUCTS.items()

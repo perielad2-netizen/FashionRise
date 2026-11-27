@@ -153,6 +153,12 @@ export function StarsShopModal({ open, onClose }: Props) {
   async function onNativeBuy(productId: string) {
     // Hard boundary: native store purchases only on Capacitor iOS / Android.
     if (isWebRuntime || unrecognizedNative || (!nativeIos && !nativeAndroid)) return
+    if (Boolean(user?.ai_stars_unlimited) || iapStatus?.unlimited_wallet) {
+      setNotice(
+        'This account has unlimited Stars. Purchases are not needed and checkout is disabled.',
+      )
+      return
+    }
     if (purchaseLock.current || busy) return
     purchaseLock.current = true
     setBusy(true)
@@ -191,8 +197,14 @@ export function StarsShopModal({ open, onClose }: Props) {
     }
   }
 
-  const unlimited = Boolean(user?.ai_stars_unlimited)
+  const unlimited = Boolean(user?.ai_stars_unlimited || iapStatus?.unlimited_wallet)
   const balance = unlimited ? '∞' : String(user?.ai_stars ?? 0)
+  const buyDisabled =
+    busy ||
+    unlimited ||
+    flowState === 'purchasing' ||
+    flowState === 'confirming' ||
+    !iapStatus?.purchasing_enabled
 
   // Portal to body so GlobalHeader stacking/background cannot clip the shop title
   // when opened from the yellow Stars badge inside the header.
@@ -253,7 +265,14 @@ export function StarsShopModal({ open, onClose }: Props) {
                 Stars packages are not available from the App Store right now.
               </p>
             ) : null}
-            {flowState === 'gate_off' || (iapStatus && !iapStatus.purchasing_enabled) ? (
+            {unlimited ? (
+              <p className={styles.comingSoon} role="status" data-testid="stars-unlimited-block">
+                This account has unlimited Stars. Checkout is disabled so you cannot pay for Stars
+                you do not need. Your unlimited entitlement is unchanged.
+              </p>
+            ) : null}
+            {!unlimited &&
+            (flowState === 'gate_off' || (iapStatus && !iapStatus.purchasing_enabled)) ? (
               <p className={styles.comingSoon} role="status">
                 Apple Stars purchasing is prepared but not enabled yet. Your balance still works for
                 existing Stars.
@@ -277,18 +296,15 @@ export function StarsShopModal({ open, onClose }: Props) {
                     <button
                       type="button"
                       className={styles.addBtn}
-                      disabled={
-                        busy ||
-                        flowState === 'purchasing' ||
-                        flowState === 'confirming' ||
-                        !iapStatus?.purchasing_enabled
-                      }
+                      disabled={buyDisabled}
                       onClick={() => void onNativeBuy(pkg.productId)}
                     >
                       {buyingProductId === pkg.productId &&
                       (flowState === 'purchasing' || flowState === 'confirming')
                         ? 'Buying…'
-                        : 'Buy'}
+                        : unlimited
+                          ? 'Not needed'
+                          : 'Buy'}
                     </button>
                   </li>
                 ))}
@@ -315,7 +331,14 @@ export function StarsShopModal({ open, onClose }: Props) {
                 Stars packages are not available from Google Play right now.
               </p>
             ) : null}
-            {flowState === 'gate_off' || (iapStatus && !iapStatus.purchasing_enabled) ? (
+            {unlimited ? (
+              <p className={styles.comingSoon} role="status" data-testid="stars-unlimited-block">
+                This account has unlimited Stars. Checkout is disabled so you cannot pay for Stars
+                you do not need. Your unlimited entitlement is unchanged.
+              </p>
+            ) : null}
+            {!unlimited &&
+            (flowState === 'gate_off' || (iapStatus && !iapStatus.purchasing_enabled)) ? (
               <p className={styles.comingSoon} role="status">
                 Google Play Stars purchasing is prepared but not enabled yet
                 {iapStatus && 'license_tester' in iapStatus && iapStatus.license_tester
@@ -363,19 +386,15 @@ export function StarsShopModal({ open, onClose }: Props) {
                     <button
                       type="button"
                       className={styles.addBtn}
-                      disabled={
-                        busy ||
-                        flowState === 'purchasing' ||
-                        flowState === 'confirming' ||
-                        !iapStatus?.purchasing_enabled ||
-                        !iapProducts.length
-                      }
+                      disabled={buyDisabled || !iapProducts.length}
                       onClick={() => void onNativeBuy(pkg.productId)}
                     >
                       {buyingProductId === pkg.productId &&
                       (flowState === 'purchasing' || flowState === 'confirming')
                         ? 'Buying…'
-                        : 'Buy'}
+                        : unlimited
+                          ? 'Not needed'
+                          : 'Buy'}
                     </button>
                   </li>
                 ))}

@@ -202,6 +202,49 @@ def reconcile_voided_purchases(db: Session, *, lookback_days: int = 30) -> dict[
     }
 
 
+def reconcile_canceled_active_purchases(db: Session, *, limit: int = 200) -> dict[str, Any]:
+    """Legacy entrypoint — delegates to orders.get financial reconcile safety policy.
+
+    Must **not** claw back from products.get alone or bypass
+    ``IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY``. Mutations stay dry-run unless the
+    financial apply gate is explicitly true.
+    """
+    from app.core.config import get_settings
+    from app.services import google_play_reconcile
+
+    if not google_iap.google_iap_configured():
+        raise ServiceUnavailableError("Google Play service account not configured")
+
+    apply_enabled = bool(
+        getattr(get_settings(), "iap_google_financial_reconcile_apply", False)
+    )
+    cap = max(1, min(int(limit or 200), 200))
+    report = google_play_reconcile.reconcile_android_purchases(
+        db,
+        dry_run=not apply_enabled,
+        limit=cap,
+        persist=True,
+        advance_cursor=True,
+    )
+    counts = report.get("counts") or {}
+    applied = int(report.get("stars_recovered") or 0)
+    return {
+        "ok": True,
+        "delegated_to": "google_play_reconcile",
+        "dry_run": report.get("dry_run"),
+        "apply_enabled": apply_enabled,
+        "scanned": report.get("scanned"),
+        "applied": int(counts.get("recover_full") or 0) if not report.get("dry_run") else 0,
+        "stars_recovered": applied if not report.get("dry_run") else 0,
+        "duplicates": int(counts.get("already_recovered") or 0),
+        "skipped": int(counts.get("ok") or 0)
+        + int(counts.get("review") or 0)
+        + int(counts.get("wait") or 0),
+        "failed": int(counts.get("skip_error") or 0) + int(counts.get("skip_identity") or 0),
+        "counts": counts,
+    }
+
+
 def _maybe_verify_oidc(authorization: str | None) -> None:
     settings = get_settings()
     if not bool(getattr(settings, "iap_google_rtdn_verify_oidc", True)):

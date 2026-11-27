@@ -27,6 +27,7 @@ import {
   getMyProfile,
   profileAvatarSrc,
 } from '@/services/profilesApi'
+import { NotificationsSettingsToggle } from '@/shell/components/NotificationsSettingsToggle'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './GlobalHeader.module.css'
 
@@ -221,11 +222,13 @@ export function GlobalHeader({
   const starsLabel = unlimited
     ? '∞'
     : Number(balance ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const purchaseNote = nativeIos
-    ? 'Buy Stars with Apple In‑App Purchase when purchasing is enabled for this build.'
-    : nativeAndroid
-      ? 'Google Play Billing for Stars is not available yet. Your current balance still works for AI features.'
-      : 'Stars can only be purchased through the FashionRise mobile app. Sign in with the same account to use your Stars on the web.'
+  const purchaseNote = unlimited
+    ? 'This account has unlimited Stars — purchases are not needed and the shop will not charge you.'
+    : nativeIos
+      ? 'Buy Stars with Apple In‑App Purchase when purchasing is enabled for this build.'
+      : nativeAndroid
+        ? 'Google Play Billing for Stars is available to license testers while public purchasing stays off.'
+        : 'Stars can only be purchased through the FashionRise mobile app. Sign in with the same account to use your Stars on the web.'
 
   return (
     <header className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>
@@ -407,6 +410,7 @@ export function GlobalHeader({
               Settings.
             </p>
             <div className={styles.settingsList}>
+              <NotificationsSettingsToggle />
               <button
                 type="button"
                 className={styles.settingsItem}

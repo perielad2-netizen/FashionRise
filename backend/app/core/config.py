@@ -495,6 +495,13 @@ class Settings(BaseSettings):
     # Exact Pub/Sub push service-account email (OIDC ``email`` claim). Required when
     # OIDC verify is on in production — never accept arbitrary *.gserviceaccount.com.
     iap_google_rtdn_expected_email: str = ""
+    # Bounded Play financial reconcile (orders.get + entitlement). Hourly cluster
+    # tick (advisory lock + last-run) — not every AI worker job tick. Scan/dry-run
+    # may run when enabled; Stars mutations stay OFF until apply is explicitly true.
+    iap_google_financial_reconcile_enabled: bool = True
+    iap_google_financial_reconcile_apply: bool = False
+    iap_google_financial_reconcile_limit: int = 50
+    iap_google_financial_reconcile_interval_seconds: float = 3600.0
     # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also
     # refuses unverified credit even in non-prod — send signed sandbox JWS instead.
     iap_allow_unverified_sandbox: bool = False

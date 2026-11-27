@@ -170,4 +170,13 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
         run_cost_sync_tick(db)
     except Exception:  # noqa: BLE001
         logger.exception("AI cost sync tick failed (non-fatal)")
+    # Google Play financial reconcile — hourly cluster tick (not every AI job tick).
+    # Interval + advisory lock + last-run live in google_play_reconcile_worker.
+    # Apply stays OFF unless IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true.
+    try:
+        from app.services.google_play_reconcile_worker import run_google_play_reconcile_tick
+
+        run_google_play_reconcile_tick(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("Google Play financial reconcile tick failed (non-fatal)")
     return magic_n + croquis_n + tech_n

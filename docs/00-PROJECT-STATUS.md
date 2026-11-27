@@ -3,7 +3,39 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:45 Asia/Jerusalem — Android **edge-to-edge UI regression fix** (revert #526 native insets) · RTDN live · public purchase **OFF**
+**Last updated:** 2026-11-27 13:20 Asia/Jerusalem — PR **#532** PM corrections A–E (hourly reconcile · Admin DB · financial evidence · auto FCM) · apply **OFF** · no new AAB yet
+
+## FIX — PR #532 PM review corrections A–E (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#532** · `cursor/web-android-push-refund-unlimited-77c6` |
+| A — Scheduling | Hourly cluster tick (`google_play_reconcile_worker`) — advisory lock + last-run + backoff · **not** every AI job tick · fair cursor pagination · `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` |
+| B — Admin | Overview reads **persisted** `google_play_reconcile_runs` / `findings` only (Alembic **047**) — **no** `orders.get`/`products.get` on page load · Sandbox vs Production separated |
+| C — Financial | Authoritative full refund = state **REFUNDED** **and** refundEvent **and** refundDetails.total · identity match (order / token / product) · re-check at apply · failed rows do not suppress retry · legacy `reconcile_canceled_active_purchases` delegates to safe path · report **actual** Stars recovered after lock |
+| D — Native push | If Android OS permission granted and user not opted out → auto FCM register after login/resume · Settings = preference/visibility (not second activation) · enabled = backend-confirmed device for current account |
+| E — Ship | Corrections consolidated in **#532** · **no replacement AAB** until client push changes are finalized/merged · Alpha 114 + 15 testers / layout / R8 / signing preserved |
+| Prod dry-run (prior) | `GPA.3369…` **already_recovered** (wallet **999347**) · `GPA.3387…` **ok/PROCESSED** · apply **OFF** · accepted |
+| Gates | Public purchasing/credit **OFF** · automatic financial apply **NOT** authorized |
+| Exact next action | Merge #532 → deploy BE (Alembic **047**) → FE for FCM auto-register · **then** decide AAB · keep apply **OFF** |
+
+## FIX — Google Play financial reconcile + Android push/unlimited (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Refund semantics (Google) | Refund-only **without revoke** may emit neither RTDN nor Voided Purchases — **not** assumed Pub/Sub failure ([voided-purchases](https://developers.google.com/android-publisher/voided-purchases), [orders](https://developers.google.com/android-publisher/api-ref/rest/v3/orders)) |
+| Authority | `orders.get` = financial state · `products.get` = entitlement · clawback only when **authoritative full refund** + canceled/404 entitlement + identity match |
+| Owner order `GPA.3369-0332-8762-49726` | `orders.get` → **`REFUNDED`** + full `refundEvent` (10:18:03Z, OTHER, 19.9 ILS) · entitlement **canceled** · ledger already `refunded` / clawed **50** / wallet **999347** |
+| Dry-run (read-only) | Decision **`already_recovered`** · `stars_would_recover=0` · apply flag **OFF** · no further wallet mutation |
+| Hypothetical pre-recovery | Would classify **`recover_full`** (full refund + canceled entitlement) |
+| Duplicate safety | Clawback engine + durable message ids — outstanding=0 blocks second deduct; unit test covers RTDN after orders reconcile |
+| Yaniv `GPA.3387-…` | `orders.get` **`PROCESSED`** · entitlement purchased · dry-run **`ok`** (successful buy; Play Points overlay unrelated) · unlimited shop blocks new buys |
+| Native push | Auto-register when OS granted + not opted out · backend confirmation required · Web Push / iOS / logout isolation preserved |
+| Admin | Persisted reconcile snapshot on overview + `GET /admin/iap/google/reconcile` (dry-run only) |
+| Periodic | **Hourly** cluster worker (not every AI tick); **mutations require** `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true` (currently **false**) |
+| Revenue | Sandbox still excluded from Production revenue |
+| Gates / Alpha | Public purchasing/credit **OFF** · Alpha 114 + 15 testers untouched · iOS purchasing unchanged |
+| Exact next action | Keep apply **OFF** until PM authorizes · ship FE + BE from #532 · AAB only after client push final |
 
 ## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
 

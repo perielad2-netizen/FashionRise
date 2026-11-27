@@ -43,6 +43,9 @@ class NativePushDeviceCreate(BaseModel):
 class NativePushDeviceRead(BaseModel):
     id: UUID
     platform: str
+    # Owner's own device token — required so the client can confirm backend
+    # registration for the current account/device (not local cache alone).
+    device_token: str
     created_at: datetime
     updated_at: datetime
 

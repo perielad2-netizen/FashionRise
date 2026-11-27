@@ -1,0 +1,274 @@
+"""Hourly Google Play financial reconcile tick (cluster-wide).
+
+Mirrors ``ai_cost_sync_worker`` scheduling (interval + last-run), but holds a
+**session-level** Postgres advisory lock on a **dedicated connection** for the
+entire reconcile cycle so internal ``db.commit()`` calls cannot release it.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from typing import Any, Iterator
+
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.core.errors import ServiceUnavailableError
+from app.db.session import SessionLocal
+from app.models.google_play_reconcile import GooglePlayReconcileRun
+from app.services import google_play_reconcile
+
+log = logging.getLogger(__name__)
+
+# Stable cluster-wide lock key for Google Play financial reconcile (FashionRise GPRC).
+GOOGLE_PLAY_RECONCILE_LOCK_KEY = 0x46524953_47505243
+
+_GOOGLE_API_ERROR_CODES = frozenset(
+    {
+        "GOOGLE_API_UNAVAILABLE",
+        "GOOGLE_API_FORBIDDEN",
+        "GOOGLE_NOT_CONFIGURED",
+        "TICK_CRASH",
+    }
+)
+
+# Run statuses that must not mask an underlying failure for backoff math.
+_BACKOFF_IGNORE_STATUSES = frozenset(
+    {
+        "skipped_backoff",
+        "skipped_lock",
+        "skipped_disabled",
+    }
+)
+
+_last_tick_monotonic: float | None = None
+
+
+def _interval_seconds(settings: Any) -> float:
+    interval = float(
+        getattr(settings, "iap_google_financial_reconcile_interval_seconds", 3600) or 3600
+    )
+    return max(60.0, interval)
+
+
+def _recent_sync(db: Session, *, interval: float) -> bool:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=interval)
+    count = db.scalar(
+        select(func.count())
+        .select_from(GooglePlayReconcileRun)
+        .where(
+            GooglePlayReconcileRun.status.in_(("success", "partial", "skipped_disabled")),
+            GooglePlayReconcileRun.started_at >= cutoff,
+        )
+    )
+    return int(count or 0) > 0
+
+
+def _latest_authoritative_run(db: Session) -> GooglePlayReconcileRun | None:
+    """Most recent run that is not a skipped-backoff/lock placeholder.
+
+    ``skipped_backoff`` rows must not reset failure backoff — look past them to
+    the underlying failed (or successful) run.
+    """
+    return db.scalar(
+        select(GooglePlayReconcileRun)
+        .where(GooglePlayReconcileRun.status.notin_(tuple(_BACKOFF_IGNORE_STATUSES)))
+        .order_by(GooglePlayReconcileRun.started_at.desc())
+        .limit(1)
+    )
+
+
+def _backoff_active(db: Session) -> tuple[bool, str | None]:
+    """Skip when the last authoritative run failed on Google API errors within backoff."""
+    last = _latest_authoritative_run(db)
+    if last is None or last.status != "failed":
+        return False, None
+    if (last.error_code or "") not in _GOOGLE_API_ERROR_CODES:
+        return False, None
+    meta = last.meta if isinstance(last.meta, dict) else {}
+    streak = max(0, int(meta.get("fail_streak") or 1))
+    # 15m, 30m, 1h, 2h, 4h, cap 6h
+    backoff = min(6 * 3600, 900 * (2 ** min(streak - 1, 5)))
+    ready_at = last.started_at + timedelta(seconds=backoff)
+    if datetime.now(timezone.utc) < ready_at:
+        return True, f"backoff_until_{ready_at.isoformat()}"
+    return False, None
+
+
+def _fail_streak(db: Session) -> int:
+    last = _latest_authoritative_run(db)
+    if last is None or last.status != "failed":
+        return 0
+    meta = last.meta if isinstance(last.meta, dict) else {}
+    return max(0, int(meta.get("fail_streak") or 0))
+
+
+@contextmanager
+def _hold_cluster_lock() -> Iterator[bool]:
+    """Hold ``pg_try_advisory_lock`` on a dedicated connection for the whole cycle.
+
+    Transaction-scoped ``pg_try_advisory_xact_lock`` is released by any
+    ``db.commit()`` inside reconcile/apply — so the cluster lock must live on a
+    separate session until unlock / connection close.
+    """
+    lock_db = SessionLocal()
+    acquired = False
+    try:
+        bind = lock_db.get_bind()
+        if bind is None or bind.dialect.name != "postgresql":
+            # Non-Postgres (tests): process throttle still applies; allow through.
+            yield True
+            return
+        got = lock_db.execute(
+            text("SELECT pg_try_advisory_lock(:k)"),
+            {"k": GOOGLE_PLAY_RECONCILE_LOCK_KEY},
+        ).scalar()
+        acquired = bool(got)
+        if not acquired:
+            yield False
+            return
+        yield True
+    finally:
+        if acquired:
+            try:
+                lock_db.execute(
+                    text("SELECT pg_advisory_unlock(:k)"),
+                    {"k": GOOGLE_PLAY_RECONCILE_LOCK_KEY},
+                )
+                lock_db.commit()
+            except Exception:  # noqa: BLE001
+                log.exception("google_play_reconcile unlock failed")
+                try:
+                    lock_db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+        lock_db.close()
+
+
+def run_google_play_reconcile_tick(db: Session, *, force: bool = False) -> dict[str, Any]:
+    """Run bounded financial reconcile subject to cluster interval + lock + backoff."""
+    global _last_tick_monotonic
+    settings = get_settings()
+    interval = _interval_seconds(settings)
+    now_m = time.monotonic()
+    if not force and _last_tick_monotonic is not None:
+        if now_m - _last_tick_monotonic < interval:
+            return {"skipped": True, "reason": "interval"}
+
+    enabled = bool(getattr(settings, "iap_google_financial_reconcile_enabled", True))
+    if not enabled:
+        if not force and _recent_sync(db, interval=interval):
+            _last_tick_monotonic = now_m
+            return {"skipped": True, "reason": "interval_db"}
+        google_play_reconcile.record_reconcile_run(
+            db,
+            status="skipped_disabled",
+            dry_run=True,
+            meta={"reason": "reconcile_disabled"},
+        )
+        _last_tick_monotonic = now_m
+        return {"skipped": True, "reason": "disabled"}
+
+    if not force and _recent_sync(db, interval=interval):
+        _last_tick_monotonic = now_m
+        return {"skipped": True, "reason": "interval_db"}
+
+    in_backoff, backoff_reason = _backoff_active(db)
+    if not force and in_backoff:
+        # Record for observability, but status is ignored by backoff lookup so it
+        # cannot reset fail_streak / ready_at of the underlying failed run.
+        google_play_reconcile.record_reconcile_run(
+            db,
+            status="skipped_backoff",
+            dry_run=True,
+            meta={
+                "reason": backoff_reason,
+                "preserves_failure_backoff": True,
+            },
+        )
+        _last_tick_monotonic = now_m
+        return {"skipped": True, "reason": "backoff"}
+
+    with _hold_cluster_lock() as got_lock:
+        if not got_lock:
+            return {"skipped": True, "reason": "lock_held"}
+
+        if not force and _recent_sync(db, interval=interval):
+            _last_tick_monotonic = now_m
+            return {"skipped": True, "reason": "interval_db"}
+
+        apply_enabled = bool(
+            getattr(settings, "iap_google_financial_reconcile_apply", False)
+        )
+        # Public apply stays OFF unless explicitly authorized.
+        dry_run = not apply_enabled
+        limit = int(getattr(settings, "iap_google_financial_reconcile_limit", 50) or 50)
+        started = datetime.now(timezone.utc)
+
+        try:
+            report = google_play_reconcile.reconcile_android_purchases(
+                db,
+                dry_run=dry_run,
+                limit=limit,
+                persist=True,
+                advance_cursor=True,
+            )
+        except ServiceUnavailableError as exc:
+            streak = _fail_streak(db) + 1
+            google_play_reconcile.record_reconcile_run(
+                db,
+                status="failed",
+                dry_run=dry_run,
+                error_code="GOOGLE_API_UNAVAILABLE",
+                error_detail=str(exc),
+                meta={"fail_streak": streak},
+                started_at=started,
+            )
+            _last_tick_monotonic = now_m
+            return {
+                "skipped": False,
+                "status": "failed",
+                "error_code": "GOOGLE_API_UNAVAILABLE",
+            }
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Google Play financial reconcile tick crashed")
+            streak = _fail_streak(db) + 1
+            try:
+                google_play_reconcile.record_reconcile_run(
+                    db,
+                    status="failed",
+                    dry_run=dry_run,
+                    error_code="TICK_CRASH",
+                    error_detail=f"{type(exc).__name__}:{exc}",
+                    meta={"fail_streak": streak},
+                    started_at=started,
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("Failed to record reconcile crash run")
+            _last_tick_monotonic = now_m
+            return {"skipped": False, "status": "failed", "error_code": "TICK_CRASH"}
+
+        counts = report.get("counts") or {}
+        has_errors = int(counts.get("skip_error") or 0) > 0
+        status = "partial" if has_errors else "success"
+        google_play_reconcile.record_reconcile_run(
+            db,
+            status=status,
+            dry_run=bool(report.get("dry_run", dry_run)),
+            report=report,
+            meta={"fail_streak": 0, "apply_enabled": apply_enabled},
+            started_at=started,
+        )
+        _last_tick_monotonic = now_m
+        return {
+            "skipped": False,
+            "status": status,
+            "scanned": report.get("scanned"),
+            "stars_would_recover": report.get("stars_would_recover"),
+            "stars_recovered": report.get("stars_recovered"),
+            "dry_run": report.get("dry_run"),
+        }
