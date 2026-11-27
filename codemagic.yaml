@@ -354,18 +354,40 @@ workflows:
         script: |
           set -euo pipefail
           DEST="$CM_BUILD_DIR/web-ui/android/app/google-services.json"
-          # Prefer Codemagic secure file mounted as CM_GOOGLE_SERVICES_JSON path,
-          # else raw JSON in env GOOGLE_SERVICES_JSON (fashionrise_native group).
+          # Cursor secret name: ANDROID_GOOGLE_SERVICES_JSON (client config only — no private keys).
+          # Prefer secure file CM_GOOGLE_SERVICES_JSON, else env ANDROID_GOOGLE_SERVICES_JSON
+          # or legacy GOOGLE_SERVICES_JSON from Codemagic group fashionrise_native.
           if [ -n "${CM_GOOGLE_SERVICES_JSON:-}" ] && [ -f "$CM_GOOGLE_SERVICES_JSON" ]; then
             cp "$CM_GOOGLE_SERVICES_JSON" "$DEST"
+          elif [ -n "${ANDROID_GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s\n' "$ANDROID_GOOGLE_SERVICES_JSON" > "$DEST"
           elif [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
             printf '%s\n' "$GOOGLE_SERVICES_JSON" > "$DEST"
           else
-            echo "WARNING: google-services.json not provided — FCM client init will be skipped"
-            exit 0
+            echo "ERROR: google-services.json missing — set ANDROID_GOOGLE_SERVICES_JSON (or CM_GOOGLE_SERVICES_JSON) in fashionrise_native"
+            exit 1
           fi
-          python3 -c "import json,sys; json.load(open(sys.argv[1])); print('google-services.json ok')" "$DEST"
-          # Never archive secrets as build artifacts.
+          FR_GS_DEST="$DEST" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          dest = Path(os.environ["FR_GS_DEST"])
+          data = json.loads(dest.read_text(encoding="utf-8"))
+          blob = json.dumps(data)
+          if "BEGIN PRIVATE KEY" in blob or data.get("private_key"):
+              raise SystemExit("Refusing google-services.json that contains a private key")
+          pkg = None
+          for c in data.get("client") or []:
+              pkg = ((c.get("client_info") or {}).get("android_client_info") or {}).get("package_name")
+              if pkg:
+                  break
+          project = (data.get("project_info") or {}).get("project_id")
+          if project != "fashionrise-e2f01":
+              raise SystemExit(f"Unexpected Firebase project_id: {project!r}")
+          if pkg != "app.fashionrise.studio":
+              raise SystemExit(f"Unexpected Android package: {pkg!r}")
+          print("google-services.json ok project=", project, "package=", pkg)
+          PY
+          # Keep until bundleRelease; remove after AAB so it is not exported as an artifact.
 
       - name: Assert Android launcher icons are real
         script: |

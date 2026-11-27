@@ -2,7 +2,7 @@
 
 FashionRise keeps **Web Push (VAPID)** unchanged for browsers. Native FCM/APNs is **fail-closed** until both a platform flag **and** credentials are present.
 
-**Flags remain OFF** until separately authorized. Incomplete native infra must not break Web Push.
+**Android FCM is LIVE** on production (`fashionrise-e2f01`, 2026-11-27 Asia/Jerusalem). iOS APNs stays as previously configured — do not flip flags without an explicit ask. Incomplete native infra must not break Web Push.
 
 ## Flags (default OFF)
 
@@ -36,11 +36,19 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 
 ## Android (Firebase / FCM)
 
-1. Firebase project linked to Play app `app.fashionrise.studio`.
-2. Download `google-services.json` into the Android app module via Codemagic/secure file — **never commit**.
-3. Create a service account with Firebase Cloud Messaging Admin; store JSON on the API host only.
-4. Play App Signing SHA-256 → `assetlinks.json` (see templates under `web-ui/public/.well-known/`).
-5. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
+| Item | Value |
+| --- | --- |
+| Firebase project | `fashionrise-e2f01` |
+| Android package | `app.fashionrise.studio` |
+| Prod SA file | `/var/lib/fashionrise/secrets/fcm-firebase-sa.json` (host only · mode 0640) |
+| Prod env | `NATIVE_PUSH_ANDROID_ENABLED=true` · `NATIVE_PUSH_FCM_PROJECT_ID=fashionrise-e2f01` · `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=<abs path>` |
+| Cursor secrets | `FIREBASE_SERVICE_ACCOUNT_JSON` (API host) · `ANDROID_GOOGLE_SERVICES_JSON` (Codemagic only) |
+
+1. Codemagic group `fashionrise_native`: set secret env `ANDROID_GOOGLE_SERVICES_JSON` (client config — **no** private key). Workflow injects `web-ui/android/app/google-services.json`, validates project/package, then deletes after `bundleRelease`.
+2. Never commit `google-services.json` or the FCM service-account private key; never ship the SA inside the AAB.
+3. Play App Signing SHA-256 → `assetlinks.json` (see templates under `web-ui/public/.well-known/`).
+4. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
+5. Smoke: `GET /api/v1/push/native/capability` → `android_enabled: true`; Internal AAB → Runway bell ON → like → tap `/studio…`.
 
 ## iOS (APNs) — entitlements & provisioning
 
