@@ -3,24 +3,28 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 16:10 Asia/Jerusalem — #540/#541 MERGED · tap opens · friend alerts · reconcile readiness · apply OFF
+**Last updated:** 2026-11-27 16:12 Asia/Jerusalem — #540/#541/#542 MERGED+deployed · tap opens · friend alerts · apply OFF
 
-## LIVE — Push + reconcile readiness (2026-11-27 Asia/Jerusalem)
+## LIVE — Push + reconcile readiness complete for PM gate (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| #540 | **MERGED** `2b9b0a38` — tap-open (no FCM `click_action`) + GPA.3329 docs · VC 241 AAB |
-| #541 | **MERGED** — friend request/accept → `notify_user` · dest `/studio/fashionrise?friends=1` · VC 252 AAB |
+| #540 | **MERGED** `2b9b0a38` — tap-open (no FCM `click_action`) + GPA.3329 · VC 241 AAB |
+| #541 | **MERGED** `e240512a` — friend request/accept → `notify_user` · `/studio/fashionrise?friends=1` · VC 252 AAB |
+| #542 | **MERGED** `28f21a15` — Admin snapshot monitoring · classification/debt/activation runbook · read-only backlog script |
+| BE deploy | `/opt/fashionrise/src` @ **`28f21a1`** · API + AI workers restarted · runtime `fcm_no_click_action=PASS` · gates assert **PASS** |
+| FE deploy | `/var/www/fashionrise/current` → `ba11fda2-friend-alerts` · `/version.json`=`ba11fda2` |
+| Nginx | devices allowlist assert **PASS** (upsert/concurrent path preserved) |
 | Tap | Device confirmed notification tap **opens** FashionRise (OPEN_URI removal validated) |
-| Destination | `/studio/runway` absolute device proof + installed `versionCode` during latest test **still unconfirmed** — do **not** claim full deep-link complete |
-| AAB | VC **241** tap-open · VC **252** friend alerts: `/var/www/fashionrise/artifacts/android/FashionRise-ba11fda2-vc252-internal.aab` |
-| Deployed | BE friend notify + FE `/version.json`=`ba11fda2` · nginx devices allowlist preserved |
+| Destination / VC | `/studio/runway` absolute proof + installed `versionCode` on latest successful tap **still unconfirmed** |
+| Social producers | likes · comments · comment-likes · scores · **friend request** · **friend accepted** — all via shared `notify_user` |
+| AAB | VC **241** tap-open · VC **252** friend alerts at `/var/www/fashionrise/artifacts/android/FashionRise-ba11fda2-vc252-internal.aab` |
 | GPA.3329 | Scoped automated reconcile apply **DONE** · wallet **999397→999347** · clawed **50** · `orders_reconcile` · post dry-run `already_recovered` · GPA.3393 once |
-| Backlog (read-only) | Android purchases **4** Sandbox · outstanding **50** on **active** `GPA.3387-…` (not refunded) · recoverable refund Stars **0** · debt **0** |
-| Gates | reconcile **ON** · apply **OFF** · purchasing **OFF** · credit **OFF** |
+| Backlog (read-only, live) | Android **4** Sandbox · outstanding **50** on **active** `GPA.3387-8819-3710-21379` · recoverable refund Stars **0** · debt **0** · `findings_review` **0** · fail streak **0** |
+| Gates | `RECONCILE_ENABLED=true` · `APPLY=false` · `PURCHASING=false` · `CREDIT=false` |
 | Ops doc | `docs/deploy/GOOGLE-PLAY-RECONCILE-OPERATOR.md` |
-| Push operational? | **Partial** — open works; needs confirmed destination + real social-event device validation |
-| Permanent auto-apply | **OFF** — readiness docs/tests in #542; separate PM approval required |
+| Push operational? | **Partial** — open works; full workflow needs destination+VC proof + real social-event device validation (install VC ≥252 for friends dest) |
+| Permanent auto-apply | **OFF** — readiness complete for PM review; do **not** enable until activation procedure + dual-sign |
 
 ## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
 
@@ -53,18 +57,19 @@
 
 | Topic | Status |
 | --- | --- |
-| Candidate selection | Fair cursor + refunded/outstanding stars; order-scoped path proven |
-| Batch limits | Worker limit env present; keep bounded |
+| Candidate selection | Fair cursor + refunded/outstanding stars; order-scoped path proven (GPA.3329) |
+| Batch limits | Default 50 / max 200 — OK |
 | Cluster locking | Advisory lock + purchase-token lock + durable message id — OK |
-| Provider outages / retry | Dry-run path tolerates; apply must stay fail-closed on ambiguity |
-| Refund without revoke | Classifies `review` (no blind deduct) — keep |
-| Partial refunds | Needs explicit policy before unattended apply |
-| Insufficient balance / debt | `ai_stars_iap_debt` path exists; monitor alerts required before unattended |
-| Duplicate RTDN + reconcile | Idempotent message ids — OK for applied recoveries |
-| Historical unrecovered | Sandbox gap (no cancel RTDN) → reconcile is the fallback; backlog must be reviewed before blanket apply |
-| Ledger / audit | `iap_google_notifications` + purchase clawback fields; no separate stars ledger table |
+| Provider outages / retry | Failed runs + exponential backoff 15m…6h — OK |
+| Refund without revoke | `review` (no blind deduct) — documented |
+| Partial / ambiguous refunds | Explicit `review` reasons in `classify_recovery` + operator doc — OK |
+| Insufficient balance / debt | `ai_stars_iap_debt` + runbook scenarios — documented (no customer-facing policy change) |
+| Monitoring | `admin_reconciliation_snapshot` backlog/fail streak/lock skips — #542 |
+| Duplicate RTDN + reconcile | Idempotent message ids — OK |
+| Historical backlog | Read-only: recoverable refund Stars **0**; outstanding 50 is **active** (not refund) |
+| Ledger / audit | `GooglePlayReconcileRun` / findings + clawback fields |
 | Emergency disable | `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (current) |
-| **Verdict** | Detection + scoped apply OK. **Blockers for permanent ON:** ops alerts, partial-refund policy, debt/shortfall runbook, backlog review, dual-sign enablement. Do **not** flip persistent apply without PM approval. |
+| **Verdict** | Engineering readiness **complete**. Permanent apply still **OFF** pending PM dual-sign per `GOOGLE-PLAY-RECONCILE-OPERATOR.md`. |
 
 ## LIVE — VC 230 push registration + controlled FCM test (2026-11-27 Asia/Jerusalem)
 
