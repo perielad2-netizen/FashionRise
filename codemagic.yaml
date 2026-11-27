@@ -331,7 +331,8 @@ workflows:
         # AAB must exceed any APK/AAB still declaring android.permission.CAMERA.
         # Raised so stamp > Play Alpha versionCode 114 and Internal/sideload 145.
         # versionCode = PROJECT_BUILD_NUMBER + OFFSET; fail-closed if ≤ Play latest.
-        ANDROID_VERSION_CODE_OFFSET: "70"
+        # Prior Internal/sideload consumed through versionCode 167 — keep stamp above.
+        ANDROID_VERSION_CODE_OFFSET: "120"
       node: 22
       java: 21
 
