@@ -5,8 +5,7 @@
       "namespace": "android_app",
       "package_name": "app.fashionrise.studio",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
-        "REPLACE_WITH_UPLOAD_KEY_SHA256_IF_NEEDED"
+        "D8:2D:D6:16:40:F9:4E:39:5E:30:14:08:04:41:8D:87:C6:D6:D5:78:B9:70:48:1E:6A:13:08:F2:53:A1:79:16"
       ]
     }
   }
