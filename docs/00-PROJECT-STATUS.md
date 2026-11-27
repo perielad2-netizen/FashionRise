@@ -3,22 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 12:10 Asia/Jerusalem — Android release readiness **COMPLETE** (VC 156 owner-validated) · public Play billing gates **OFF** · Alpha closed preserved
+**Last updated:** 2026-11-27 12:25 Asia/Jerusalem — Android sandbox **purchase COMPLETE** · **refund clawback NOT received** · public Play gates **OFF**
 
-## COMPLETE — Android release readiness (2026-11-27 Asia/Jerusalem)
+## COMPLETE — Android release readiness + sandbox purchase (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **COMPLETE** for Internal/closed device readiness · public Play Stars gates remain **OFF** until PM flip |
-| AAB | Codemagic [6b095171…](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b09517117e6d611c9fb17af) · **VC 156** / 1.0 · owner-validated on device |
-| Device matrix | Login · FCM push · camera · deep links · restored native layout (no ActionBar / no double inset) · Play sandbox UI path exercised |
-| RTDN | Test notification `applied` (message_id `23636621182746101`) · zero wallet mutation |
-| Ledger verify | `platform=android` purchases in prod DB: **0** · `POST /shop/iap/confirm` for Android: **none observed** · `iap_stars_adjustments` android: **0** |
-| Sandbox revenue | Admin analytics excludes `environment=Sandbox` / test envs from Production revenue (code path verified); no Android Sandbox rows yet to exclude |
-| Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` · license-tester allowlist only |
-| Alpha closed | **VC 114** + **15** testers — **preserved** (untouched) |
-| Public activation prep | [`docs/deploy/ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md`](./deploy/ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md) — checklist only; **do not** flip C1/C2 without §B ledger |
-| Exact next action | Complete license-tester sandbox **confirm + refund** ledger rows (B1–B4) → then PM may authorize public gates |
+| Status | Device readiness **COMPLETE** · sandbox **purchase COMPLETE** · sandbox **refund/clawback NOT COMPLETE** · public gates **OFF** |
+| AAB | Codemagic [6b095171…](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b09517117e6d611c9fb17af) · **VC 156** owner-validated |
+| Sandbox buy | Order **`GPA.3369-0332-8762-49726`** · purchase `671392a4-5e3b-483a-bf13-c702418b7aaf` · `stars_50` · `environment=Sandbox` · credited **50** once · ack+consumed · wallet 999347→**999397** |
+| Purchase RTDN | `one_time_purchased` received (pre-confirm → `unmatched`) · confirm **200** |
+| Sandbox refund (Play) | Owner refunded ~12:18 Asia/Jerusalem · Play `products.get` → **`purchaseState=1` CANCELED** · still consumed+acked · `purchaseType=0` test |
+| Refund RTDN | **NONE** after refund (no `one_time_canceled` / `voided` row) · `voidedpurchases.list` empty for this token |
+| Clawback | `stars_clawed_back=0` · adjustments **0** · wallet still **999397** (expected 999347) — **automatic clawback did not run** |
+| Revenue | Sandbox env → excluded from Production revenue (buy row present; clawback pending) |
+| Gates | `PURCHASING=false` · `CREDIT=false` |
+| Alpha closed | **VC 114** + **15** testers — **preserved** |
+| Public activation | [`ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md`](./deploy/ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md) — **blocked** until refund RTDN/clawback (B3) passes |
+| Exact next action | Diagnose missing cancel/void RTDN for Play Console refunds (topic filters / Pub/Sub delivery) · **do not** public-gate flip · **do not** manual wallet edit |
 
 ## ARCHIVE — Android edge-to-edge UI regression fix (VC 145→156)
 

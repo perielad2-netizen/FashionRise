@@ -57,7 +57,16 @@ Public gates remain **OFF**. Allowlisted FashionRise emails get purchasing+credi
 | B5 | Non-allowlisted account | `/shop/iap/google/status` purchasing/credit **false** |
 | B6 | Production purchaseType for allowlisted email | confirm **rejected** (Sandbox-only while gates OFF) |
 
-**Verification note (2026-11-27):** After VC **156** owner shell validation, production still had **0** `platform=android` purchase rows and **no** `POST /shop/iap/confirm` hits. Complete B1–B4 and record message ids / purchase ids here before section C.
+**Verification note (2026-11-27 Asia/Jerusalem):**
+
+| Step | Result |
+|---|---|
+| B1 buy `stars_50` | **PASS** — purchase `671392a4-5e3b-483a-bf13-c702418b7aaf` · order `GPA.3369-0332-8762-49726` · Sandbox · +50 · ack+consumed · wallet 999347→999397 |
+| B2 idempotent | Not re-tested this pass |
+| B3 refund/clawback | **FAIL** — Play `purchaseState=1` (CANCELED) after Console refund ~12:18; **no** cancel/void RTDN; `stars_clawed_back=0`; wallet still **999397**; `voidedpurchases.list` empty |
+| B4 revenue exclude | Sandbox purchase excluded from Production revenue path (code + env=Sandbox) |
+
+Do **not** start section C until B3 passes (RTDN cancel/void → automatic clawback to 999347, no duplicate adjustments).
 
 ---
 
