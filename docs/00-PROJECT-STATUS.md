@@ -3,21 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 16:00 Asia/Jerusalem — push tap root cause (OPEN_URI) · GPA.3329 auto-recover applied · AAB >230 pending
+**Last updated:** 2026-11-27 16:00 Asia/Jerusalem — BE+FE tap fix live · controlled retest FCM sent · AAB VC 241 building · GPA.3329 recovered
 
 ## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | Device receipt | **Confirmed** 15:40 IL · SM-S921B VC **230** · title “FashionRise push test” · body runway tap copy · FashionRise icon · settings survived restart/re-login |
-| Tap | **FAILED** — notification did **not** open the app |
+| Tap | **FAILED** on VC 230 payload — notification did **not** open the app |
 | Tap root cause | FCM `click_action: "OPEN_URI"` with no MainActivity intent-filter → system tray cannot resolve Activity. Registration/delivery ≠ interaction. |
-| Fix (this branch) | BE: omit custom `click_action` (`build_fcm_message_body`) · FE: early `installNativePushInteractionListeners` + `notificationNavigation` pending dest until auth ready · regression tests · Android offset **140** (VC >230) |
-| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm` (same tap bug). Friend-request alerts: **no** push today (friends routes do not call `push_service`). |
-| Push operational? | **No** — await BE+AAB deploy and device tap → `/studio/runway` |
-| GPA.3329 apply | **DONE** via `run_google_play_reconcile_once.py --order-id … --authorize-apply-stars 50 --apply` · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` / would **0** · exactly one `orders_reconcile` applied · GPA.3393 still clawed once |
-| Persistent gates | purchasing **false** · credit **false** · reconcile apply **false** (unchanged) |
-| Permanent auto-apply | **Not safe to enable yet** — see readiness section below; needs separate PM approval |
+| Fix | BE: omit custom `click_action` (`build_fcm_message_body`) · FE: early listeners + `notificationNavigation` · tests · offset **140** |
+| PR | **#540** `cursor/web-push-tap-refund-recover-77c6` tip **`864bbc25`** |
+| BE deploy | `/opt/fashionrise/src` @ **`864bbc25`** · API restarted · runtime assert no `click_action` |
+| FE deploy | `/var/www/fashionrise/releases/864bbc25-push-tap-open` · `/version.json` → **`864bbc25`** · nginx devices allowlist assert **PASS** |
+| Controlled retest FCM | Sent **only** to Peri `b96f7f58-…` · title “FashionRise push test” · body “Tap-open retest — should open Runway.” · url `/studio/runway` · **no** `click_action` · FCM **ok** |
+| AAB | Codemagic build **`6b098ae56649b1e24f3aacbd`** (index **63**) · stamp **versionCode=241** · versionName **1.0** · offset **140** · **building** |
+| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm`. Friend-request alerts: **no** push today. |
+| Push operational? | **No** — device must confirm tap opens app → `/studio/runway`. BE fix alone should open on VC **230**; full FE pending-nav needs AAB **241**. |
+| GPA.3329 apply | **DONE** · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` · GPA.3393 still once |
+| Persistent gates | purchasing **false** · credit **false** · reconcile apply **false** |
+| Permanent auto-apply | **Not enabled** — readiness blockers below; needs separate PM approval |
+
+### Device retest (operator)
+
+1. Prefer install Internal AAB **VC 241** when ready (bundled FE). Interim: VC **230** can validate **open** after BE fix (tap may still race on cold start without pending-nav AAB).
+2. App states: foreground / background / removed from recents / locked→unlock / after restart+re-login.
+3. Tap the “Tap-open retest” notification → FashionRise opens → lands on **`/studio/runway`**.
+4. Repeat tap once; no duplicate navigation storm.
+5. Optional bounded social: like/comment from a second test account to Peri only — same infrastructure; do not broadcast.
 
 ### Permanent hourly reconcile readiness (assessment only — NOT enabled)
 
