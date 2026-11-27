@@ -398,11 +398,18 @@ def _clawback_purchase(
         return
 
     # Serialize vs confirm + concurrent RTDN/reconcile on the same token.
+    purchase_id = purchase.id
     lock_key = google_iap.purchase_token_lock_key(token)
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
 
+    # Drop identity-map stale values so concurrent clawbacks see committed
+    # stars_clawed_back / status after the advisory lock is held.
+    db.expire_all()
     locked_purchase = db.scalar(
-        select(IapPurchase).where(IapPurchase.id == purchase.id).with_for_update()
+        select(IapPurchase)
+        .where(IapPurchase.id == purchase_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_purchase is None:
         row.processing_state = "failed"
@@ -425,7 +432,10 @@ def _clawback_purchase(
         return
 
     user = db.scalar(
-        select(User).where(User.id == locked_purchase.user_id).with_for_update()
+        select(User)
+        .where(User.id == locked_purchase.user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if user is None:
         row.processing_state = "failed"
