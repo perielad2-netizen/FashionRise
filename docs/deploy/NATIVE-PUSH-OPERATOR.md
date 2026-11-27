@@ -50,7 +50,7 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 4. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
 5. Smoke: `GET /api/v1/push/native/capability` → `android_enabled: true`; Internal AAB → Runway bell ON → like → tap `/studio…`.
 6. Registration diagnostics (client): failing stage is recorded via `getLastNativePushDiagnostic()` / Settings notice (`token_timeout`, `token_error`, `backend_post`, …). Console logs use token **fingerprints only** — never full FCM tokens. Auto + Settings share `syncNativePushAfterAuth`.
-7. Prod QA (2026-11-27 Asia/Jerusalem): VC **219** AAB contains Firebase + plugin; failure observed **before** `POST /push/native/devices` (FCM token stage). Do not declare fixed until a real device shows `granted` + a `native_push_devices` row.
+7. Prod QA (2026-11-27 Asia/Jerusalem): VC **219** failed **before** `POST /push/native/devices` (FCM token stage). Diagnostics + retry shipped in **#534**; Internal AAB **VC 230** (`0b197880`) ready for device retest. Do not declare fixed until a real device shows `granted` + a `native_push_devices` row + a received test push.
 
 ## iOS (APNs) — entitlements & provisioning
 

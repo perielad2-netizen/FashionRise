@@ -3,26 +3,38 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 14:05 Asia/Jerusalem — Prod QA push+refund · root causes identified · diagnostics PR · apply still OFF · not device-validated
+**Last updated:** 2026-11-27 14:35 Asia/Jerusalem — #534 merged/deployed · GPA.3393 recovered 50 · AAB VC **230** · push still OPEN
+
+## LIVE — PR #534 merge + scoped refund recover + AAB VC 230 (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#534** **MERGED** · tip **`0b197880`** · no GitHub Actions checks on repo (mergeable clean; local pytest + vitest green) |
+| BE | `/opt/fashionrise/src` @ **`0b197880`** · API + `ai-worker@{1..3}` restarted · gates unchanged |
+| FE | `/var/www/fashionrise/releases/0b197880-push-refund-diag` · `/version.json` → **`0b197880`** · diagnostics strings present |
+| AAB | Codemagic **`fashionrise-android-play-internal`** build **`6b09777488816b2b9071db30`** (index **62**) · **versionCode=230** · versionName **1.0** · commit **`0b197880`** · packaged `version.json` **`0b197880`** · offset **130** |
+| AAB artifact (Codemagic) | UI `https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b09777488816b2b9071db30` · API artifact `https://api.codemagic.io/artifacts/e40aa2b5-413f-4c83-b94d-b620244d3ed1/c8dcb08c-1426-4214-b3d0-2cf6013c7e6d/app-release.aab` (requires Codemagic auth) |
+| AAB on VPS (operator path) | `/var/www/fashionrise/artifacts/android/FashionRise-0b197880-vc230-internal.aab` (not publicly routed by nginx SPA; scp/rsync for testers) |
+| Refund recover | Order **`GPA.3393-4815-4520-53687`** · dry-run `recover_full` would **50** · process-local `APPLY_ORDER_ID` apply · recovered **50** · post dry-run `already_recovered` / would **0** · wallet **999397→999347** · purchase status **refunded** · clawed **50** · audit `orders_reconcile` **applied** |
+| Persistent gates | purchasing **false** · credit **false** · `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY` **false** (never enabled) · scoped env cleared after script |
+| RTDN gap | Pub/Sub healthy (test + `one_time_purchased` **200**). Refund at 11:42:52Z produced **no** cancel/void POST — Google did not deliver RTDN for this Sandbox refund+revoke. Reconcile remains the fallback (used here). |
+| Push | **OPEN** — install VC **230** → Settings toggle → use stage-aware notice · success only when token + POST devices + DB row + toggle survives restart + real push received |
+| Exact next action | Device install VC 230 · capture failing stage if still broken · do **not** enable persistent financial apply / purchasing / credit |
 
 ## QA — Push registration + refund recovery (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Installed Android target | Internal AAB **VC 219** (`6b09658ff0062a24ddbc607f`) — FirebaseInitProvider + `google_app_id` `1:873511357568:android:a03620834a029aa950aa65` + FCM plugin present; R8 keeps Firebase |
-| BE / FE tip | **`d9b6e8b9`** (pre-diagnostics) · capability `android_enabled:true` · `NATIVE_PUSH_ANDROID_ENABLED=true` |
+| Installed Android target (pre-fix) | Internal AAB **VC 219** (`6b09658ff0062a24ddbc607f`) — FirebaseInitProvider + `google_app_id` `1:873511357568:android:a03620834a029aa950aa65` + FCM plugin present; R8 keeps Firebase |
+| BE / FE tip (pre-fix) | **`d9b6e8b9`** · capability `android_enabled:true` · `NATIVE_PUSH_ANDROID_ENABLED=true` |
 | Push failing stage | **FCM token acquisition** — zero `POST /push/native/devices` · `native_push_devices=0` · Settings shows `registration_failed` after permission+capability succeed |
 | Push not caused by | Feature flag off · missing google-services in AAB · backend confirm regression · separate auto vs manual path (both share `syncNativePushAfterAuth`) |
-| Push fix in this PR | Stage-aware diagnostics + actionable Settings/Runway errors + safe logs (token fingerprint only) + one FCM register retry · **requires new AAB** (Capacitor local `dist`) · **not declared fixed until real-device validation** |
-| Refund order | `GPA.3393-4815-4520-53687` · PeriShilat · `stars_50` · Sandbox · purchase **active** · credited **50** · clawed **0** |
+| Push fix shipped | Stage-aware diagnostics + actionable Settings/Runway errors + safe logs (token fingerprint only) + one FCM register retry · **VC 230 AAB** · **not declared fixed until real-device validation** |
+| Refund order | `GPA.3393-4815-4520-53687` · PeriShilat · `stars_50` · Sandbox |
 | Play authority | `orders.get` **REFUNDED** + full refund 19.9 ILS · `products.get` purchaseState **canceled** · identity match |
 | RTDN | Only `one_time_purchased` (unmatched race) — **no** cancel/void RTDN for this refund |
-| Prior refund | `GPA.3369-…` already clawed 50 via `operator_products_get_canceled` (not financial-apply gate) |
-| Reconcile finding | `recover_full` / `full_refund_and_entitlement_canceled` · **would_recover_stars=50** · `applied=false` |
-| Expected vs actual | Expected claw **50** → wallet **999347** · Actual claw **0** · displayed **999397** (ledger=`users.ai_stars` consistent) |
-| Why not clawed | `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (fail-closed) — detection works; mutations blocked pending PM authorization |
+| Recovery (authorized) | Scoped process-local apply · clawed **50** · balance **999347** · exactly-once proven |
 | Gates (unchanged) | purchasing **false** · credit **false** · reconcile apply **false** · native Android push **true** |
-| Exact next action | Ship diagnostics AAB → device retry Settings toggle → read stage message / logcat · PM authorize apply only if claw of **50** for GPA.3393 is approved |
 
 ## LIVE — PR #532 Google Play reconcile + auto FCM (2026-11-27 Asia/Jerusalem)
 

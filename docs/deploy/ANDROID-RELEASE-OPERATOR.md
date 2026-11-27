@@ -61,6 +61,9 @@ Connectivity check (no purchase): SA mints Android Publisher token · `oneTimePr
    `https://fashionrise.app/api/v1/shop/iap/google/notifications`  
    then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL **and** `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` to the push SA email.
 3. Optional backfill: call `reconcile_voided_purchases` (Voided Purchases API, ≤30 days).
+   For a **single PM-authorized** order while the persistent apply gate stays OFF, use
+   `backend/scripts/run_google_play_recover_order.py --order-id GPA.… --authorize-recovery-stars N --apply`
+   (process-local `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY_ORDER_ID` only — never write the global apply flag).
 4. Financial reconcile (preferred): `orders.get` + `products.get` via
    `google_play_reconcile.reconcile_android_purchases(dry_run=True)` /
    Admin `GET /admin/iap/google/reconcile`. Google may refund without RTDN/voided rows.
