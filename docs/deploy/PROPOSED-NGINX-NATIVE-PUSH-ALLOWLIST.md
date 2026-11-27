@@ -2,7 +2,8 @@
 
 **Status:** **LIVE** on production (2026-11-27 Asia/Jerusalem).  
 **Canonical version-controlled source of truth:** `deploy/nginx-allowlists/native-push.conf.snippet`  
-**Assert:** `scripts/assert_nginx_native_push_allowlist.sh [/etc/nginx/sites-available/fashionrise.app]`
+**Assert (sparse-checkout safe):** `deploy/nginx-allowlists/assert_native_push_allowlist.sh [/etc/nginx/sites-available/fashionrise.app]`  
+(also mirrored at `scripts/assert_nginx_native_push_allowlist.sh`)
 
 Do **not** regenerate production from `deploy/nginx_fashionrise.conf` (legacy open proxy stub). Production uses an explicit per-route allowlist; this snippet must be present above `location /api/ { return 403; }`.
 
