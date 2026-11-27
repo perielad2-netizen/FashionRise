@@ -6,10 +6,23 @@ const platform = vi.hoisted(() => ({
   nativePlatform: vi.fn(() => 'android' as 'android' | 'ios' | 'web'),
 }))
 
-vi.mock('@/services/api/client', () => ({
-  apiRequest: (...args: unknown[]) => apiRequest(...args),
-  getApiBaseUrl: () => 'https://fashionrise.app/api/v1',
-}))
+vi.mock('@/services/api/client', () => {
+  class ApiError extends Error {
+    status: number
+    body: unknown
+    constructor(message: string, status: number, body: unknown) {
+      super(message)
+      this.name = 'ApiError'
+      this.status = status
+      this.body = body
+    }
+  }
+  return {
+    ApiError,
+    apiRequest: (...args: unknown[]) => apiRequest(...args),
+    getApiBaseUrl: () => 'https://fashionrise.app/api/v1',
+  }
+})
 
 vi.mock('@/services/native/platform', () => ({
   isNativeShell: () => platform.isNativeShell(),
@@ -156,15 +169,44 @@ describe('nativePush', () => {
   })
 
   it('records backend_post when device POST fails after token', async () => {
+    const { ApiError } = await import('@/services/api/client')
     const token = 'fcm-token-abcdefghijklmnopqrstuv'
     localStorage.setItem('fr.nativePush.token', token)
     apiRequest
       .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
-      .mockRejectedValueOnce(new Error('500 boom'))
+      .mockRejectedValueOnce(new ApiError('server error', 500, null))
     const result = await syncNativePushAfterAuth()
     expect(result).toBe('registration_failed')
     expect(getLastNativePushDiagnostic()?.stage).toBe('backend_post')
+    expect(getLastNativePushDiagnostic()?.code).toBe('post_failed_500')
     expect(formatNativePushRegistrationFailureMessage()).toMatch(/server rejected/i)
+  })
+
+  it('does not tell the user to sign in again for gateway HTTP 403', async () => {
+    const { ApiError } = await import('@/services/api/client')
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockRejectedValueOnce(new ApiError('Forbidden', 403, null))
+    const result = await syncNativePushAfterAuth()
+    expect(result).toBe('registration_failed')
+    expect(getLastNativePushDiagnostic()?.code).toBe('post_failed_403')
+    const msg = formatNativePushRegistrationFailureMessage()
+    expect(msg).toMatch(/HTTP 403/i)
+    expect(msg).toMatch(/signing in again will not help/i)
+    expect(msg).not.toMatch(/Sign in again and retry/i)
+  })
+
+  it('asks to sign in again only for HTTP 401 on device POST', async () => {
+    const { ApiError } = await import('@/services/api/client')
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockRejectedValueOnce(new ApiError('Your session expired. Please sign in again.', 401, null))
+    await expect(syncNativePushAfterAuth()).resolves.toBe('registration_failed')
+    expect(formatNativePushRegistrationFailureMessage()).toMatch(/Sign in again and retry/i)
   })
 
   it('respects desired=false without prompting', async () => {

@@ -128,7 +128,13 @@
 
     # Native push capability probe (Capacitor / Android)
     location = /api/v1/push/native/capability {
-        limit_except GET { deny all; }
+        limit_except GET OPTIONS { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    # Native push device registration (was missing → OPTIONS/POST nginx 403)
+    location = /api/v1/push/native/devices {
+        limit_except GET POST DELETE OPTIONS { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }
 
@@ -139,3 +145,5 @@
 ```
 
 Insert these blocks **above** the final `location /api/ { return 403; }` catch-all.
+
+See also `docs/deploy/PROPOSED-NGINX-NATIVE-PUSH-ALLOWLIST.md` for the full proxy header set and smoke checks.

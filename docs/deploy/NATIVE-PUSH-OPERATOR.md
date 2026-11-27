@@ -50,7 +50,12 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 4. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
 5. Smoke: `GET /api/v1/push/native/capability` → `android_enabled: true`; Internal AAB → Runway bell ON → like → tap `/studio…`.
 6. Registration diagnostics (client): failing stage is recorded via `getLastNativePushDiagnostic()` / Settings notice (`token_timeout`, `token_error`, `backend_post`, …). Console logs use token **fingerprints only** — never full FCM tokens. Auto + Settings share `syncNativePushAfterAuth`.
-7. Prod QA (2026-11-27 Asia/Jerusalem): VC **219** failed **before** `POST /push/native/devices` (FCM token stage). Diagnostics + retry shipped in **#534**; Internal AAB **VC 230** (`0b197880`) ready for device retest. Do not declare fixed until a real device shows `granted` + a `native_push_devices` row + a received test push.
+7. Prod QA (2026-11-27 Asia/Jerusalem):
+   - VC **219** failed **before** `POST /push/native/devices` (FCM token stage). Diagnostics + retry shipped in **#534**; Internal AAB **VC 230** (`0b197880`).
+   - VC **230** then acquired an FCM token but Settings showed *server rejected registration*: nginx had allowlisted only `/push/native/capability` — `OPTIONS/POST /push/native/devices` hit `location /api/ { return 403 }` (Capacitor Origin `https://localhost`). **No POST reached FastAPI**; `native_push_devices` stayed **0**. Sign-in-again was **not** applicable.
+   - Fix: **LIVE** allowlist + repo SoT `deploy/nginx-allowlists/native-push.conf.snippet` (assert via `scripts/assert_nginx_native_push_allowlist.sh`). Backup `nginx-fashionrise.app.bak-native-devices-20261127T130828Z`. Smoke: OPTIONS **200**, unauth POST **401**, unknown path **403**. **No AAB rebuild required**; VC 230 can retest now.
+   - After registration succeeds: inspect `native_push_devices`, then run a **separately controlled** delivery test to that device only. Do not declare push operational until real delivery is verified.
+   - Do not declare fixed until Notifications **ON** + DB row + preference survives restart/re-login + gated real push.
 
 ## iOS (APNs) — entitlements & provisioning
 
