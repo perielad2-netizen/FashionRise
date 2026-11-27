@@ -369,6 +369,47 @@ def test_orders_get_error_never_deducts(db_session: Session, monkeypatch: pytest
     assert int(user.ai_stars) == 100
 
 
+def test_apply_gate_off_blocks_recover_full_even_when_dry_run_false(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """Production QA: full refund + canceled entitlement must not claw while apply OFF."""
+    monkeypatch.setenv("IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY", "false")
+    get_settings.cache_clear()
+    user = _user(db_session, "reconcile-gate-off@fashionrise.app")
+    purchase = _purchase(
+        db_session, user, token="gate-off-token-1", order="GPA.3393-gate-off-1"
+    )
+    order = _full_refund_order(order_id="GPA.3393-gate-off-1", token="gate-off-token-1")
+    monkeypatch.setattr(google_iap, "google_iap_configured", lambda: True)
+    monkeypatch.setattr(google_iap, "get_order", lambda *_a, **_k: order)
+
+    class _V:
+        purchase_state = 1
+        environment = "Sandbox"
+        product_id = "stars_50"
+
+    monkeypatch.setattr(google_iap, "verify_product_purchase", lambda **_k: _V())
+    monkeypatch.setattr(google_iap, "is_canceled", lambda _v: True)
+    monkeypatch.setattr(google_iap, "is_pending", lambda _v: False)
+    monkeypatch.setattr(google_iap, "is_purchased", lambda _v: False)
+
+    # Caller asks to apply, but gate is OFF → fail closed to dry-run.
+    report = google_play_reconcile.reconcile_android_purchases(
+        db_session, dry_run=False, order_id="GPA.3393-gate-off-1", persist=True
+    )
+    assert report["dry_run"] is True
+    assert report["apply_enabled"] is False
+    assert report["stars_would_recover"] == 50
+    assert report["stars_recovered"] == 0
+    assert report["decisions"][0]["decision"] == "recover_full"
+    assert report["decisions"][0]["would_recover_stars"] == 50
+    db_session.refresh(user)
+    db_session.refresh(purchase)
+    assert int(user.ai_stars) == 100
+    assert int(purchase.stars_clawed_back) == 0
+    assert purchase.status == STATUS_ACTIVE
+
+
 def test_admin_snapshot_reads_persisted_only(db_session: Session, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY", "false")
     get_settings.cache_clear()
