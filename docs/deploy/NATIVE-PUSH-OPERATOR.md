@@ -53,8 +53,9 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 7. Prod QA (2026-11-27 Asia/Jerusalem):
    - VC **219** failed **before** `POST /push/native/devices` (FCM token stage). Diagnostics + retry shipped in **#534**; Internal AAB **VC 230** (`0b197880`).
    - VC **230** then acquired an FCM token but Settings showed *server rejected registration*: nginx had allowlisted only `/push/native/capability` — `OPTIONS/POST /push/native/devices` hit `location /api/ { return 403 }` (Capacitor Origin `https://localhost`). **No POST reached FastAPI**; `native_push_devices` stayed **0**. Sign-in-again was **not** applicable.
-   - Fix: **LIVE** allowlist `GET|POST|DELETE|OPTIONS /api/v1/push/native/devices` (see `PROPOSED-NGINX-NATIVE-PUSH-ALLOWLIST.md`; backup `nginx-fashionrise.app.bak-native-devices-20261127T130828Z`). Smoke: OPTIONS **200**, unauth POST **401**. **No AAB rebuild required**; VC 230 can retest now.
-   - Do not declare fixed until a real device shows Notifications **ON** + a `native_push_devices` row + a separately gated real push delivery test.
+   - Fix: **LIVE** allowlist + repo SoT `deploy/nginx-allowlists/native-push.conf.snippet` (assert via `scripts/assert_nginx_native_push_allowlist.sh`). Backup `nginx-fashionrise.app.bak-native-devices-20261127T130828Z`. Smoke: OPTIONS **200**, unauth POST **401**, unknown path **403**. **No AAB rebuild required**; VC 230 can retest now.
+   - After registration succeeds: inspect `native_push_devices`, then run a **separately controlled** delivery test to that device only. Do not declare push operational until real delivery is verified.
+   - Do not declare fixed until Notifications **ON** + DB row + preference survives restart/re-login + gated real push.
 
 ## iOS (APNs) — entitlements & provisioning
 

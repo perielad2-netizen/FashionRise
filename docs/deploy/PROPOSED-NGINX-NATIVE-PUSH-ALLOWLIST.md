@@ -1,6 +1,11 @@
 # Proposed Nginx allowlist — Native Push devices
 
-**Status:** required for Capacitor Android/iOS device registration.  
+**Status:** **LIVE** on production (2026-11-27 Asia/Jerusalem).  
+**Canonical version-controlled source of truth:** `deploy/nginx-allowlists/native-push.conf.snippet`  
+**Assert:** `scripts/assert_nginx_native_push_allowlist.sh [/etc/nginx/sites-available/fashionrise.app]`
+
+Do **not** regenerate production from `deploy/nginx_fashionrise.conf` (legacy open proxy stub). Production uses an explicit per-route allowlist; this snippet must be present above `location /api/ { return 403; }`.
+
 **Root cause (2026-11-27):** production nginx allowlisted only `GET /api/v1/push/native/capability`.  
 `POST|GET|DELETE /api/v1/push/native/devices` fell through to `location /api/ { return 403; }`, so Capacitor CORS preflight (`OPTIONS`, Origin `https://localhost`) returned **nginx 403** and the authenticated POST never reached FastAPI.  
 Web Push (`/push/vapid-public-key`, `/push/subscriptions`) was already allowlisted and unaffected.
