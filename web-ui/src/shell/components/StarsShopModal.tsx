@@ -5,12 +5,14 @@ import { MOBILE_STORE_LINKS } from '@/config/mobileStoreLinks'
 import { ApiError } from '@/services/api/client'
 import {
   fetchAppleIapStatus,
+  fetchGoogleIapStatus,
   isNativeAndroidShell,
   isNativeIosStarsShop,
   listStarsIapProducts,
   purchaseStarsPack,
   recoverPendingStarsPurchases,
   type AppleIapStatus,
+  type GoogleIapStatus,
   type PurchaseFlowState,
   type StarsIapProduct,
 } from '@/services/native/iap'
@@ -34,9 +36,9 @@ function stateMessage(state: PurchaseFlowState, fallback?: string): string | nul
     case 'already_processed':
       return fallback || 'This purchase was already processed.'
     case 'gate_off':
-      return fallback || 'Apple Stars purchasing is not enabled yet.'
+      return fallback || 'Stars purchasing is not enabled yet.'
     case 'unavailable':
-      return fallback || 'Stars packages are unavailable in the App Store right now.'
+      return fallback || 'Stars packages are unavailable in the store right now.'
     case 'recovery_required':
       return (
         fallback ||
@@ -71,7 +73,7 @@ export function StarsShopModal({ open, onClose }: Props) {
 
   const [packages, setPackages] = useState<StarPackage[]>([])
   const [iapProducts, setIapProducts] = useState<StarsIapProduct[]>([])
-  const [iapStatus, setIapStatus] = useState<AppleIapStatus | null>(null)
+  const [iapStatus, setIapStatus] = useState<AppleIapStatus | GoogleIapStatus | null>(null)
   const [busy, setBusy] = useState(false)
   /** Only the tapped package shows “Buying…” — other packs stay labeled Buy (disabled). */
   const [buyingProductId, setBuyingProductId] = useState<string | null>(null)
@@ -80,25 +82,23 @@ export function StarsShopModal({ open, onClose }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const purchaseLock = useRef(false)
 
-  const reloadAndroidCatalog = useCallback(async () => {
-    setError(null)
-    const pkgs = await fetchStarPackages()
-    setPackages(pkgs)
-    void refreshUser()
-  }, [refreshUser])
-
-  const reloadNativeIos = useCallback(async () => {
+  const reloadNativeStore = useCallback(async () => {
     setError(null)
     setFlowState('loading_products')
     try {
       const [status, products] = await Promise.all([
-        fetchAppleIapStatus().catch(() => null),
+        (nativeIos ? fetchAppleIapStatus() : fetchGoogleIapStatus()).catch(() => null),
         listStarsIapProducts().catch(() => [] as StarsIapProduct[]),
       ])
       setIapStatus(status)
       setIapProducts(products)
+      // Keep catalog fallback for Android when Play products are not yet returned.
+      if (!products.length && nativeAndroid) {
+        const pkgs = await fetchStarPackages().catch(() => [] as StarPackage[])
+        setPackages(pkgs)
+      }
       if (!products.length) {
-        setFlowState('unavailable')
+        setFlowState(status && !status.purchasing_enabled ? 'gate_off' : 'unavailable')
       } else if (status && !status.purchasing_enabled) {
         setFlowState('gate_off')
       } else {
@@ -107,26 +107,28 @@ export function StarsShopModal({ open, onClose }: Props) {
       void refreshUser()
     } catch (err) {
       setFlowState('unavailable')
-      setError(err instanceof Error ? err.message : 'Could not load App Store products.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : nativeIos
+            ? 'Could not load App Store products.'
+            : 'Could not load Google Play products.',
+      )
     }
-  }, [refreshUser])
+  }, [nativeAndroid, nativeIos, refreshUser])
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     ;(async () => {
       try {
-        if (nativeIos) {
-          await reloadNativeIos()
-          // Bounded recovery when opening shop (credit gate may still be off).
+        if (nativeIos || nativeAndroid) {
+          await reloadNativeStore()
           const recovery = await recoverPendingStarsPurchases()
           if (!cancelled && recovery.recovered > 0) {
             setNotice(recovery.message || 'Recovered a pending Stars purchase.')
             void refreshUser()
           }
-        } else if (nativeAndroid) {
-          // Native Android keeps current catalog preview; Play Billing is a future task.
-          await reloadAndroidCatalog()
         } else {
           // Browser/PWA or unrecognized native — balance only; never init purchase APIs.
           setPackages([])
@@ -144,13 +146,13 @@ export function StarsShopModal({ open, onClose }: Props) {
     return () => {
       cancelled = true
     }
-  }, [open, nativeIos, nativeAndroid, reloadNativeIos, reloadAndroidCatalog, refreshUser])
+  }, [open, nativeIos, nativeAndroid, reloadNativeStore, refreshUser])
 
   if (!open) return null
 
   async function onNativeBuy(productId: string) {
-    // Hard boundary: StoreKit purchase only on Capacitor iOS.
-    if (!nativeIos || isWebRuntime || nativeAndroid || unrecognizedNative) return
+    // Hard boundary: native store purchases only on Capacitor iOS / Android.
+    if (isWebRuntime || unrecognizedNative || (!nativeIos && !nativeAndroid)) return
     if (purchaseLock.current || busy) return
     purchaseLock.current = true
     setBusy(true)
@@ -302,45 +304,89 @@ export function StarsShopModal({ open, onClose }: Props) {
         ) : nativeAndroid ? (
           <>
             <p className={styles.hint}>
-              Stars power your AI fashion creations. Choose a package below to get started. Google
-              Play Stars purchasing is not available yet.
+              Stars power your AI fashion creations. Choose a package below to get started.
             </p>
             <p className={styles.costs}>{costLine}</p>
-
+            {flowState === 'loading_products' ? (
+              <p className={styles.empty}>Loading Google Play products…</p>
+            ) : null}
+            {flowState === 'unavailable' ? (
+              <p className={styles.notice} role="status">
+                Stars packages are not available from Google Play right now.
+              </p>
+            ) : null}
+            {flowState === 'gate_off' || (iapStatus && !iapStatus.purchasing_enabled) ? (
+              <p className={styles.comingSoon} role="status">
+                Google Play Stars purchasing is prepared but not enabled yet
+                {iapStatus && 'license_tester' in iapStatus && iapStatus.license_tester
+                  ? ' for this account'
+                  : ''}
+                . Your balance still works for existing Stars.
+              </p>
+            ) : null}
             <section className={styles.section} data-testid="stars-android-packages">
               <h3>Packages</h3>
               <ul className={styles.list}>
-                {packages.map((pkg) => (
-                  <li key={pkg.sku} className={styles.card}>
+                {(iapProducts.length
+                  ? iapProducts.map((pkg) => ({
+                      key: pkg.productId,
+                      productId: pkg.productId,
+                      stars: pkg.stars,
+                      title: pkg.title,
+                      meta: (
+                        <>
+                          {pkg.stars} Stars
+                          {pkg.priceString ? <> · {pkg.priceString}</> : null}
+                        </>
+                      ),
+                    }))
+                  : packages.map((pkg) => ({
+                      key: pkg.sku,
+                      productId: pkg.sku,
+                      stars: pkg.stars,
+                      title: pkg.name,
+                      meta: (
+                        <>
+                          {pkg.stars} Stars · {formatUsdCents(pkg.price_usd_cents)}
+                        </>
+                      ),
+                    }))
+                ).map((pkg) => (
+                  <li key={pkg.key} className={styles.card}>
                     <div className={styles.packTop}>
                       <div>
                         <div className={styles.packStars}>{pkg.stars}</div>
-                        <div className={styles.pkgName}>{pkg.name}</div>
-                        <div className={styles.pkgMeta}>
-                          {pkg.stars} Stars · {formatUsdCents(pkg.price_usd_cents)}
-                          {pkg.list_price_usd_cents != null &&
-                          pkg.list_price_usd_cents > pkg.price_usd_cents ? (
-                            <>
-                              {' '}
-                              <s>{formatUsdCents(pkg.list_price_usd_cents)}</s>
-                            </>
-                          ) : null}
-                        </div>
+                        <div className={styles.pkgName}>{pkg.title}</div>
+                        <div className={styles.pkgMeta}>{pkg.meta}</div>
                       </div>
                     </div>
                     <button
                       type="button"
                       className={styles.addBtn}
-                      disabled
-                      aria-disabled="true"
-                      title="Google Play Stars purchasing is not available yet"
+                      disabled={
+                        busy ||
+                        flowState === 'purchasing' ||
+                        flowState === 'confirming' ||
+                        !iapStatus?.purchasing_enabled ||
+                        !iapProducts.length
+                      }
+                      onClick={() => void onNativeBuy(pkg.productId)}
                     >
-                      Add
+                      {buyingProductId === pkg.productId &&
+                      (flowState === 'purchasing' || flowState === 'confirming')
+                        ? 'Buying…'
+                        : 'Buy'}
                     </button>
                   </li>
                 ))}
               </ul>
             </section>
+            {flowState === 'recovery_required' ? (
+              <p className={styles.notice} role="status">
+                Confirmation pending. Close and reopen the shop, or restart the app, to recover
+                Stars if they do not appear.
+              </p>
+            ) : null}
           </>
         ) : isWebRuntime ? (
           <>

@@ -3,15 +3,16 @@
 Apple and Google own checkout. We verify the signed transaction server-side, then
 credit the Stars wallet. Phase B adds ASN V2 refund/revoke handling and native
 shop recovery. Public purchasing and credit stay default-OFF.
-Android verification remains staged and unchanged.
+Android uses Google Play Developer API verification + RTDN clawbacks (fail-closed).
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,7 +32,7 @@ from app.models.iap_purchase import (
     IapPurchase,
 )
 from app.models.user import User
-from app.services import ai_stars, apple_asn, apple_iap
+from app.services import ai_stars, apple_asn, apple_iap, google_iap
 
 _log = logging.getLogger(__name__)
 
@@ -89,6 +90,23 @@ def apple_shop_status(user: User | None = None) -> dict[str, Any]:
     }
 
 
+def google_shop_status(user: User | None = None) -> dict[str, Any]:
+    """Android Play Billing readiness (gates + configuration). No secrets."""
+    return {
+        "platform": "android",
+        "purchasing_enabled": google_iap.google_purchasing_enabled_for(user),
+        "credit_enabled": google_iap.google_credit_enabled_for(user),
+        "verification_configured": google_iap.google_iap_configured(),
+        "license_tester": bool(
+            user is not None and google_iap.email_is_google_license_tester(user.email)
+        ),
+        "package_name": google_iap.google_package_name(),
+        "products": [
+            {"product_id": pid, "stars": stars} for pid, stars in STARS_PRODUCTS.items()
+        ],
+    }
+
+
 def confirm_purchase(
     db: Session,
     user: User,
@@ -119,11 +137,11 @@ def confirm_purchase(
             receipt=receipt,
         )
 
-    return _confirm_android_staged(
+    return _confirm_android(
         db,
         user,
-        product_id=client_pid,
-        transaction_id=transaction_id,
+        client_product_id=client_pid,
+        client_transaction_id=(transaction_id or "").strip() or None,
         purchase_token=purchase_token,
     )
 
@@ -260,36 +278,103 @@ def _assert_app_account_token_owns_transaction(user: User, verified: apple_iap.V
         raise ForbiddenError("Apple appAccountToken does not match this account")
 
 
-def _confirm_android_staged(
+def _confirm_android(
     db: Session,
     user: User,
     *,
-    product_id: str,
-    transaction_id: str | None,
+    client_product_id: str,
+    client_transaction_id: str | None,
     purchase_token: str | None,
 ) -> dict[str, Any]:
-    """Android path unchanged (staged). Phase B does not modify Play Billing."""
-    _ = db
-    _ = user
-    pid = (product_id or "").strip()
-    if pid not in STARS_PRODUCTS:
-        raise ValidationAppError("Unknown Stars product")
-    txn = (transaction_id or purchase_token or "").strip()
-    if not txn:
-        raise ValidationAppError("transaction_id is required")
+    """Verify Google Play purchaseToken → credit Stars exactly once → client consumes."""
+    token = (purchase_token or "").strip()
+    if not token:
+        raise ValidationAppError("Google purchase_token is required")
 
-    settings = get_settings()
-    if settings.iap_allow_unverified_sandbox and settings.environment != "production":
+    global_credit = google_iap.google_credit_enabled()
+    if not google_iap.google_credit_enabled_for(user):
         raise ServiceUnavailableError(
-            "Unverified sandbox IAP credit is disabled while Apple IAP is the active path."
+            "Google Play Stars credit is not enabled yet. "
+            "License-tester mode or public credit gate must be on."
         )
-
-    if not (settings.iap_google_service_account_json or "").strip():
+    if not google_iap.google_iap_configured():
         raise ServiceUnavailableError("Google Play service account not configured")
-    if not (purchase_token or "").strip():
-        raise ForbiddenError("Missing Google purchase token")
-    raise ServiceUnavailableError(
-        "Google Play purchase verification is staged — configure Play Developer API next."
+
+    advisory_pid = (client_product_id or "").strip()
+    if not advisory_pid:
+        raise ValidationAppError("product_id is required for Google Play confirm")
+
+    verified = google_iap.verify_product_purchase(
+        product_id=advisory_pid,
+        purchase_token=token,
+    )
+
+    if not global_credit:
+        if (verified.environment or "").strip() != "Sandbox":
+            raise ForbiddenError(
+                "License tester credit requires a verified Google Play test purchase"
+            )
+
+    if verified.product_id not in STARS_PRODUCTS:
+        raise ValidationAppError("Unknown Stars product on verified Google purchase")
+    if client_product_id and client_product_id != verified.product_id:
+        raise ForbiddenError("Client product id does not match verified Google product")
+    if (
+        client_transaction_id
+        and verified.order_id
+        and client_transaction_id != verified.order_id
+        and client_transaction_id != token
+    ):
+        raise ForbiddenError("Client transaction id does not match verified Google order")
+
+    google_iap.assert_account_owns_purchase(user.id, verified)
+
+    if google_iap.is_pending(verified):
+        return {
+            "stars_credited": 0,
+            "already_processed": False,
+            "pending": True,
+            "ai_stars": int(getattr(user, "ai_stars", 0) or 0),
+            "product_id": verified.product_id,
+            "transaction_id": verified.order_id,
+            "reason": "google_purchase_pending",
+        }
+    if google_iap.is_canceled(verified) or not google_iap.is_purchased(verified):
+        raise ForbiddenError("Google purchase is not in a purchased state")
+
+    # Serialize confirm vs RTDN clawback on this purchase token.
+    lock_key = int.from_bytes(
+        hashlib.sha256(f"fr.google.iap:{token}".encode()).digest()[:8],
+        "big",
+        signed=True,
+    )
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+    existing = db.scalar(
+        select(IapPurchase).where(
+            IapPurchase.platform == "android",
+            IapPurchase.purchase_token == token,
+        )
+    )
+    if existing is not None:
+        return _idempotent_or_conflict(db, user, existing)
+
+    by_order = _find_purchase(db, platform="android", transaction_id=verified.order_id)
+    if by_order is not None:
+        return _idempotent_or_conflict(db, user, by_order)
+
+    stars = STARS_PRODUCTS[verified.product_id] * max(1, verified.quantity)
+    return _persist_credit(
+        db,
+        user,
+        platform="android",
+        product_id=verified.product_id,
+        transaction_id=verified.order_id,
+        stars=stars,
+        original_transaction_id=verified.order_id,
+        environment=verified.environment,
+        purchase_token=token,
+        obfuscated_account_id=verified.obfuscated_external_account_id,
     )
 
 
@@ -389,6 +474,8 @@ def _persist_credit(
     stars: int,
     original_transaction_id: str | None = None,
     environment: str | None = None,
+    purchase_token: str | None = None,
+    obfuscated_account_id: str | None = None,
 ) -> dict[str, Any]:
     """Insert purchase + credit under caller's advisory lock (iOS) / uniqueness.
 
@@ -404,6 +491,8 @@ def _persist_credit(
         product_id=product_id,
         transaction_id=transaction_id,
         original_transaction_id=original_transaction_id or transaction_id,
+        purchase_token=purchase_token,
+        obfuscated_account_id=obfuscated_account_id,
         environment=environment,
         status=STATUS_ACTIVE,
         stars_credited=stars,

@@ -105,6 +105,25 @@ function openNotificationUrl(rawUrl: unknown): void {
   navigateInApp(sanitizePushDestination(rawUrl))
 }
 
+const ANDROID_CHANNEL_ID = 'fashionrise_social'
+
+async function ensureAndroidChannels(): Promise<void> {
+  if (platformForApi() !== 'android') return
+  try {
+    await PushNotifications.createChannel({
+      id: ANDROID_CHANNEL_ID,
+      name: 'FashionRise social',
+      description: 'Likes, comments, follows, and friend requests',
+      importance: 4,
+      visibility: 1,
+      sound: 'default',
+      vibration: true,
+    })
+  } catch {
+    /* channel may already exist */
+  }
+}
+
 async function installListeners(): Promise<void> {
   if (listenersInstalled) return
   listenersInstalled = true
@@ -161,6 +180,7 @@ export async function syncNativePushAfterAuth(): Promise<
   if (!enabled) return 'disabled'
 
   await installListeners()
+  await ensureAndroidChannels()
 
   let perm = await PushNotifications.checkPermissions()
   if (perm.receive === 'prompt') {

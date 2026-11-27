@@ -28,6 +28,7 @@ from app.models.private_media_asset import PrivateMediaAsset
 from app.models.private_media_cleanup import PrivateMediaCleanupQueue
 from app.models.public_media_cleanup import PublicMediaCleanupQueue
 from app.models.iap_apple_notification import IapAppleNotification
+from app.models.iap_google_notification import IapGoogleNotification
 from app.models.iap_purchase import IapPurchase
 from app.models.iap_stars_adjustment import IapStarsAdjustment
 from app.models.native_push_device import NativePushDevice

@@ -37,6 +37,10 @@ class IapPurchase(Base):
     product_id: Mapped[str] = mapped_column(String(128), nullable=False)
     transaction_id: Mapped[str] = mapped_column(String(255), nullable=False)
     original_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # Google Play purchaseToken (unique for android rows). Null on Apple.
+    purchase_token: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
+    # Play BillingFlowParams.setObfuscatedAccountId (≤64 chars).
+    obfuscated_account_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     environment: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=STATUS_ACTIVE)
     stars_credited: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

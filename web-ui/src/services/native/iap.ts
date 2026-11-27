@@ -17,7 +17,13 @@
  * - If Apple history omits a finished consumable and our pending hint is gone,
  *   support reconciliation via ASN + App Store Server API is required (gated).
  *
- * Android: adapter present but purchasing stays gated off (Play verification staged).
+ * Android (Capacitor + Billing Library via Capgo):
+ * - Load localized Play products
+ * - Purchase with obfuscatedAccountId (= server appAccountToken UUID)
+ * - Confirm with purchaseToken (server verifies via Play Developer API)
+ * - consumePurchase after durable backend credit (never trust client Stars)
+ * - Gates: IAP_GOOGLE_* / license-tester emails (default OFF)
+ *
  * Web: this module is a no-op; StarsShopModal keeps the web cart UX.
  */
 import { NativePurchases, PURCHASE_TYPE, type Transaction } from '@capgo/native-purchases'
@@ -54,6 +60,17 @@ export type AppleIapStatus = {
   verification_configured: boolean
   /** True when the signed-in account is on IAP_APPLE_SANDBOX_TESTER_EMAILS. */
   sandbox_tester?: boolean
+  products: Array<{ product_id: string; stars: number }>
+}
+
+export type GoogleIapStatus = {
+  platform: string
+  purchasing_enabled: boolean
+  credit_enabled: boolean
+  verification_configured: boolean
+  /** True when the signed-in account is on IAP_GOOGLE_LICENSE_TESTER_EMAILS. */
+  license_tester?: boolean
+  package_name?: string
   products: Array<{ product_id: string; stars: number }>
 }
 
@@ -119,6 +136,10 @@ export async function fetchAppleIapStatus(): Promise<AppleIapStatus> {
   // Prefer auth so designated sandbox testers receive purchasing/credit=true
   // while public gates remain OFF for anonymous / non-tester callers.
   return apiRequest<AppleIapStatus>('/shop/iap/apple/status')
+}
+
+export async function fetchGoogleIapStatus(): Promise<GoogleIapStatus> {
+  return apiRequest<GoogleIapStatus>('/shop/iap/google/status')
 }
 
 export async function fetchAppAccountToken(): Promise<string> {
@@ -194,12 +215,17 @@ async function finishTransaction(transaction: Transaction): Promise<void> {
   // Capgo: acknowledgePurchase finishes StoreKit 2 transactions when
   // autoAcknowledgePurchases was false. Capgo Transaction.updates may already
   // have finished it — treat "not found / already finished" as success.
+  // Android consumables: consumePurchase after durable backend credit.
+  const token = String(transaction.purchaseToken || transaction.transactionId || '')
+  if (!token) return
   try {
-    const token = String(transaction.purchaseToken || transaction.transactionId || '')
-    if (!token) return
+    if (nativePlatform() === 'android') {
+      await NativePurchases.consumePurchase({ purchaseToken: token })
+      return
+    }
     await NativePurchases.acknowledgePurchase({ purchaseToken: token })
   } catch {
-    /* already finished by Capgo updates listener — confirm already durable */
+    /* already finished / consumed — confirm already durable */
   }
 }
 
@@ -240,7 +266,7 @@ function clearPendingTxn(transactionId: string): void {
 }
 
 /**
- * Full iOS purchase → confirm → finish flow.
+ * Full native purchase → confirm → finish/consume flow (iOS StoreKit / Android Play).
  * Does not start when another purchase is in flight.
  */
 export async function purchaseStarsPack(productId: string): Promise<{
@@ -248,11 +274,13 @@ export async function purchaseStarsPack(productId: string): Promise<{
   state: PurchaseFlowState
   message?: string
 }> {
-  if (!isNativeIosStarsShop()) {
+  const onIos = isNativeIosStarsShop()
+  const onAndroid = isNativeAndroidShell()
+  if (!onIos && !onAndroid) {
     return {
       result: null,
       state: 'unavailable',
-      message: 'In-app purchases are only available in the iOS App Store app',
+      message: 'In-app purchases are only available in the iOS or Android store app',
     }
   }
   if (purchaseInFlight) {
@@ -267,23 +295,25 @@ export async function purchaseStarsPack(productId: string): Promise<{
   purchaseInFlight = true
   let transaction: Transaction | null = null
   try {
-    let status: AppleIapStatus
+    let purchasingEnabled = false
     try {
-      status = await fetchAppleIapStatus()
-    } catch {
-      status = {
-        platform: 'ios',
-        purchasing_enabled: false,
-        credit_enabled: false,
-        verification_configured: false,
-        products: [],
+      if (onIos) {
+        const status = await fetchAppleIapStatus()
+        purchasingEnabled = Boolean(status.purchasing_enabled)
+      } else {
+        const status = await fetchGoogleIapStatus()
+        purchasingEnabled = Boolean(status.purchasing_enabled)
       }
+    } catch {
+      purchasingEnabled = false
     }
-    if (!status.purchasing_enabled) {
+    if (!purchasingEnabled) {
       return {
         result: null,
         state: 'gate_off',
-        message: 'Apple Stars purchasing is not enabled yet.',
+        message: onIos
+          ? 'Apple Stars purchasing is not enabled yet.'
+          : 'Google Play Stars purchasing is not enabled yet.',
       }
     }
 
@@ -293,7 +323,9 @@ export async function purchaseStarsPack(productId: string): Promise<{
       productIdentifier: productId,
       productType: PURCHASE_TYPE.INAPP,
       appAccountToken,
-      // Prefer manual finish; Capgo Transaction.updates may still auto-finish.
+      // Android consumables must be consumed after server credit.
+      isConsumable: onAndroid,
+      // Prefer manual finish; Capgo Transaction.updates may still auto-finish on iOS.
       autoAcknowledgePurchases: false,
     })
 
@@ -306,7 +338,7 @@ export async function purchaseStarsPack(productId: string): Promise<{
       })
     }
 
-    if (!transaction.jwsRepresentation) {
+    if (onIos && !transaction.jwsRepresentation) {
       return {
         result: null,
         state: 'recovery_required',
@@ -314,17 +346,32 @@ export async function purchaseStarsPack(productId: string): Promise<{
           'Purchase completed in the App Store but signed transaction evidence is missing. Recovery will retry when you reopen the shop.',
       }
     }
+    if (onAndroid && !transaction.purchaseToken) {
+      return {
+        result: null,
+        state: 'recovery_required',
+        message:
+          'Purchase completed in Google Play but purchase token is missing. Recovery will retry when you reopen the shop.',
+      }
+    }
 
     try {
       const result = await confirmTransaction(transaction, productId)
-      // Finish after durable acceptance (credit, already processed, or blocked refund).
+      if ((result as IapConfirmResult & { pending?: boolean }).pending) {
+        return {
+          result,
+          state: 'recovery_required',
+          message: 'Payment is still pending. Stars will credit after Google Play completes the charge.',
+        }
+      }
+      // Finish/consume after durable acceptance (credit, already processed, or blocked refund).
       await finishTransaction(transaction)
       if (transaction.transactionId) clearPendingTxn(String(transaction.transactionId))
       if (result.blocked) {
         return {
           result,
           state: 'already_processed',
-          message: 'This purchase was refunded or revoked by Apple and was not credited.',
+          message: 'This purchase was refunded or revoked and was not credited.',
         }
       }
       if (result.already_processed) {
@@ -339,8 +386,8 @@ export async function purchaseStarsPack(productId: string): Promise<{
           state: state === 'gate_off' ? 'gate_off' : 'recovery_required',
           message:
             state === 'gate_off'
-              ? 'Purchase recorded by Apple; Stars credit is not enabled yet. Contact support if Stars are missing after enablement.'
-              : 'Purchase succeeded in the App Store but confirmation failed. We will retry when the app resumes.',
+              ? 'Purchase recorded by the store; Stars credit is not enabled yet. Contact support if Stars are missing after enablement.'
+              : 'Purchase succeeded in the store but confirmation failed. We will retry when the app resumes.',
         }
       }
       return {
@@ -377,7 +424,9 @@ export async function recoverPendingStarsPurchases(): Promise<{
   state: PurchaseFlowState
   message?: string
 }> {
-  if (!isNativeIosStarsShop()) {
+  const onIos = isNativeIosStarsShop()
+  const onAndroid = isNativeAndroidShell()
+  if (!onIos && !onAndroid) {
     return { recovered: 0, attempted: 0, state: 'unavailable' }
   }
   if (purchaseInFlight || recoveryInFlight) {
@@ -391,13 +440,17 @@ export async function recoverPendingStarsPurchases(): Promise<{
   recoveryInFlight = true
   lastRecoveryAt = now
   try {
-    let status: AppleIapStatus
+    let creditEnabled = false
     try {
-      status = await fetchAppleIapStatus()
+      if (onIos) {
+        creditEnabled = Boolean((await fetchAppleIapStatus()).credit_enabled)
+      } else {
+        creditEnabled = Boolean((await fetchGoogleIapStatus()).credit_enabled)
+      }
     } catch {
       return { recovered: 0, attempted: 0, state: 'network_failure' }
     }
-    if (!status.credit_enabled) {
+    if (!creditEnabled) {
       return { recovered: 0, attempted: 0, state: 'gate_off' }
     }
 
