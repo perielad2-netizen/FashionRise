@@ -3,7 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 15:45 Asia/Jerusalem — #536+#537 merged · FE `ec595a0` · nginx devices LIVE+SoT · GPA.3329 auto-reconcile dry-run OK (apply pending)
+**Last updated:** 2026-11-27 15:50 Asia/Jerusalem — VC 230 push registered · FCM accepted for Peri device · upsert race fix · GPA.3329 apply still pending
+
+## LIVE — VC 230 push registration + controlled FCM test (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Device retest | ~15:31 IL / 13:31Z · SM-S921B · Settings Notifications **ON** (green) |
+| HTTP | OPTIONS **200** → POST **201** (after brief 401 refresh) → GET **200** confirm |
+| DB | Peri (`54880c4a-…`) · **1** android row · id `b96f7f58-…` · token fp `dC5Y…EC0g` (len 142) · created **13:33:24Z** · **no duplicate tokens** |
+| Other devices | One other android row for a different account — **not** targeted |
+| Race note | Concurrent POST during toggle hit `uq_native_push_devices_token` → intermittent **500**; final state healthy. Fix: IntegrityError recovery in `upsert_native_device` |
+| Controlled FCM | Sent **only** to Peri device `b96f7f58-…` via `_send_fcm` · **FCM accepted=`true`** · token_gone=`false` · title “FashionRise push test” · url `/studio/runway` |
+| Device receipt | **Separate** — operator must confirm notification appeared on phone (not proven by FCM HTTP alone) |
+| Push operational? | Registration **verified**. Full workflow **not** closed until device receipt confirmed |
+| #536 / FE / nginx | MERGED · FE `/version.json`=`ec595a0` · nginx devices assert **PASS** · SoT `deploy/nginx-allowlists/` |
+| Refund | GPA.3329 still `recover_full` would **50** · wallet **999397** · apply **not** executed · gates unchanged |
+| AAB | No rebuild (VC **230**) |
 
 ## LIVE — PR #536/#537 nginx devices + FE deploy (2026-11-27 Asia/Jerusalem)
 

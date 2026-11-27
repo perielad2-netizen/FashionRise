@@ -106,6 +106,64 @@ def test_sanitize_push_url_allowlist():
     assert push_service.sanitize_push_url("/privacy") == "/privacy"
 
 
+def test_register_native_device_idempotent_same_token(client, db_session, monkeypatch):
+    """Repeated POST of the same FCM token must stay 201 (no UniqueViolation 500)."""
+    _enable_android_flags(monkeypatch)
+    tokens = register_with_invite(client, db_session, "np.idem@example.com", "npIdem")
+    headers = _auth(tokens)
+    token = "fcm-idem-" + ("y" * 24)
+    body = {"platform": "android", "device_token": token}
+    first = client.post("/api/v1/push/native/devices", headers=headers, json=body)
+    second = client.post("/api/v1/push/native/devices", headers=headers, json=body)
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert first.json()["id"] == second.json()["id"]
+    listed = client.get("/api/v1/push/native/devices", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_upsert_native_device_recovers_unique_race(monkeypatch):
+    """IntegrityError on insert commit re-binds the winning token row (no 500)."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.schemas.push import NativePushDeviceCreate
+
+    _enable_android_flags(monkeypatch)
+    user = User(id=__import__("uuid").uuid4(), email="a@ex.com", username="a", hashed_password="x")
+    winner = NativePushDevice(
+        id=__import__("uuid").uuid4(),
+        user_id=__import__("uuid").uuid4(),
+        platform="android",
+        device_token="fcm-race-" + ("z" * 24),
+    )
+    db = __import__("unittest.mock", fromlist=["MagicMock"]).MagicMock()
+    state = {"n": 0}
+
+    def scalar(_stmt):
+        state["n"] += 1
+        if state["n"] == 1:
+            return None
+        return winner
+
+    def commit():
+        if state["n"] == 1:
+            raise IntegrityError("INSERT", {}, Exception("uq_native_push_devices_token"))
+        return None
+
+    db.scalar.side_effect = scalar
+    db.commit.side_effect = commit
+    out = push_service.upsert_native_device(
+        db,
+        user,
+        NativePushDeviceCreate(platform="android", device_token=winner.device_token),
+    )
+    assert out is winner
+    assert winner.user_id == user.id
+    assert db.rollback.called
+    assert db.commit.call_count >= 2
+
+
 def test_notify_skips_native_when_disabled(client, db_session, monkeypatch):
     _clear_native_env(monkeypatch)
     # Keep web push off too
