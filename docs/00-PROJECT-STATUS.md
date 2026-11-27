@@ -3,31 +3,31 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 10:10 Asia/Jerusalem — Android FCM **LIVE** (API + Codemagic `ANDROID_GOOGLE_SERVICES_JSON`); AAB not started; Play Billing pending
+**Last updated:** 2026-11-27 10:55 Asia/Jerusalem — Play App Signing assetlinks **LIVE** · Play SA verify **configured** · public purchase **OFF** · AAB hold (RTDN next)
 
-## LIVE — Android FCM (API + Codemagic inject ready) (2026-11-27 Asia/Jerusalem)
-
-| Field | Value |
-| --- | --- |
-| Status | **LIVE (API)** + **Codemagic env ready** — do **not** start AAB until Play Billing config is done |
-| Merged | PR **#523** → `main` (`e7d05340`) |
-| Capability | `GET /api/v1/push/native/capability` → `android_enabled: true` |
-| SA path | `/var/lib/fashionrise/secrets/fcm-firebase-sa.json` (mode 0640 · not in git) |
-| Env | `NATIVE_PUSH_FCM_PROJECT_ID=fashionrise-e2f01` · `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=<abs path>` |
-| Codemagic | Group `fashionrise_native` has secure `ANDROID_GOOGLE_SERVICES_JSON` (existing vars preserved) |
-| Untouched | Web Push · iOS APNs · signing credentials · no AAB triggered |
-| Exact next action | Finish Google Play Billing (Play SA + products + license testers + assetlinks SHA) → then Internal AAB |
-
-## READY — Android release: Play Billing + App Links (FCM API done)
+## LIVE — Android App Links + Play Billing verify (gates OFF) (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | FCM API **on**; Play Billing + assetlinks SHA still owner-blocked |
-| Alembic | **046** applied |
-| Play Billing | Fail-closed until Play Developer SA + products + license testers |
-| App Links | `assetlinks.json` **200** — replace placeholder with **Play App Signing SHA-256** |
-| Codemagic | `fashionrise-android-play-internal` · offset **30** · injects `ANDROID_GOOGLE_SERVICES_JSON` |
-| Operator checklist | `docs/deploy/ANDROID-RELEASE-OPERATOR.md` |
+| Status | **assetlinks LIVE** · Play Developer SA on API · `IAP_GOOGLE_PURCHASING_ENABLED=false` / `CREDIT=false` |
+| Package | `app.fashionrise.studio` |
+| App Signing SHA-256 | `D8:2D:D6:16:…:79:16` published at `/.well-known/assetlinks.json` (apex + www) |
+| DAL API | `statements:list` returns package + fingerprint for `https://fashionrise.app` |
+| Play SA | `/var/lib/fashionrise/secrets/google-play-sa.json` (0640) · Cursor `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` |
+| Env | `IAP_GOOGLE_SERVICE_ACCOUNT_JSON=<abs path>` · package `app.fashionrise.studio` |
+| Products (API) | `stars_50` / `stars_150` / `stars_500` — all **ACTIVE** via `oneTimeProducts` |
+| Public purchase | **OFF** until license-tester validation · `IAP_GOOGLE_LICENSE_TESTER_EMAILS` still empty (set FashionRise account emails when ready) |
+| Dep | Prod venv now has `google-auth` (required for FCM + Play verify) |
+| Untouched | No AAB · no RTDN audience yet · Web Push / iOS unchanged |
+| Exact next action | RTDN Pub/Sub → set `IAP_GOOGLE_RTDN_AUDIENCE` · add license-tester emails · then Internal AAB |
+
+## LIVE — Android FCM (API + Codemagic inject ready)
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE (API)** + Codemagic `ANDROID_GOOGLE_SERVICES_JSON` in `fashionrise_native` |
+| Capability | `android_enabled: true` · project `fashionrise-e2f01` |
+| Merged | PR **#523** / docs **#524** |
 
 ## LIVE — Real AI financial reporting activated (2026-11-27 Asia/Jerusalem)
 

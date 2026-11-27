@@ -39,33 +39,43 @@ Do **not** change Web Push or iOS APNs flags in this checklist.
 
 ## B. Google Play Billing (Stars)
 
-Products (consumable, same as Apple): `stars_50` · `stars_150` · `stars_500`.
+Products (consumable, same as Apple): `stars_50` · `stars_150` · `stars_500` — **ACTIVE** in Play (verified via Android Publisher `oneTimeProducts`).
 
-1. Play Console → Monetize → create/activate the three in-app products (consumable).
-2. Link a Play Developer API service account (Android Publisher) with access to this app.
-3. Store JSON on API host: `IAP_GOOGLE_SERVICE_ACCOUNT_JSON=/path/to/play-sa.json`.
-4. Gates (default OFF in code; set only when ready):
-   - License testers first: `IAP_GOOGLE_LICENSE_TESTER_EMAILS=you@…` (FashionRise account emails).
-   - Keep `IAP_GOOGLE_PURCHASING_ENABLED=false` / `IAP_GOOGLE_CREDIT_ENABLED=false` until license-tester smoke passes.
-   - Then enable public gates if authorized.
-5. RTDN: Play Console → Monetization setup → Real-time developer notifications → Pub/Sub topic → push subscription to  
+### Production API (2026-11-27 Asia/Jerusalem)
+
+| Env | Value |
+| --- | --- |
+| `IAP_GOOGLE_SERVICE_ACCOUNT_JSON` | `/var/lib/fashionrise/secrets/google-play-sa.json` (from Cursor `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`) |
+| `IAP_GOOGLE_PACKAGE_NAME` | `app.fashionrise.studio` |
+| `IAP_GOOGLE_PURCHASING_ENABLED` | `false` (public OFF) |
+| `IAP_GOOGLE_CREDIT_ENABLED` | `false` (public OFF) |
+| `IAP_GOOGLE_LICENSE_TESTER_EMAILS` | set FashionRise account emails when ready for license-tester smoke |
+| `IAP_GOOGLE_RTDN_VERIFY_OIDC` | `true` |
+| `IAP_GOOGLE_RTDN_AUDIENCE` | **pending** — set after Pub/Sub push URL exists |
+
+Connectivity check (no purchase): SA mints Android Publisher token · `oneTimeProducts` lists the three SKUs · bogus purchase token returns 400 (auth OK).
+
+1. Keep public gates **false** until license-tester validation.
+2. RTDN next: Play Console → Monetization setup → Real-time developer notifications → Pub/Sub → push to  
    `https://fashionrise.app/api/v1/shop/iap/google/notifications`  
-   Set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL; leave `IAP_GOOGLE_RTDN_VERIFY_OIDC=true`.
-6. Nginx must allowlist `POST` on that path (see shop allowlist docs).
-7. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
+   then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL.
+3. Nginx must allowlist `POST` on that path (see shop allowlist docs).
+4. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
 
 Never trust client Stars/price. Credit only after `purchases.products.get` · purchaseState=Purchased · account bind · durable purchase-token idempotency · then client `consumePurchase`.
 
 ## C. Android App Links (Digital Asset Links)
 
-1. Play Console → App integrity → **App signing key certificate** → copy **SHA-256** (not upload key).
-2. Write `/var/www/fashionrise/well-known/assetlinks.json` with that fingerprint and package `app.fashionrise.studio`.
-3. Nginx must serve `/.well-known/assetlinks.json` (and AASA) with **200**, JSON, **no redirect**, before any `location ~ /\.` deny.
-4. Same file for `www.fashionrise.app` (both hosts declared in the manifest).
-5. Cloudflare: exclude Access/WAF challenge on `/.well-known/*` if needed.
-6. Verify: Digital Asset Links API / `adb shell pm get-app-links app.fashionrise.studio`.
+**Live (2026-11-27 Asia/Jerusalem):** Play App Signing SHA-256  
+`D8:2D:D6:16:40:F9:4E:39:5E:30:14:08:04:41:8D:87:C6:D6:D5:78:B9:70:48:1E:6A:13:08:F2:53:A1:79:16`  
+at `/var/www/fashionrise/well-known/assetlinks.json` (nginx alias for apex + www).
 
-Repo keeps `web-ui/public/.well-known/*.template` only — live fingerprints stay on the host.
+1. Verify: `https://fashionrise.app/.well-known/assetlinks.json` and `https://www.fashionrise.app/.well-known/assetlinks.json` → **200** JSON.
+2. DAL: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://fashionrise.app&relation=delegate_permission/common.handle_all_urls`
+3. If Play Console shows a **previous** app signing certificate, append its SHA-256 to `sha256_cert_fingerprints` (array supports multiple) for older installs — do not remove the current Play App Signing fingerprint.
+4. Cloudflare: exclude Access/WAF challenge on `/.well-known/*` if needed.
+
+Repo keeps `web-ui/public/.well-known/*.template` — live host file is authoritative.
 
 ## D. Codemagic AAB
 
