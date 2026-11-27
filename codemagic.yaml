@@ -329,7 +329,8 @@ workflows:
         # Raise when Play Internal already consumed lower versionCodes from prior AABs.
         # Bumped for camera-permission P0 (#CAMERA tools:node=remove) — next Internal
         # AAB must exceed any APK/AAB still declaring android.permission.CAMERA.
-        ANDROID_VERSION_CODE_OFFSET: "20"
+        # Raised for FCM + Play Billing + App Links consolidated Internal AAB.
+        ANDROID_VERSION_CODE_OFFSET: "30"
       node: 22
       java: 21
 
@@ -348,6 +349,23 @@ workflows:
       - name: Sync Capacitor Android project
         script: |
           npx cap sync android
+
+      - name: Inject google-services.json (Firebase)
+        script: |
+          set -euo pipefail
+          DEST="$CM_BUILD_DIR/web-ui/android/app/google-services.json"
+          # Prefer Codemagic secure file mounted as CM_GOOGLE_SERVICES_JSON path,
+          # else raw JSON in env GOOGLE_SERVICES_JSON (fashionrise_native group).
+          if [ -n "${CM_GOOGLE_SERVICES_JSON:-}" ] && [ -f "$CM_GOOGLE_SERVICES_JSON" ]; then
+            cp "$CM_GOOGLE_SERVICES_JSON" "$DEST"
+          elif [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s\n' "$GOOGLE_SERVICES_JSON" > "$DEST"
+          else
+            echo "WARNING: google-services.json not provided — FCM client init will be skipped"
+            exit 0
+          fi
+          python3 -c "import json,sys; json.load(open(sys.argv[1])); print('google-services.json ok')" "$DEST"
+          # Never archive secrets as build artifacts.
 
       - name: Assert Android launcher icons are real
         script: |
@@ -381,6 +399,8 @@ workflows:
           AAB="$CM_BUILD_DIR/web-ui/android/app/build/outputs/bundle/release/app-release.aab"
           test -f "$AAB"
           echo "Built AAB: $AAB (versionCode=$VC versionName=$VN package=$GOOGLE_PLAY_PACKAGE_NAME)"
+          # Ensure Firebase config never ships in exported mapping/artifacts as a copy.
+          rm -f "$CM_BUILD_DIR/web-ui/android/app/google-services.json" || true
 
     artifacts:
       - $CM_BUILD_DIR/web-ui/android/app/build/outputs/bundle/release/*.aab

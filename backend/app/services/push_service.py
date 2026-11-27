@@ -400,6 +400,10 @@ def _send_fcm(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool, 
                 "android": {
                     "collapse_key": str(payload.get("tag") or "fashionrise-runway")[:64],
                     "priority": "HIGH",
+                    "notification": {
+                        "channel_id": "fashionrise_social",
+                        "click_action": "OPEN_URI",
+                    },
                 },
             }
         }

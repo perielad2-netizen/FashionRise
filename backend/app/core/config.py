@@ -483,6 +483,15 @@ class Settings(BaseSettings):
     iap_apple_shared_secret: str = ""
     # Path or inline JSON for Google Play Developer API service account.
     iap_google_service_account_json: str = ""
+    iap_google_package_name: str = "app.fashionrise.studio"
+    # Google Play purchasing / credit — default OFF until license testers + products ready.
+    iap_google_purchasing_enabled: bool = False
+    iap_google_credit_enabled: bool = False
+    # License-tester FashionRise emails (Play license testing) while public gates stay OFF.
+    iap_google_license_tester_emails: str = ""
+    # RTDN Pub/Sub push OIDC verification (audience = full HTTPS webhook URL).
+    iap_google_rtdn_verify_oidc: bool = True
+    iap_google_rtdn_audience: str = ""
     # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also
     # refuses unverified credit even in non-prod — send signed sandbox JWS instead.
     iap_allow_unverified_sandbox: bool = False

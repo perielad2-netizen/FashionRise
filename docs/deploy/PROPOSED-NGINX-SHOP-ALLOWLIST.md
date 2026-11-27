@@ -55,6 +55,33 @@ location = /api/v1/shop/iap/apple/status {
     add_header Cache-Control "no-store" always;
 }
 
+location = /api/v1/shop/iap/google/status {
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 15s;
+    add_header Cache-Control "no-store" always;
+}
+
+location = /api/v1/shop/iap/google/notifications {
+    limit_except POST OPTIONS { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Authorization $http_authorization;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    client_max_body_size 1m;
+    add_header Cache-Control "no-store" always;
+}
+
 location = /api/v1/shop/iap/confirm {
     proxy_pass http://127.0.0.1:8010;
     proxy_http_version 1.1;

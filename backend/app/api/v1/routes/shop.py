@@ -10,7 +10,7 @@ from app.auth.dependencies import CurrentUser, OptionalUser
 from app.core.errors import ForbiddenError, ServiceUnavailableError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.services import apple_asn, iap_service, stars_shop
+from app.services import apple_asn, google_rtdn, iap_service, stars_shop
 
 router = APIRouter()
 
@@ -122,6 +122,17 @@ def get_apple_iap_status(
     return iap_service.apple_shop_status(user)
 
 
+@router.get("/iap/google/status")
+@limiter.limit("60/minute")
+def get_google_iap_status(
+    request: Request,
+    user: OptionalUser,
+) -> dict[str, Any]:
+    """Android Play Billing gate/config status (optional auth; no secrets)."""
+    _ = request.url
+    return iap_service.google_shop_status(user)
+
+
 @router.post("/iap/confirm")
 @limiter.limit("30/minute")
 def confirm_iap_purchase(
@@ -174,3 +185,28 @@ def apple_iap_notifications(
     except Exception:
         # Transient — Apple retries on non-2xx.
         raise ServiceUnavailableError("Apple notification processing temporarily unavailable")
+
+
+@router.post("/iap/google/notifications")
+@limiter.limit("120/minute")
+async def google_iap_notifications(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Google Play RTDN via Pub/Sub push.
+
+    No FashionRise user session. Authenticated by Google OIDC Bearer when enabled.
+    """
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise ValidationAppError("Invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise ValidationAppError("Invalid JSON body")
+    auth = request.headers.get("authorization")
+    try:
+        return google_rtdn.process_google_rtdn(db, body=body, authorization=auth)
+    except (ValidationAppError, ForbiddenError, ServiceUnavailableError):
+        raise
+    except Exception:
+        raise ServiceUnavailableError("Google RTDN processing temporarily unavailable")
