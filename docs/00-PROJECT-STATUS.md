@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 16:00 Asia/Jerusalem — BE+FE tap fix live · controlled retest FCM sent · AAB VC 241 building · GPA.3329 recovered
+**Last updated:** 2026-11-27 16:05 Asia/Jerusalem — #540 MERGED · tap opens app confirmed · friend alerts shipping · GPA.3329 recovered · apply gate OFF
+
+## LIVE — #540 merged · tap opens app · GPA.3329 auto-recover (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR #540 | **MERGED** `2b9b0a38` · tip included tap-open BE/FE + VC 241 AAB docs |
+| Device | Controlled retest notification **received** and **tap opened FashionRise** (OPEN_URI removal validated) |
+| Destination | `/studio/runway` navigation **not yet confirmed** as absolute device proof (versionCode during latest test also unconfirmed) — do **not** claim full deep-link complete |
+| AAB | Internal **VC 241** available: `/var/www/fashionrise/artifacts/android/FashionRise-864bbc25-vc241-internal.aab` |
+| Deployed (pre-merge tip) | BE/FE already on tap-open tip; nginx devices allowlist preserved |
+| GPA.3329 | Scoped automated reconcile apply **DONE** · wallet **999397→999347** · clawed **50** · `orders_reconcile` · post dry-run `already_recovered` · GPA.3393 once · gates OFF |
+| Friend alerts | Settings promises friend alerts; producers for request/accept now wired to `notify_user` (this follow-up PR) |
+| Push operational? | **Partial** — open works; full workflow needs confirmed destination + real social-event device validation |
+| Permanent auto-apply | **OFF** — readiness work continues; separate PM approval required |
 
 ## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
 
@@ -13,13 +27,13 @@
 | Tap | **FAILED** on VC 230 payload — notification did **not** open the app |
 | Tap root cause | FCM `click_action: "OPEN_URI"` with no MainActivity intent-filter → system tray cannot resolve Activity. Registration/delivery ≠ interaction. |
 | Fix | BE: omit custom `click_action` (`build_fcm_message_body`) · FE: early listeners + `notificationNavigation` · tests · offset **140** |
-| PR | **#540** `cursor/web-push-tap-refund-recover-77c6` tip **`864bbc25`** |
+| PR | **#540** MERGED |
 | BE deploy | `/opt/fashionrise/src` @ **`864bbc25`** · API restarted · runtime assert no `click_action` |
 | FE deploy | `/var/www/fashionrise/releases/864bbc25-push-tap-open` · `/version.json` → **`864bbc25`** · nginx devices allowlist assert **PASS** |
 | Controlled retest FCM | Sent **only** to Peri `b96f7f58-…` · title “FashionRise push test” · body “Tap-open retest — should open Runway.” · url `/studio/runway` · **no** `click_action` · FCM **ok** |
 | AAB | Codemagic build **`6b098ae56649b1e24f3aacbd`** (index **63**) · **versionCode=241** · versionName **1.0** · offset **140** · VPS `/var/www/fashionrise/artifacts/android/FashionRise-864bbc25-vc241-internal.aab` |
-| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm`. Friend-request alerts: **no** push today. |
-| Push operational? | **No** — device must confirm tap opens app → `/studio/runway`. BE fix alone should open on VC **230**; full FE pending-nav needs AAB **241**. |
+| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm`. Friend-request alerts: **shipping** in follow-up. |
+| Push operational? | Tap **opens** confirmed later same day; destination absolute proof still pending |
 | GPA.3329 apply | **DONE** · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` · GPA.3393 still once |
 | Persistent gates | purchasing **false** · credit **false** · reconcile apply **false** |
 | Permanent auto-apply | **Not enabled** — readiness blockers below; needs separate PM approval |

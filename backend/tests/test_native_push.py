@@ -128,6 +128,13 @@ def test_sanitize_push_url_allowlist():
     assert push_service.sanitize_push_url("/auth/google/complete#access_token=x") == "/studio/runway"
     assert push_service.sanitize_push_url("/studio/runway?token=leak") == "/studio/runway"
     assert push_service.sanitize_push_url("/privacy") == "/privacy"
+    # Manage friends sheet — only friends=1 on fashionrise is allowed through.
+    assert (
+        push_service.sanitize_push_url("/studio/fashionrise?friends=1")
+        == "/studio/fashionrise?friends=1"
+    )
+    assert push_service.sanitize_push_url("/studio/runway?friends=1") == "/studio/runway"
+    assert push_service.sanitize_push_url("/studio/fashionrise?friends=1&token=x") == "/studio/runway"
 
 
 def test_register_native_device_idempotent_same_token(client, db_session, monkeypatch):

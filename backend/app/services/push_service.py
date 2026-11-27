@@ -73,6 +73,14 @@ def native_ios_enabled() -> bool:
     )
 
 
+# Safe, non-credential query strings permitted on specific Studio paths only.
+_ALLOWED_PUSH_QUERIES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("/studio/fashionrise", "friends=1"),
+    }
+)
+
+
 def sanitize_push_url(url: str | None) -> str:
     """Allow only non-credential Studio/privacy paths for push taps."""
     fallback = "/studio/runway"
@@ -82,7 +90,7 @@ def sanitize_push_url(url: str | None) -> str:
             from urllib.parse import urlparse
 
             parsed = urlparse(raw)
-            raw = parsed.path or "/"
+            raw = f"{parsed.path or '/'}{('?' + parsed.query) if parsed.query else ''}"
         except Exception:  # noqa: BLE001
             return fallback
     if not raw.startswith("/") or raw.startswith("//"):
@@ -90,14 +98,21 @@ def sanitize_push_url(url: str | None) -> str:
     if _TOKENISH.search(raw):
         return fallback
     path = raw.split("?", 1)[0].split("#", 1)[0]
+    query = ""
+    if "?" in raw:
+        query = raw.split("?", 1)[1].split("#", 1)[0].strip()
     if any(path == p or path.startswith(p) for p in _BLOCKED_PUSH_PATH_PREFIXES):
         return fallback
     if path != "/" and not any(
         path == p or path.startswith(f"{p}/") for p in _ALLOWED_PUSH_PATH_PREFIXES
     ):
         return fallback
-    # Drop query/hash — push destinations never carry credentials.
-    return path if path != "/" else fallback
+    if path == "/":
+        return fallback
+    # Drop query/hash by default; allow only explicitly safe pairs (e.g. friends sheet).
+    if query and (path, query) in _ALLOWED_PUSH_QUERIES:
+        return f"{path}?{query}"
+    return path
 
 
 def upsert_subscription(
@@ -342,6 +357,34 @@ def notify_comment_like(db: Session, *, author_id: uuid.UUID, actor: User, snipp
         title="Someone liked your comment",
         body=f"@{actor.username} liked “{preview}”" if preview else f"@{actor.username} liked your comment",
         tag=f"runway-comment-like-{author_id}",
+    )
+
+
+def notify_friend_request(db: Session, *, addressee_id: uuid.UUID, actor: User) -> None:
+    """Notify the invitee of a pending friend request (Settings: friend alerts)."""
+    if addressee_id == actor.id:
+        return
+    notify_user(
+        db,
+        addressee_id,
+        title="New friend request",
+        body=f"@{actor.username} wants to be friends",
+        url="/studio/fashionrise?friends=1",
+        tag=f"friend-request-{addressee_id}",
+    )
+
+
+def notify_friend_accepted(db: Session, *, requester_id: uuid.UUID, actor: User) -> None:
+    """Notify the original requester that their friend request was accepted."""
+    if requester_id == actor.id:
+        return
+    notify_user(
+        db,
+        requester_id,
+        title="Friend request accepted",
+        body=f"@{actor.username} accepted your friend request",
+        url="/studio/fashionrise?friends=1",
+        tag=f"friend-accepted-{requester_id}",
     )
 
 

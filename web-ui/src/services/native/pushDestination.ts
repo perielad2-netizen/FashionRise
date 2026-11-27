@@ -29,6 +29,9 @@ export function isPushDestinationPath(pathname: string): boolean {
   )
 }
 
+/** Safe non-credential queries allowed on specific Studio paths (Manage friends). */
+const ALLOWED_PUSH_QUERIES: ReadonlySet<string> = new Set(['/studio/fashionrise?friends=1'])
+
 /** Safe SPA path for a push tap; defaults to FashionRise feed. Never returns credential-bearing URLs. */
 export function sanitizePushDestination(raw: unknown): string {
   const fallback = '/studio/fashionrise'
@@ -49,6 +52,12 @@ export function sanitizePushDestination(raw: unknown): string {
   if (TOKENISH.test(url)) return fallback
   const path = url.split('?')[0].split('#')[0] || '/'
   if (!isPushDestinationPath(path)) return fallback
-  // Drop query/hash entirely for push destinations (no credential leakage).
-  return path === '/' ? fallback : path
+  if (path === '/') return fallback
+  const query = (url.split('?')[1] || '').split('#')[0].trim()
+  // Drop query/hash by default; allow only explicitly safe pairs.
+  if (query) {
+    const candidate = `${path}?${query}`
+    if (ALLOWED_PUSH_QUERIES.has(candidate)) return candidate
+  }
+  return path
 }

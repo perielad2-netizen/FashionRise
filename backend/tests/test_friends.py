@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from tests.auth_test_helpers import register_with_invite
 
 
@@ -13,28 +15,36 @@ def test_request_accept_lists_friend(client, db_session):
     peri = register_with_invite(client, db_session, "peri_friends@example.com", "PeriFriends")
     yaniv = register_with_invite(client, db_session, "yaniv_friends@example.com", "yanivFriends")
 
-    req = client.post(
-        "/api/v1/friends/request",
-        headers=_auth(peri),
-        json={"username": "yanivFriends"},
-    )
-    assert req.status_code == 201, req.text
-    body = req.json()
-    assert body["status"] == "pending"
-    assert body["friend"]["username"] == "yanivFriends"
-    friendship_id = body["id"]
+    with patch("app.services.push_service.notify_friend_request") as n_req, patch(
+        "app.services.push_service.notify_friend_accepted"
+    ) as n_acc:
+        req = client.post(
+            "/api/v1/friends/request",
+            headers=_auth(peri),
+            json={"username": "yanivFriends"},
+        )
+        assert req.status_code == 201, req.text
+        body = req.json()
+        assert body["status"] == "pending"
+        assert body["friend"]["username"] == "yanivFriends"
+        friendship_id = body["id"]
+        assert n_req.call_count == 1
+        assert n_req.call_args.kwargs["addressee_id"] is not None
+        assert n_req.call_args.kwargs["actor"].username == "PeriFriends"
 
-    pending = client.get("/api/v1/friends/requests", headers=_auth(yaniv))
-    assert pending.status_code == 200
-    assert len(pending.json()) == 1
-    assert pending.json()[0]["friend"]["username"] == "PeriFriends"
+        pending = client.get("/api/v1/friends/requests", headers=_auth(yaniv))
+        assert pending.status_code == 200
+        assert len(pending.json()) == 1
+        assert pending.json()[0]["friend"]["username"] == "PeriFriends"
 
-    accepted = client.post(
-        f"/api/v1/friends/{friendship_id}/accept",
-        headers=_auth(yaniv),
-    )
-    assert accepted.status_code == 200, accepted.text
-    assert accepted.json()["status"] == "accepted"
+        accepted = client.post(
+            f"/api/v1/friends/{friendship_id}/accept",
+            headers=_auth(yaniv),
+        )
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["status"] == "accepted"
+        assert n_acc.call_count == 1
+        assert n_acc.call_args.kwargs["actor"].username == "yanivFriends"
 
     peri_friends = client.get("/api/v1/friends", headers=_auth(peri))
     yaniv_friends = client.get("/api/v1/friends", headers=_auth(yaniv))
