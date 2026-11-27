@@ -1203,6 +1203,17 @@ def overview(
         audience_filter=aud_filt,
     )
     payload["ai_financial"] = ai_financial
+    try:
+        from app.services import google_play_reconcile
+
+        payload["ai_financial"]["google_play_reconciliation"] = (
+            google_play_reconcile.admin_reconciliation_snapshot(db, sample_limit=25)
+        )
+    except Exception:  # noqa: BLE001 — overview must not fail closed on reconcile probe
+        payload["ai_financial"]["google_play_reconciliation"] = {
+            "kind": "unavailable",
+            "detail": "google_play_reconciliation_probe_failed",
+        }
     successful_gens = int(
         magic_in_range
         + fitting_in_range

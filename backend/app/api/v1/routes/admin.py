@@ -20,7 +20,7 @@ from app.db.session import get_db
 from app.models.account_classification_event import ACCOUNT_CLASSIFICATIONS
 from app.models.admin_stars_grant import ADMIN_GRANT_REASONS
 from app.models.user import User
-from app.services import admin_analytics, admin_stars_grants
+from app.services import admin_analytics, admin_stars_grants, google_play_reconcile
 from app.services.admin_analytics import ConflictClassificationError
 
 router = APIRouter()
@@ -83,6 +83,37 @@ def admin_overview(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/iap/google/reconcile")
+@limiter.limit("20/minute")
+def admin_google_play_reconcile_dry_run(
+    request: Request,
+    _admin: FinancialAdminUser,
+    db: Session = Depends(get_db),
+    order_id: Optional[str] = Query(default=None, max_length=128),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    """Read-only Google Play financial reconcile (orders.get + entitlement).
+
+    Never mutates wallets. Apply mode is a separate config flag and is not
+    exposed through this endpoint.
+    """
+    _ = request.url
+    try:
+        return google_play_reconcile.reconcile_android_purchases(
+            db,
+            dry_run=True,
+            limit=limit,
+            order_id=(order_id or "").strip() or None,
+        )
+    except AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Play reconcile temporarily unavailable",
+        ) from exc
 
 
 @router.get("/metrics/dictionary")

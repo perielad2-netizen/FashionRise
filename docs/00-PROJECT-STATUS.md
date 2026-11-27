@@ -3,19 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 12:50 Asia/Jerusalem — Android push/Settings + refund clawback + unlimited shop guard · public gates **OFF**
+**Last updated:** 2026-11-27 12:55 Asia/Jerusalem — Google Play **orders.get** financial reconcile (dry-run) · native push/unlimited shop · public gates **OFF**
 
-## FIX — Android native push, Settings toggle, refund clawback, unlimited shop (2026-11-27 Asia/Jerusalem)
+## FIX — Google Play financial reconcile + Android push/unlimited (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Native push root cause | Prod had **0** `native_push_devices` rows ever (Yaniv + owner). Capability `android_enabled=true` but client returned success without waiting for an FCM token; only Chrome Web Push delivered comments. Browser subscriptions **preserved**. |
-| Native push fix | Wait for FCM/APNs token before `granted`; surface `registration_failed`; Settings → **Notifications** toggle (shared `pushApi`/`nativePush`); Android plugin opens system notification settings when OS denied; R8 keeps for FCM + plugin |
-| Yaniv Play buy | Order `GPA.3387-8819-3710-21379` · purchase `11ae5adf-…` · Sandbox · confirm **200** · +50 · ack/consumed. Google Play Points error is **unrelated** to FashionRise credit (purchase succeeded). Wallet unlimited — balance 1000103 |
-| Unlimited shop | `google/apple status` sets `unlimited_wallet` + `purchasing_enabled=false` for unlimited accounts; Stars shop blocks Buy (“Not needed”) without changing entitlement. Confirm still recovers already-paid tokens |
-| Owner refund | Order `GPA.3369-0332-8762-49726` — Play `purchaseState=1` CANCELED but **no** cancel/void RTDN and empty `voidedpurchases.list`. Operator clawback via products.get → `stars_clawed_back=50` · wallet **999347** · status `refunded`. Durable fix: `reconcile_canceled_active_purchases` |
-| Gates / Alpha | Public `PURCHASING/CREDIT=false` · Alpha **114** + 15 testers preserved · layout/R8 preserved |
-| Exact next action | Ship one Internal AAB (FE+native) · BE deploy reconcile helper · Yaniv re-login → Settings Notifications On → verify native device row + background push |
+| Refund semantics (Google) | Refund-only **without revoke** may emit neither RTDN nor Voided Purchases — **not** assumed Pub/Sub failure ([voided-purchases](https://developers.google.com/android-publisher/voided-purchases), [orders](https://developers.google.com/android-publisher/api-ref/rest/v3/orders)) |
+| Authority | `orders.get` = financial state · `products.get` = entitlement · clawback only when **both** full refund + canceled/404 entitlement |
+| Owner order `GPA.3369-0332-8762-49726` | `orders.get` → **`REFUNDED`** + full `refundEvent` (10:18:03Z, OTHER, 19.9 ILS) · entitlement **canceled** · ledger already `refunded` / clawed **50** / wallet **999347** |
+| Dry-run (read-only) | Decision **`already_recovered`** · `stars_would_recover=0` · apply flag **OFF** · no further wallet mutation |
+| Hypothetical pre-recovery | Would classify **`recover_full`** (full refund + canceled entitlement) |
+| Duplicate safety | Clawback engine + durable message ids — outstanding=0 blocks second deduct; unit test covers RTDN after orders reconcile |
+| Yaniv `GPA.3387-…` | `orders.get` **`PROCESSED`** · entitlement purchased · dry-run **`ok`** (successful buy; Play Points overlay unrelated) · unlimited shop blocks new buys |
+| Native push | Zero FCM device rows → wait-for-token + Settings Notifications toggle (Web Push preserved) |
+| Admin | `ai_financial.google_play_reconciliation` + `GET /admin/iap/google/reconcile` (dry-run only) |
+| Periodic | AI worker tick scans when enabled; **mutations require** `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true` (currently **false**) |
+| Revenue | Sandbox still excluded from Production revenue |
+| Gates / Alpha | Public purchasing/credit **OFF** · Alpha 114 + 15 testers untouched · iOS purchasing unchanged |
+| Exact next action | Keep apply **OFF** until PM authorizes · ship AAB for push Settings · Yaniv enable Notifications |
 
 ## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
 
