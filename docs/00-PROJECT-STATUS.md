@@ -3,7 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 13:15 Asia/Jerusalem — PR **#532** merged + live · Alembic **047** · prod dry-run clean · Codemagic AAB building
+**Last updated:** 2026-11-27 14:05 Asia/Jerusalem — Prod QA push+refund · root causes identified · diagnostics PR · apply still OFF · not device-validated
+
+## QA — Push registration + refund recovery (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Installed Android target | Internal AAB **VC 219** (`6b09658ff0062a24ddbc607f`) — FirebaseInitProvider + `google_app_id` `1:873511357568:android:a03620834a029aa950aa65` + FCM plugin present; R8 keeps Firebase |
+| BE / FE tip | **`d9b6e8b9`** (pre-diagnostics) · capability `android_enabled:true` · `NATIVE_PUSH_ANDROID_ENABLED=true` |
+| Push failing stage | **FCM token acquisition** — zero `POST /push/native/devices` · `native_push_devices=0` · Settings shows `registration_failed` after permission+capability succeed |
+| Push not caused by | Feature flag off · missing google-services in AAB · backend confirm regression · separate auto vs manual path (both share `syncNativePushAfterAuth`) |
+| Push fix in this PR | Stage-aware diagnostics + actionable Settings/Runway errors + safe logs (token fingerprint only) + one FCM register retry · **requires new AAB** (Capacitor local `dist`) · **not declared fixed until real-device validation** |
+| Refund order | `GPA.3393-4815-4520-53687` · PeriShilat · `stars_50` · Sandbox · purchase **active** · credited **50** · clawed **0** |
+| Play authority | `orders.get` **REFUNDED** + full refund 19.9 ILS · `products.get` purchaseState **canceled** · identity match |
+| RTDN | Only `one_time_purchased` (unmatched race) — **no** cancel/void RTDN for this refund |
+| Prior refund | `GPA.3369-…` already clawed 50 via `operator_products_get_canceled` (not financial-apply gate) |
+| Reconcile finding | `recover_full` / `full_refund_and_entitlement_canceled` · **would_recover_stars=50** · `applied=false` |
+| Expected vs actual | Expected claw **50** → wallet **999347** · Actual claw **0** · displayed **999397** (ledger=`users.ai_stars` consistent) |
+| Why not clawed | `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (fail-closed) — detection works; mutations blocked pending PM authorization |
+| Gates (unchanged) | purchasing **false** · credit **false** · reconcile apply **false** · native Android push **true** |
+| Exact next action | Ship diagnostics AAB → device retry Settings toggle → read stage message / logcat · PM authorize apply only if claw of **50** for GPA.3393 is approved |
 
 ## LIVE — PR #532 Google Play reconcile + auto FCM (2026-11-27 Asia/Jerusalem)
 

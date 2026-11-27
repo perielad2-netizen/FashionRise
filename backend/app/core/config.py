@@ -500,6 +500,11 @@ class Settings(BaseSettings):
     # may run when enabled; Stars mutations stay OFF until apply is explicitly true.
     iap_google_financial_reconcile_enabled: bool = True
     iap_google_financial_reconcile_apply: bool = False
+    # Process-local only (operator one-shot env). When set to an exact Play
+    # order id AND reconcile is called with that same order_id=, allow apply for
+    # that single transaction even while the persistent apply gate stays false.
+    # Never write this into the host .env as a standing enablement.
+    iap_google_financial_reconcile_apply_order_id: str = ""
     iap_google_financial_reconcile_limit: int = 50
     iap_google_financial_reconcile_interval_seconds: float = 3600.0
     # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also

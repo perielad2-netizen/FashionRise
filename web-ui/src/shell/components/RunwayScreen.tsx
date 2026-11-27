@@ -66,6 +66,7 @@ import {
 } from '@/lib/androidKeyboardInput'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { formatNativePushRegistrationFailureMessage } from '@/services/native/nativePush'
 import { isNativeShell } from '@/services/native/platform'
 import {
   disableRunwayPush,
@@ -327,7 +328,9 @@ export function RunwayScreen({
         setPushNeedsGesture(false)
       } else if (result === 'registration_failed') {
         setPushNotice(
-          'Could not register this device for push. Check Google Play Services, then retry from Settings.',
+          isNativeShell()
+            ? formatNativePushRegistrationFailureMessage()
+            : 'Could not register for browser push. Check notification permission and try again.',
         )
         setPushNeedsGesture(false)
       } else if (result === 'unsupported') {
@@ -400,7 +403,9 @@ export function RunwayScreen({
       } else if (result === 'registration_failed') {
         setPushOn(false)
         setPushNotice(
-          'Could not register this device for push. Check Google Play Services, then retry from Settings.',
+          isNativeShell()
+            ? formatNativePushRegistrationFailureMessage()
+            : 'Could not register for browser push. Check notification permission and try again.',
         )
       } else if (result === 'disabled') {
         setPushOn(false)

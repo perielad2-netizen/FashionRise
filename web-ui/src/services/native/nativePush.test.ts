@@ -36,6 +36,9 @@ vi.mock('@capacitor/push-notifications', () => ({
 import {
   _resetNativePushListenersForTests,
   _setNativePushRegTimeoutForTests,
+  enableNativePush,
+  formatNativePushRegistrationFailureMessage,
+  getLastNativePushDiagnostic,
   nativePushIsEnabled,
   setNativePushDesired,
   syncNativePushAfterAuth,
@@ -56,6 +59,7 @@ describe('nativePush', () => {
     const result = await syncNativePushAfterAuth()
     expect(result).toBe('disabled')
     expect(apiRequest).toHaveBeenCalledWith('/push/native/capability', { auth: false })
+    expect(getLastNativePushDiagnostic()?.stage).toBe('capability')
   })
 
   it('auto-registers when OS permission is already granted (no second activation)', async () => {
@@ -86,16 +90,81 @@ describe('nativePush', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(apiRequest).toHaveBeenCalledWith('/push/native/devices')
+    expect(getLastNativePushDiagnostic()?.stage).toBe('ok')
+    expect(getLastNativePushDiagnostic()?.tokenFingerprint).toMatch(/^fcm-…/)
   })
 
-  it('returns registration_failed when no FCM token arrives', async () => {
+  it('returns registration_failed when no FCM token arrives and records token_timeout', async () => {
     _setNativePushRegTimeoutForTests(50)
-    apiRequest.mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+    apiRequest.mockResolvedValue({ android_enabled: true, ios_enabled: false })
     const { PushNotifications } = await import('@capacitor/push-notifications')
-    vi.mocked(PushNotifications.register).mockResolvedValueOnce(undefined)
+    vi.mocked(PushNotifications.register).mockResolvedValue(undefined)
     // Token stays empty; registration listener never fires in mock.
     const result = await syncNativePushAfterAuth()
     expect(result).toBe('registration_failed')
+    expect(getLastNativePushDiagnostic()?.stage).toBe('token_timeout')
+    expect(formatNativePushRegistrationFailureMessage()).toMatch(/FCM token timed out/i)
+    // Never reached backend register.
+    expect(apiRequest.mock.calls.some((c) => c[0] === '/push/native/devices')).toBe(false)
+  })
+
+  it('surfaces registrationError stage with actionable copy (no full token leakage)', async () => {
+    _setNativePushRegTimeoutForTests(50)
+    apiRequest.mockResolvedValue({ android_enabled: true, ios_enabled: false })
+    const { PushNotifications } = await import('@capacitor/push-notifications')
+    const listeners: Record<string, (payload: unknown) => void> = {}
+    vi.mocked(PushNotifications.addListener).mockImplementation(async (event, cb) => {
+      listeners[event] = cb as (payload: unknown) => void
+      return { remove: vi.fn() }
+    })
+    vi.mocked(PushNotifications.register).mockImplementation(async () => {
+      listeners.registrationError?.({
+        error: 'SERVICE_NOT_AVAILABLE longtoken_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_secret',
+      })
+    })
+    const result = await syncNativePushAfterAuth()
+    expect(result).toBe('registration_failed')
+    expect(getLastNativePushDiagnostic()?.stage).toBe('token_error')
+    const msg = formatNativePushRegistrationFailureMessage()
+    expect(msg).toMatch(/FCM token/i)
+    expect(msg).not.toMatch(/ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/)
+    expect(getLastNativePushDiagnostic()?.message).toContain('[redacted]')
+  })
+
+  it('manual enableNativePush shares syncNativePushAfterAuth implementation', async () => {
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockResolvedValueOnce({
+        id: '1',
+        platform: 'android',
+        device_token: token,
+        created_at: '2026-11-13T00:00:00Z',
+        updated_at: '2026-11-13T00:00:00Z',
+      })
+      .mockResolvedValueOnce([
+        {
+          id: '1',
+          platform: 'android',
+          device_token: token,
+          created_at: '2026-11-13T00:00:00Z',
+          updated_at: '2026-11-13T00:00:00Z',
+        },
+      ])
+    await expect(enableNativePush()).resolves.toBe('granted')
+  })
+
+  it('records backend_post when device POST fails after token', async () => {
+    const token = 'fcm-token-abcdefghijklmnopqrstuv'
+    localStorage.setItem('fr.nativePush.token', token)
+    apiRequest
+      .mockResolvedValueOnce({ android_enabled: true, ios_enabled: false })
+      .mockRejectedValueOnce(new Error('500 boom'))
+    const result = await syncNativePushAfterAuth()
+    expect(result).toBe('registration_failed')
+    expect(getLastNativePushDiagnostic()?.stage).toBe('backend_post')
+    expect(formatNativePushRegistrationFailureMessage()).toMatch(/server rejected/i)
   })
 
   it('respects desired=false without prompting', async () => {

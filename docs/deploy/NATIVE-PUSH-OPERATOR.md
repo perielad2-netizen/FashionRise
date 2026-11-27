@@ -46,9 +46,11 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 
 1. Codemagic group `fashionrise_native`: secret env `ANDROID_GOOGLE_SERVICES_JSON` is **configured** (client config — **no** private key; existing group vars preserved). Workflow injects `web-ui/android/app/google-services.json`, validates project/package, then deletes after `bundleRelease`. Do not start AAB until Play Billing is ready.
 2. Never commit `google-services.json` or the FCM service-account private key; never ship the SA inside the AAB.
-3. Play App Signing SHA-256 → `assetlinks.json` (see templates under `web-ui/public/.well-known/`).
+3. Play App Signing SHA-256 → `assetlinks.json` (see templates under `web-ui/public/.well-known/`). Also add the **Play App Signing SHA-1** (and upload-key SHA-1 if used for sideload) under Firebase Console → Project settings → Your apps → `app.fashionrise.studio` → Add fingerprint — required for some FCM / Installations edge cases.
 4. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
 5. Smoke: `GET /api/v1/push/native/capability` → `android_enabled: true`; Internal AAB → Runway bell ON → like → tap `/studio…`.
+6. Registration diagnostics (client): failing stage is recorded via `getLastNativePushDiagnostic()` / Settings notice (`token_timeout`, `token_error`, `backend_post`, …). Console logs use token **fingerprints only** — never full FCM tokens. Auto + Settings share `syncNativePushAfterAuth`.
+7. Prod QA (2026-11-27 Asia/Jerusalem): VC **219** AAB contains Firebase + plugin; failure observed **before** `POST /push/native/devices` (FCM token stage). Do not declare fixed until a real device shows `granted` + a `native_push_devices` row.
 
 ## iOS (APNs) — entitlements & provisioning
 

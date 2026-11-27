@@ -628,11 +628,31 @@ def reconcile_android_purchases(
     sandbox_scanned = 0
     production_scanned = 0
 
-    apply_enabled = bool(
-        getattr(get_settings(), "iap_google_financial_reconcile_apply", False)
+    settings = get_settings()
+    apply_enabled = bool(getattr(settings, "iap_google_financial_reconcile_apply", False))
+    scoped_order = (
+        getattr(settings, "iap_google_financial_reconcile_apply_order_id", "") or ""
+    ).strip()
+    requested_order = (order_id or "").strip()
+    # Process-local scoped apply: exact order_id env + matching order_id= arg.
+    # Does NOT enable the persistent reconcile apply gate.
+    scoped_apply = bool(
+        scoped_order
+        and requested_order
+        and scoped_order == requested_order
+        and purchase_id is None
     )
-    if not dry_run and not apply_enabled:
-        dry_run = True  # fail closed — never mutate unless apply flag is on
+    if not dry_run and not apply_enabled and not scoped_apply:
+        dry_run = True  # fail closed — never mutate unless apply or scoped order
+    if not dry_run and scoped_apply and not apply_enabled:
+        # Hard scope: only the authorized order row may be present.
+        if len(rows) != 1 or (rows[0].transaction_id or "").strip() != requested_order:
+            dry_run = True
+            _log.error(
+                "scoped_apply_refused order=%s rows=%s",
+                requested_order,
+                [getattr(r, "transaction_id", None) for r in rows],
+            )
 
     for purchase in rows:
         env = (purchase.environment or "").strip().lower()
@@ -664,6 +684,7 @@ def reconcile_android_purchases(
         "ok": True,
         "dry_run": dry_run,
         "apply_enabled": apply_enabled,
+        "scoped_apply_order_id": requested_order if (scoped_apply and not dry_run) else None,
         "scanned": len(decisions),
         "provider_requests": provider_requests[0],
         "counts": counts,

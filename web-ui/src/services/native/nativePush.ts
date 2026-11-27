@@ -9,6 +9,9 @@
  * automatically obtain + register the FCM/APNs token after login / resume.
  * Settings is preference/visibility — not a mandatory second activation.
  * "Enabled" requires successful backend registration for this account+device.
+ *
+ * Auto (bootstrap / Settings mount) and manual (Settings toggle) share
+ * `syncNativePushAfterAuth` / `enableNativePush` — do not fork paths.
  */
 import { PushNotifications } from '@capacitor/push-notifications'
 import { apiRequest, getApiBaseUrl } from '@/services/api/client'
@@ -39,6 +42,25 @@ export type NativePushSyncResult =
   | 'unauthenticated'
   | 'registration_failed'
 
+/** Discrete stages for QA — never include full FCM/APNs tokens. */
+export type NativePushFailStage =
+  | 'capability'
+  | 'permission'
+  | 'register_call'
+  | 'token_error'
+  | 'token_timeout'
+  | 'backend_post'
+  | 'backend_confirm'
+
+export type NativePushDiagnostic = {
+  stage: NativePushFailStage | 'ok'
+  code: string
+  message: string
+  at: number
+  /** First/last 4 chars only when a token was involved — never the full value. */
+  tokenFingerprint?: string
+}
+
 const TOKEN_KEY = 'fr.nativePush.token'
 const PLATFORM_KEY = 'fr.nativePush.platform'
 const DESIRED_KEY = 'fr.nativePush.desired'
@@ -46,6 +68,7 @@ let regTimeoutMs = 20_000
 
 let listenersInstalled = false
 let lastRegistrationError: string | null = null
+let lastDiagnostic: NativePushDiagnostic | null = null
 let tokenWaiters: Array<(token: string | null) => void> = []
 let syncInFlight: Promise<NativePushSyncResult> | null = null
 
@@ -53,6 +76,49 @@ function platformForApi(): 'android' | 'ios' | null {
   const p = nativePlatform()
   if (p === 'android' || p === 'ios') return p
   return null
+}
+
+function tokenFingerprint(token: string | null | undefined): string | undefined {
+  const t = (token || '').trim()
+  if (t.length < 12) return undefined
+  return `${t.slice(0, 4)}…${t.slice(-4)}(len=${t.length})`
+}
+
+function sanitizePushError(raw: unknown): string {
+  let text = String(raw ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return 'unknown_error'
+  // Strip anything that looks like a long token / credential blob.
+  text = text.replace(/[A-Za-z0-9_-]{40,}/g, '[redacted]')
+  if (text.length > 180) text = `${text.slice(0, 177)}…`
+  return text
+}
+
+function setDiagnostic(
+  stage: NativePushFailStage | 'ok',
+  code: string,
+  message: string,
+  token?: string | null,
+): void {
+  lastDiagnostic = {
+    stage,
+    code,
+    message: sanitizePushError(message),
+    at: Date.now(),
+    tokenFingerprint: tokenFingerprint(token),
+  }
+  try {
+    // Safe diagnostic only — never log full tokens or auth credentials.
+    console.info('[nativePush]', {
+      stage: lastDiagnostic.stage,
+      code: lastDiagnostic.code,
+      message: lastDiagnostic.message,
+      tokenFingerprint: lastDiagnostic.tokenFingerprint ?? null,
+    })
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isNativePushDesired(): boolean {
@@ -176,6 +242,8 @@ async function installListeners(): Promise<void> {
   await PushNotifications.addListener('registration', (token) => {
     const value = (token?.value || '').trim()
     if (!value) {
+      lastRegistrationError = 'empty_token'
+      setDiagnostic('token_error', 'empty_token', 'FCM/APNs returned an empty token')
       resolveTokenWaiters(null)
       return
     }
@@ -194,7 +262,9 @@ async function installListeners(): Promise<void> {
   })
 
   await PushNotifications.addListener('registrationError', (err) => {
-    lastRegistrationError = String((err as { error?: string })?.error || 'registration_error')
+    const raw = sanitizePushError((err as { error?: string })?.error || 'registration_error')
+    lastRegistrationError = raw
+    setDiagnostic('token_error', 'registration_error', raw)
     resolveTokenWaiters(null)
   })
 
@@ -212,6 +282,47 @@ export function getLastNativePushRegistrationError(): string | null {
   return lastRegistrationError
 }
 
+export function getLastNativePushDiagnostic(): NativePushDiagnostic | null {
+  return lastDiagnostic
+}
+
+/**
+ * User-facing copy for Settings / Runway. Maps the failing stage to an
+ * actionable hint without exposing tokens or credentials.
+ */
+export function formatNativePushRegistrationFailureMessage(): string {
+  const d = lastDiagnostic
+  if (!d || d.stage === 'ok') {
+    return 'Could not register this device for push. Check Google Play Services and try again.'
+  }
+  switch (d.stage) {
+    case 'capability':
+      return 'Native push is not enabled on the server for this platform yet.'
+    case 'permission':
+      return 'Notifications are blocked for FashionRise. Enable them in system settings, then try again.'
+    case 'register_call':
+      return 'Push plugin failed to start. Update the app from Play Store / Internal testing and retry.'
+    case 'token_error': {
+      const hint = d.message.toLowerCase()
+      if (hint.includes('play') || hint.includes('service_not_available') || hint.includes('gms')) {
+        return `Could not get an FCM token (${d.message}). Update Google Play Services, confirm you’re online, then retry.`
+      }
+      if (hint.includes('firebase') || hint.includes('not initialized')) {
+        return `Firebase did not initialize on this build (${d.message}). Reinstall the latest Internal testing build.`
+      }
+      return `Could not get an FCM token (${d.message}). Check Google Play Services and network, then retry.`
+    }
+    case 'token_timeout':
+      return 'FCM token timed out. Update Google Play Services, stay online for ~30s, then retry from Settings.'
+    case 'backend_post':
+      return 'Got a device token but the server rejected registration. Sign in again and retry.'
+    case 'backend_confirm':
+      return 'Server did not confirm this device yet. Wait a moment and retry from Settings.'
+    default:
+      return 'Could not register this device for push. Check Google Play Services and try again.'
+  }
+}
+
 async function deviceRegisteredOnBackend(
   platform: 'android' | 'ios',
   token: string,
@@ -224,6 +335,34 @@ async function deviceRegisteredOnBackend(
   } catch {
     return false
   }
+}
+
+async function requestNativeToken(forceRefresh: boolean): Promise<string | null> {
+  if (!forceRefresh) {
+    const existing = readStoredToken()
+    if (existing) return existing
+  }
+  lastRegistrationError = null
+  const pending = waitForDeviceToken()
+  try {
+    await PushNotifications.register()
+  } catch (err) {
+    setDiagnostic('register_call', 'register_threw', sanitizePushError(err))
+    resolveTokenWaiters(null)
+    return null
+  }
+  const token = (await pending) || readStoredToken()
+  if (token) return token
+  if (lastRegistrationError) {
+    setDiagnostic('token_error', 'registration_error', lastRegistrationError)
+  } else {
+    setDiagnostic(
+      'token_timeout',
+      'token_timeout',
+      'No FCM/APNs token within timeout — Play Services or Firebase install may be unavailable',
+    )
+  }
+  return null
 }
 
 /**
@@ -251,11 +390,15 @@ async function syncNativePushAfterAuthInner(): Promise<NativePushSyncResult> {
   let capability: NativePushCapability
   try {
     capability = await getNativePushCapability()
-  } catch {
+  } catch (err) {
+    setDiagnostic('capability', 'capability_fetch_failed', sanitizePushError(err))
     return 'disabled'
   }
   const enabled = platform === 'android' ? capability.android_enabled : capability.ios_enabled
-  if (!enabled) return 'disabled'
+  if (!enabled) {
+    setDiagnostic('capability', 'platform_disabled', `${platform}_disabled`)
+    return 'disabled'
+  }
 
   await installListeners()
   await ensureAndroidChannels()
@@ -265,28 +408,36 @@ async function syncNativePushAfterAuthInner(): Promise<NativePushSyncResult> {
   if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
     perm = await PushNotifications.requestPermissions()
   }
-  if (perm.receive !== 'granted') return 'denied'
-
-  const pending = waitForDeviceToken()
-  try {
-    await PushNotifications.register()
-  } catch {
-    return 'registration_failed'
+  if (perm.receive !== 'granted') {
+    setDiagnostic('permission', 'os_denied', `receive=${perm.receive}`)
+    return 'denied'
   }
 
-  const token = (await pending) || readStoredToken()
+  // Prefer a fresh FCM token when none is cached; one retry helps cold Play Services.
+  let token = await requestNativeToken(false)
+  if (!token) {
+    token = await requestNativeToken(true)
+  }
   if (!token) return 'registration_failed'
 
   try {
     await registerNativePushDevice({ platform, device_token: token })
-  } catch {
+  } catch (err) {
+    setDiagnostic('backend_post', 'post_failed', sanitizePushError(err), token)
     return 'registration_failed'
   }
 
   // Confirm backend has this account+device — never report enabled from local cache alone.
   if (!(await deviceRegisteredOnBackend(platform, token))) {
+    setDiagnostic(
+      'backend_confirm',
+      'confirm_missing',
+      'Device list did not include this token after register',
+      token,
+    )
     return 'registration_failed'
   }
+  setDiagnostic('ok', 'registered', 'backend confirmed device', token)
   return 'granted'
 }
 
@@ -380,6 +531,7 @@ export async function nativePushIsEnabled(): Promise<boolean> {
 export function _resetNativePushListenersForTests(): void {
   listenersInstalled = false
   lastRegistrationError = null
+  lastDiagnostic = null
   tokenWaiters = []
   regTimeoutMs = 20_000
   syncInFlight = null

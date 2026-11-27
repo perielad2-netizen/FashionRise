@@ -6,7 +6,10 @@ import {
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { isNativeShell } from '@/services/native/platform'
-import { nativePushPermissionState } from '@/services/native/nativePush'
+import {
+  formatNativePushRegistrationFailureMessage,
+  nativePushPermissionState,
+} from '@/services/native/nativePush'
 import { openAppNotificationSettings } from '@/services/native/openAppNotificationSettings'
 import styles from './GlobalHeader.module.css'
 
@@ -106,7 +109,9 @@ export function NotificationsSettingsToggle() {
       if (result === 'registration_failed') {
         setOn(false)
         setNotice(
-          'Could not register this device for push. Check Google Play Services and try again.',
+          native
+            ? formatNativePushRegistrationFailureMessage()
+            : 'Could not register for browser push. Check notification permission and try again.',
         )
         return
       }
