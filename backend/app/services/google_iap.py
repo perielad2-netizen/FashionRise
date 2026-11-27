@@ -241,3 +241,109 @@ def is_pending(verified: VerifiedGooglePurchase) -> bool:
 
 def is_canceled(verified: VerifiedGooglePurchase) -> bool:
     return verified.purchase_state == _STATE_CANCELED
+
+
+def purchase_token_lock_key(purchase_token: str) -> int:
+    """Stable pg_advisory_xact_lock key shared by confirm + RTDN/voided clawbacks."""
+    import hashlib
+
+    return int.from_bytes(
+        hashlib.sha256(f"fr.google.iap:{purchase_token}".encode()).digest()[:8],
+        "big",
+        signed=True,
+    )
+
+
+@dataclass(frozen=True)
+class VoidedGooglePurchase:
+    purchase_token: str
+    order_id: str | None
+    voided_time_millis: int | None
+    raw: dict[str, Any]
+
+
+def list_voided_purchases(
+    *,
+    start_time_ms: int,
+    end_time_ms: int,
+    max_pages: int = 10,
+) -> list[VoidedGooglePurchase]:
+    """Bounded ``purchases.voidedpurchases.list`` (in-app products only, type=0).
+
+    Google retains at most ~30 days of voided records; callers must keep the
+    window inside that limit.
+    """
+    if not google_iap_configured():
+        raise ServiceUnavailableError("Google Play service account not configured")
+    if end_time_ms < start_time_ms:
+        raise ValidationAppError("voided purchases endTime must be >= startTime")
+    pkg = google_package_name()
+    bearer = _access_token()
+    out: list[VoidedGooglePurchase] = []
+    token_page: str | None = None
+    pages = 0
+    with httpx.Client(timeout=30.0) as client:
+        while pages < max_pages:
+            pages += 1
+            params: dict[str, Any] = {
+                "startTime": str(start_time_ms),
+                "endTime": str(end_time_ms),
+                "type": 0,
+                "maxResults": 1000,
+            }
+            if token_page:
+                params["token"] = token_page
+            url = (
+                "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+                f"{pkg}/purchases/voidedpurchases"
+            )
+            try:
+                resp = client.get(
+                    url, headers={"Authorization": f"Bearer {bearer}"}, params=params
+                )
+            except httpx.HTTPError as exc:
+                _log.warning("google_voided_list_transport err=%s", type(exc).__name__)
+                raise ServiceUnavailableError(
+                    "Google Play voided purchases temporarily unavailable"
+                ) from exc
+            if resp.status_code in (401, 403):
+                raise ServiceUnavailableError(
+                    "Google Play Developer API authorization failed (voidedpurchases)"
+                )
+            if resp.status_code >= 400:
+                raise ServiceUnavailableError(
+                    f"Google Play voidedpurchases HTTP {resp.status_code}"
+                )
+            try:
+                payload = resp.json()
+            except Exception as exc:  # noqa: BLE001
+                raise ServiceUnavailableError(
+                    "Google Play voidedpurchases returned invalid JSON"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise ServiceUnavailableError("Google Play voidedpurchases malformed")
+            for item in payload.get("voidedPurchases") or []:
+                if not isinstance(item, dict):
+                    continue
+                pt = str(item.get("purchaseToken") or "").strip()
+                if not pt:
+                    continue
+                oid = str(item.get("orderId") or "").strip() or None
+                vt_raw = item.get("voidedTimeMillis")
+                try:
+                    vt = int(vt_raw) if vt_raw is not None else None
+                except (TypeError, ValueError):
+                    vt = None
+                out.append(
+                    VoidedGooglePurchase(
+                        purchase_token=pt,
+                        order_id=oid,
+                        voided_time_millis=vt,
+                        raw=item,
+                    )
+                )
+            next_token = (payload.get("tokenPagination") or {}).get("nextPageToken")
+            if not next_token:
+                break
+            token_page = str(next_token)
+    return out

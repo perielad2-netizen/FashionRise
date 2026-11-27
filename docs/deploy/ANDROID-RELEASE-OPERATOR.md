@@ -51,14 +51,16 @@ Products (consumable, same as Apple): `stars_50` · `stars_150` · `stars_500` �
 | `IAP_GOOGLE_CREDIT_ENABLED` | `false` (public OFF) |
 | `IAP_GOOGLE_LICENSE_TESTER_EMAILS` | set FashionRise account emails when ready for license-tester smoke |
 | `IAP_GOOGLE_RTDN_VERIFY_OIDC` | `true` |
-| `IAP_GOOGLE_RTDN_AUDIENCE` | **pending** — set after Pub/Sub push URL exists |
+| `IAP_GOOGLE_RTDN_AUDIENCE` | **pending** — full push URL `https://fashionrise.app/api/v1/shop/iap/google/notifications` |
+| `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` | **pending** — exact Pub/Sub push service-account email (OIDC `email` claim) |
 
 Connectivity check (no purchase): SA mints Android Publisher token · `oneTimeProducts` lists the three SKUs · bogus purchase token returns 400 (auth OK).
 
-1. Keep public gates **false** until license-tester validation.
-2. RTDN next: Play Console → Monetization setup → Real-time developer notifications → Pub/Sub → push to  
+1. Keep public gates **false** until license-tester validation (Sandbox purchases only for allowlisted emails).
+2. RTDN: Play Console → Monetization setup → Real-time developer notifications → Pub/Sub → push to  
    `https://fashionrise.app/api/v1/shop/iap/google/notifications`  
-   then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL.
+   then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL **and** `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` to the push SA email.
+3. Optional backfill: call `reconcile_voided_purchases` (Voided Purchases API, ≤30 days).
 3. Nginx must allowlist `POST` on that path (see shop allowlist docs).
 4. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
 
@@ -82,7 +84,10 @@ Repo keeps `web-ui/public/.well-known/*.template` — live host file is authorit
 - Workflow: `fashionrise-android-play-internal`
 - `versionName=1.0` · `versionCode=PROJECT_BUILD_NUMBER+ANDROID_VERSION_CODE_OFFSET` (offset **30** for this release)
 - Signing: existing `fashionrise_android_upload`
+- Release R8: `minifyEnabled true` + `shrinkResources true` (Play DEX obfuscation)
+- Android 15: `EdgeToEdge.enable` in `MainActivity` + transparent system bars / cutout
 - Upload AAB manually to **Internal testing** — do not publish production track; do not recreate the tester track.
+- Do **not** start AAB until RTDN env (`AUDIENCE` + `EXPECTED_EMAIL`) is set.
 
 ## E. Enablement order
 

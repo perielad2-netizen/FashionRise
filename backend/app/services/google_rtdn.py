@@ -2,6 +2,15 @@
 
 Authenticated by Google OIDC bearer when ``IAP_GOOGLE_RTDN_VERIFY_OIDC=true``
 (default). Credits never originate here — only clawbacks / reconciliation.
+
+OIDC requires:
+  - Bearer token verified against ``IAP_GOOGLE_RTDN_AUDIENCE``
+  - ``email`` claim exact-match to ``IAP_GOOGLE_RTDN_EXPECTED_EMAIL``
+  - ``email_verified`` claim true
+
+Clawbacks take the same purchase-token advisory lock as confirm, re-check
+authoritative Play purchase state, and never deduct more than
+``stars_credited - stars_clawed_back`` (Stars debt policy unchanged).
 """
 
 from __future__ import annotations
@@ -9,10 +18,11 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +43,8 @@ _log = logging.getLogger(__name__)
 # oneTimeProductNotification.notificationType
 _OTN_PURCHASED = 1
 _OTN_CANCELED = 2
+
+_MAX_VOIDED_LOOKBACK_DAYS = 30
 
 
 def process_google_rtdn(db: Session, *, body: dict[str, Any], authorization: str | None) -> dict[str, Any]:
@@ -106,16 +118,87 @@ def process_google_rtdn(db: Session, *, body: dict[str, Any], authorization: str
 
 
 def reconcile_voided_purchases(db: Session, *, lookback_days: int = 30) -> dict[str, Any]:
-    """Optional operator poll of voidedpurchases.list (no auto-schedule required)."""
+    """Operator poll of ``purchases.voidedpurchases.list`` (in-app only, ≤30d).
+
+    Each voided token is recorded under a durable synthetic ``message_id`` so
+    RTDN and reconcile cannot claw the same purchase twice.
+    """
     if not google_iap.google_iap_configured():
         raise ServiceUnavailableError("Google Play service account not configured")
-    # Deferred: voidedpurchases.list needs startTime/endTime millis.
-    # RTDN is the primary path; this stub documents the operator hook.
-    _ = lookback_days
-    _ = db
+
+    days = max(1, min(int(lookback_days or 30), _MAX_VOIDED_LOOKBACK_DAYS))
+    end_ms = int(time.time() * 1000)
+    start_ms = end_ms - (days * 24 * 60 * 60 * 1000)
+
+    voided = google_iap.list_voided_purchases(start_time_ms=start_ms, end_time_ms=end_ms)
+    scanned = 0
+    applied = 0
+    duplicates = 0
+    unmatched = 0
+    skipped = 0
+
+    for item in voided:
+        scanned += 1
+        message_id = f"voidedpurchases:{item.purchase_token}:{item.order_id or 'no-order'}"
+        existing = db.scalar(
+            select(IapGoogleNotification).where(IapGoogleNotification.message_id == message_id)
+        )
+        if existing is not None:
+            duplicates += 1
+            continue
+
+        row = IapGoogleNotification(
+            id=uuid.uuid4(),
+            message_id=message_id,
+            notification_type="voided_reconcile",
+            package_name=google_iap.google_package_name(),
+            purchase_token=item.purchase_token,
+            order_id=item.order_id,
+            processing_state="received",
+            audit_meta={
+                "source": "voidedpurchases.list",
+                "voided_time_millis": item.voided_time_millis,
+            },
+        )
+        db.add(row)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            duplicates += 1
+            continue
+
+        purchase = _find_purchase(
+            db, purchase_token=item.purchase_token, order_id=item.order_id
+        )
+        if purchase is None:
+            row.processing_state = "unmatched"
+            unmatched += 1
+            db.commit()
+            continue
+
+        _clawback_purchase(
+            db,
+            row,
+            purchase,
+            kind="VOIDED",
+            product_id_hint=None,
+            authoritative="voidedpurchases",
+        )
+        if row.processing_state == "applied":
+            applied += 1
+        else:
+            skipped += 1
+        db.commit()
+
     return {
         "ok": True,
-        "note": "Use RTDN for refunds; call Play voidedpurchases.list manually if backfill needed.",
+        "lookback_days": days,
+        "scanned": scanned,
+        "applied": applied,
+        "duplicates": duplicates,
+        "unmatched": unmatched,
+        "skipped": skipped,
     }
 
 
@@ -125,28 +208,42 @@ def _maybe_verify_oidc(authorization: str | None) -> None:
         return
     if not (authorization or "").strip().lower().startswith("bearer "):
         raise ForbiddenError("Google RTDN requires OIDC Bearer token")
-    # Full Google JWKS verification is enabled when audience is configured.
+
     audience = (getattr(settings, "iap_google_rtdn_audience", "") or "").strip()
+    expected_email = (
+        getattr(settings, "iap_google_rtdn_expected_email", "") or ""
+    ).strip().lower()
+
+    # Fail closed whenever verify is on: audience + dedicated push identity required.
     if not audience:
-        # Fail closed for production shape: require audience when verify is on.
-        if settings.environment == "production":
-            raise ServiceUnavailableError(
-                "IAP_GOOGLE_RTDN_AUDIENCE must be set when RTDN OIDC verify is enabled"
-            )
-        return
+        raise ServiceUnavailableError(
+            "IAP_GOOGLE_RTDN_AUDIENCE must be set when RTDN OIDC verify is enabled"
+        )
+    if not expected_email:
+        raise ServiceUnavailableError(
+            "IAP_GOOGLE_RTDN_EXPECTED_EMAIL must be set when RTDN OIDC verify is enabled"
+        )
+    if not expected_email.endswith(".gserviceaccount.com"):
+        raise ServiceUnavailableError(
+            "IAP_GOOGLE_RTDN_EXPECTED_EMAIL must be a Google service account email"
+        )
+
     token = authorization.split(" ", 1)[1].strip()
     try:
-        from google.oauth2 import id_token
         from google.auth.transport import requests as grequests
+        from google.oauth2 import id_token
 
         claims = id_token.verify_oauth2_token(token, grequests.Request(), audience)
-        email = str(claims.get("email") or "")
-        if not email.endswith("gserviceaccount.com"):
-            raise ForbiddenError("RTDN OIDC email is not a Google service account")
     except ForbiddenError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise ForbiddenError("Invalid Google RTDN OIDC token") from exc
+
+    email = str(claims.get("email") or "").strip().lower()
+    if email != expected_email:
+        raise ForbiddenError("RTDN OIDC email does not match configured push identity")
+    if claims.get("email_verified") is not True:
+        raise ForbiddenError("RTDN OIDC email_verified claim required")
 
 
 def _handle_voided(db: Session, row: IapGoogleNotification, voided: Any) -> None:
@@ -162,7 +259,14 @@ def _handle_voided(db: Session, row: IapGoogleNotification, voided: Any) -> None
     if purchase is None:
         row.processing_state = "unmatched"
         return
-    _clawback_purchase(db, row, purchase, kind="VOIDED")
+    _clawback_purchase(
+        db,
+        row,
+        purchase,
+        kind="VOIDED",
+        product_id_hint=purchase.product_id,
+        authoritative="products.get",
+    )
 
 
 def _handle_one_time(db: Session, row: IapGoogleNotification, otn: Any) -> None:
@@ -191,7 +295,14 @@ def _handle_one_time(db: Session, row: IapGoogleNotification, otn: Any) -> None:
         if purchase is None:
             row.processing_state = "unmatched"
             return
-        _clawback_purchase(db, row, purchase, kind="CANCELED")
+        _clawback_purchase(
+            db,
+            row,
+            purchase,
+            kind="CANCELED",
+            product_id_hint=sku or purchase.product_id,
+            authoritative="products.get",
+        )
         return
     row.notification_type = f"one_time_{ntype}"
     row.processing_state = "ignored"
@@ -219,41 +330,135 @@ def _find_purchase(
     return None
 
 
+def _assert_play_voided_or_canceled(
+    *,
+    purchase_token: str,
+    product_id: str | None,
+    authoritative: str,
+) -> dict[str, Any]:
+    """Confirm Play still treats the purchase as canceled/voided before clawback.
+
+    ``voidedpurchases`` source is itself authoritative (list membership).
+    ``products.get`` must show canceled (or 404 after revoke).
+    """
+    if authoritative == "voidedpurchases":
+        return {"source": "voidedpurchases", "ok": True}
+
+    pid = (product_id or "").strip()
+    if not pid:
+        # Without SKU we cannot call products.get — fail closed for RTDN clawback.
+        raise ServiceUnavailableError(
+            "Google RTDN clawback requires product_id for purchases.products.get"
+        )
+    try:
+        verified = google_iap.verify_product_purchase(
+            product_id=pid, purchase_token=purchase_token
+        )
+    except ForbiddenError as exc:
+        # purchases.products.get 404 → purchase gone from Play (treat as voided).
+        if "not found" in str(exc).lower():
+            return {"source": "products.get", "ok": True, "not_found": True}
+        raise
+
+    if google_iap.is_canceled(verified):
+        return {
+            "source": "products.get",
+            "ok": True,
+            "purchase_state": verified.purchase_state,
+            "environment": verified.environment,
+        }
+    if google_iap.is_pending(verified) or google_iap.is_purchased(verified):
+        return {
+            "source": "products.get",
+            "ok": False,
+            "purchase_state": verified.purchase_state,
+            "environment": verified.environment,
+        }
+    return {
+        "source": "products.get",
+        "ok": True,
+        "purchase_state": verified.purchase_state,
+        "environment": verified.environment,
+    }
+
+
 def _clawback_purchase(
     db: Session,
     row: IapGoogleNotification,
     purchase: IapPurchase,
     *,
     kind: str,
+    product_id_hint: str | None,
+    authoritative: str,
 ) -> None:
-    user = db.scalar(select(User).where(User.id == purchase.user_id).with_for_update())
+    token = (purchase.purchase_token or row.purchase_token or "").strip()
+    if not token:
+        row.processing_state = "failed"
+        row.audit_meta = {**(row.audit_meta or {}), "policy": "missing_purchase_token"}
+        return
+
+    # Serialize vs confirm + concurrent RTDN/reconcile on the same token.
+    lock_key = google_iap.purchase_token_lock_key(token)
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+    locked_purchase = db.scalar(
+        select(IapPurchase).where(IapPurchase.id == purchase.id).with_for_update()
+    )
+    if locked_purchase is None:
+        row.processing_state = "failed"
+        return
+
+    play_check = _assert_play_voided_or_canceled(
+        purchase_token=token,
+        product_id=product_id_hint or locked_purchase.product_id,
+        authoritative=authoritative,
+    )
+    if not play_check.get("ok"):
+        row.processing_state = "ignored"
+        row.audit_meta = {
+            **(row.audit_meta or {}),
+            "policy": "play_not_voided",
+            "play": play_check,
+        }
+        row.iap_purchase_id = locked_purchase.id
+        row.user_id = locked_purchase.user_id
+        return
+
+    user = db.scalar(
+        select(User).where(User.id == locked_purchase.user_id).with_for_update()
+    )
     if user is None:
         row.processing_state = "failed"
         return
-    credited = int(purchase.stars_credited or 0)
-    clawed = int(purchase.stars_clawed_back or 0)
+
+    credited = int(locked_purchase.stars_credited or 0)
+    clawed = int(locked_purchase.stars_clawed_back or 0)
     need = max(0, credited - clawed)
-    row.iap_purchase_id = purchase.id
+    row.iap_purchase_id = locked_purchase.id
     row.user_id = user.id
     if need <= 0:
-        if purchase.status not in (STATUS_REFUNDED, STATUS_REVOKED):
-            purchase.status = STATUS_REFUNDED
+        if locked_purchase.status not in (STATUS_REFUNDED, STATUS_REVOKED):
+            locked_purchase.status = STATUS_REFUNDED
         row.processing_state = "applied"
-        row.audit_meta = {**(row.audit_meta or {}), "policy": "nothing_to_claw"}
+        row.audit_meta = {
+            **(row.audit_meta or {}),
+            "policy": "nothing_to_claw",
+            "play": play_check,
+        }
         return
 
     from_balance, added_debt, balance_after, debt_after = ai_stars.apply_iap_clawback(
         db, user, stars_to_recover=need
     )
-    purchase.stars_clawed_back = clawed + need
-    purchase.status = STATUS_REVOKED if kind == "VOIDED" else STATUS_REFUNDED
+    locked_purchase.stars_clawed_back = clawed + need
+    locked_purchase.status = STATUS_REVOKED if kind == "VOIDED" else STATUS_REFUNDED
     adj = IapStarsAdjustment(
         id=uuid.uuid4(),
         user_id=user.id,
-        iap_purchase_id=purchase.id,
+        iap_purchase_id=locked_purchase.id,
         notification_id=None,
         platform="android",
-        transaction_id=purchase.transaction_id,
+        transaction_id=locked_purchase.transaction_id,
         adjustment_kind=kind,
         stars_delta_balance=-from_balance,
         stars_delta_debt=added_debt,
@@ -267,4 +472,5 @@ def _clawback_purchase(
         **(row.audit_meta or {}),
         "from_balance": from_balance,
         "debt_add": added_debt,
+        "play": play_check,
     }

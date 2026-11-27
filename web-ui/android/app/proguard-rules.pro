@@ -1,21 +1,36 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# FashionRise Android release — Capacitor + native plugins.
+# Keep attributes needed for debugging / reflection-heavy Capacitor bridges.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+-keepattributes SourceFile,LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Capacitor core + plugins (JS bridge uses reflection).
+-keep class com.getcapacitor.** { *; }
+-keep class com.getcapacitor.plugin.** { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod <methods>;
+}
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Cordova compatibility layer used by some Capacitor plugins.
+-keep class org.apache.cordova.** { *; }
+
+# FashionRise app entry.
+-keep class app.fashionrise.studio.** { *; }
+
+# Capgo Native Purchases / Billing Library.
+-keep class ee.forgr.** { *; }
+-keep class com.android.billingclient.** { *; }
+-keep class com.android.vending.billing.** { *; }
+
+# Firebase / FCM (when google-services.json is present).
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# OkHttp / common AndroidX.
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
