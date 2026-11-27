@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:20 Asia/Jerusalem — Android RTDN **LIVE** · Internal AAB **versionCode 145** · public purchase **OFF** · closed testers preserved
+**Last updated:** 2026-11-27 11:24 Asia/Jerusalem — Android RTDN **test notification applied** · Internal AAB **VC 145** · public purchase **OFF**
 
 ## LIVE — Android RTDN + release activate (2026-11-27 Asia/Jerusalem)
 
@@ -18,8 +18,8 @@
 | FCM / Play | FCM validate auth OK · Play `purchases.products.get` auth OK · `/shop/iap/google/status` verification_configured |
 | Clawback | Post-lock `expire_all` + `populate_existing` (fresh Stars/clawed state) |
 | AAB | Codemagic build `6b0948fade2cb89d84d49e45` **finished** · `app-release.aab` **versionCode 145** / `1.0` ( > Alpha **114**) · closed track untouched · Internal only |
-| RTDN rows | `iap_google_notifications` count **0** — Play Console test notification **not yet received** |
-| Exact next action | Operator: Play Console → RTDN **Send test notification** → confirm DB row · install Internal AAB · license-tester sandbox buy+refund · then consider public gates |
+| RTDN rows | Test notification **received** `2026-11-27 11:23 Asia/Jerusalem` · `processing_state=applied` · `notification_type=test` · message_id `23636621182746101` · **0** wallet/purchase mutations |
+| Exact next action | Install Internal AAB (VC 145) · license-tester sandbox buy+refund · keep public gates OFF until validated |
 
 ## LIVE — Android App Links + Play Billing verify (gates OFF)
 
