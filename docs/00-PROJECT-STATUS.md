@@ -3,20 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:20 Asia/Jerusalem — Android billing RTDN readiness (OIDC identity + voided reconcile + R8/edge-to-edge); public purchase **OFF**; AAB hold
+**Last updated:** 2026-11-27 11:20 Asia/Jerusalem — Android RTDN **LIVE** · Internal AAB **versionCode 145** · public purchase **OFF** · closed testers preserved
 
-## READY — Android billing RTDN + Play Console build hygiene (2026-11-27 Asia/Jerusalem)
+## LIVE — Android RTDN + release activate (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | Code ready for Pub/Sub RTDN · public `PURCHASING`/`CREDIT` still **false** · no AAB yet |
-| RTDN OIDC | Requires `IAP_GOOGLE_RTDN_AUDIENCE` + exact `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` + `email_verified` |
-| Clawbacks | Authoritative Play state before refund · purchase-token advisory lock · no double Stars deduct |
-| Voided reconcile | `reconcile_voided_purchases` → `purchases.voidedpurchases.list` (≤30d, in-app) |
-| License testers | Allowlist emails only; verified **Sandbox**/test purchases only while public gates OFF |
-| Android build | R8 minify+shrink on · EdgeToEdge in `MainActivity` · transparent system bars |
-| Assetlinks / Play SA | Still live from prior step |
-| Exact next action | Finish Pub/Sub → set `IAP_GOOGLE_RTDN_AUDIENCE` + `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` · license-tester emails · then Internal AAB |
+| Status | **LIVE** tip `f7f2fb2c` (#526+#527) · RTDN OIDC configured · public purchase **OFF** |
+| RTDN | `VERIFY_OIDC=true` · audience `https://fashionrise.app/api/v1/shop/iap/google/notifications` · expected `fashionrise-rtdn-push@fashionrise.iam.gserviceaccount.com` |
+| Pub/Sub | topic `projects/fashionrise/topics/fashionrise-play-rtdn` · push sub `fashionrise-play-rtdn-push` |
+| Nginx | Exact `POST` allowlist + `Authorization` forward · CF reaches API (unauth probe → FastAPI 403 OIDC, not Access block) |
+| License testers | `IAP_GOOGLE_LICENSE_TESTER_EMAILS` = same 4 FashionRise logins as `IAP_APPLE_SANDBOX_TESTER_EMAILS` (not guessed) |
+| Gates | `PURCHASING=false` · `CREDIT=false` (Sandbox-only for allowlisted emails) |
+| FCM / Play | FCM validate auth OK · Play `purchases.products.get` auth OK · `/shop/iap/google/status` verification_configured |
+| Clawback | Post-lock `expire_all` + `populate_existing` (fresh Stars/clawed state) |
+| AAB | Codemagic build `6b0948fade2cb89d84d49e45` **finished** · `app-release.aab` **versionCode 145** / `1.0` ( > Alpha **114**) · closed track untouched · Internal only |
+| RTDN rows | `iap_google_notifications` count **0** — Play Console test notification **not yet received** |
+| Exact next action | Operator: Play Console → RTDN **Send test notification** → confirm DB row · install Internal AAB · license-tester sandbox buy+refund · then consider public gates |
 
 ## LIVE — Android App Links + Play Billing verify (gates OFF)
 
