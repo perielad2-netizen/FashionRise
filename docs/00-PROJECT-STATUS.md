@@ -3,20 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:20 Asia/Jerusalem — Android billing RTDN readiness (OIDC identity + voided reconcile + R8/edge-to-edge); public purchase **OFF**; AAB hold
+**Last updated:** 2026-11-27 11:45 Asia/Jerusalem — Android **edge-to-edge UI regression fix** (revert #526 native insets) · RTDN live · public purchase **OFF**
 
-## READY — Android billing RTDN + Play Console build hygiene (2026-11-27 Asia/Jerusalem)
+## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | Code ready for Pub/Sub RTDN · public `PURCHASING`/`CREDIT` still **false** · no AAB yet |
-| RTDN OIDC | Requires `IAP_GOOGLE_RTDN_AUDIENCE` + exact `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` + `email_verified` |
-| Clawbacks | Authoritative Play state before refund · purchase-token advisory lock · no double Stars deduct |
-| Voided reconcile | `reconcile_voided_purchases` → `purchases.voidedpurchases.list` (≤30d, in-app) |
-| License testers | Allowlist emails only; verified **Sandbox**/test purchases only while public gates OFF |
-| Android build | R8 minify+shrink on · EdgeToEdge in `MainActivity` · transparent system bars |
-| Assetlinks / Play SA | Still live from prior step |
-| Exact next action | Finish Pub/Sub → set `IAP_GOOGLE_RTDN_AUDIENCE` + `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` · license-tester emails · then Internal AAB |
+| Symptom | Device VC **145**: native ActionBar/title + distorted icon, large top gap, white system bars, clipped viewport |
+| Cause | PR **#526** `EdgeToEdge.enable` + padding `android.R.id.content` with systemBars **double-applied** insets (Capacitor StatusBar overlay + CSS `safe-area-inset-*` already apply once) |
+| Fix | Revert `MainActivity` to empty `BridgeActivity`; restore Alpha `styles.xml`; `postSplashScreenTheme` → `AppTheme.NoActionBar`; **keep R8** minify/shrink |
+| Preserve | FCM, Play Billing, RTDN, deep links, signing · Alpha closed **114** + 15 testers untouched |
+| Gates | `PURCHASING=false` · `CREDIT=false` · license testers only |
+| AAB | Codemagic Internal `ANDROID_VERSION_CODE_OFFSET=60` (must exceed **145**) |
+| Exact next action | Merge fix → Internal AAB → install · confirm chrome matches Alpha · then sandbox buy/refund |
+
+## LIVE — Android RTDN (API) + billing verify (gates OFF)
+
+| Field | Value |
+| --- | --- |
+| Tip | `f7f2fb2c` (#526+#527) · RTDN OIDC live · test notification `applied` |
+| Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` |
+| Play SA / FCM | verification_configured · FCM auth OK |
 
 ## LIVE — Android App Links + Play Billing verify (gates OFF)
 

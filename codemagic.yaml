@@ -329,9 +329,9 @@ workflows:
         # Raise when Play Internal already consumed lower versionCodes from prior AABs.
         # Bumped for camera-permission P0 (#CAMERA tools:node=remove) — next Internal
         # AAB must exceed any APK/AAB still declaring android.permission.CAMERA.
-        # Raised so stamp > Play Alpha versionCode 114 (and prior Internal 110).
+        # Raised so stamp > Play Alpha versionCode 114 and Internal/sideload 145.
         # versionCode = PROJECT_BUILD_NUMBER + OFFSET; fail-closed if ≤ Play latest.
-        ANDROID_VERSION_CODE_OFFSET: "50"
+        ANDROID_VERSION_CODE_OFFSET: "60"
       node: 22
       java: 21
 
