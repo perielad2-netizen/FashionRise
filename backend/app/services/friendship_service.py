@@ -159,6 +159,12 @@ def request_friend(
     db.add(row)
     db.commit()
     db.refresh(row)
+    try:
+        from app.services import push_service as push_service
+
+        push_service.notify_friend_request(db, addressee_id=target.id, actor=requester)
+    except Exception:  # noqa: BLE001 — engagement must not fail friendship
+        pass
     return _friendship_read(db, row, requester.id)
 
 
@@ -174,8 +180,15 @@ def accept_friend(db: Session, user: User, friendship_id: uuid.UUID) -> Friendsh
         raise ConflictError("This friend request can no longer be accepted")
     row.status = FRIENDSHIP_ACCEPTED
     row.accepted_at = _utcnow()
+    requester_id = row.requester_id
     db.commit()
     db.refresh(row)
+    try:
+        from app.services import push_service as push_service
+
+        push_service.notify_friend_accepted(db, requester_id=requester_id, actor=user)
+    except Exception:  # noqa: BLE001 — engagement must not fail friendship
+        pass
     return _friendship_read(db, row, user.id)
 
 

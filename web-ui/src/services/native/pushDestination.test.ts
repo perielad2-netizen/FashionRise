@@ -23,4 +23,17 @@ describe('pushDestination', () => {
     expect(sanitizePushDestination('/studio/home?code=oauth')).toBe('/studio/fashionrise')
     expect(sanitizePushDestination('/auth/google/complete')).toBe('/studio/fashionrise')
   })
+
+  it('allows Manage friends deep-link query only', () => {
+    expect(sanitizePushDestination('/studio/fashionrise?friends=1')).toBe(
+      '/studio/fashionrise?friends=1',
+    )
+    expect(sanitizePushDestination('https://fashionrise.app/studio/fashionrise?friends=1')).toBe(
+      '/studio/fashionrise?friends=1',
+    )
+    expect(sanitizePushDestination('/studio/fashionrise?friends=1&token=x')).toBe(
+      '/studio/fashionrise',
+    )
+    expect(sanitizePushDestination('/studio/runway?friends=1')).toBe('/studio/runway')
+  })
 })
