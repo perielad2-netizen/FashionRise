@@ -49,20 +49,18 @@ Products (consumable, same as Apple): `stars_50` · `stars_150` · `stars_500` �
 | `IAP_GOOGLE_PACKAGE_NAME` | `app.fashionrise.studio` |
 | `IAP_GOOGLE_PURCHASING_ENABLED` | `false` (public OFF) |
 | `IAP_GOOGLE_CREDIT_ENABLED` | `false` (public OFF) |
-| `IAP_GOOGLE_LICENSE_TESTER_EMAILS` | set FashionRise account emails when ready for license-tester smoke |
+| `IAP_GOOGLE_LICENSE_TESTER_EMAILS` | 4 FashionRise logins (same set as Apple sandbox testers) |
 | `IAP_GOOGLE_RTDN_VERIFY_OIDC` | `true` |
-| `IAP_GOOGLE_RTDN_AUDIENCE` | **pending** — full push URL `https://fashionrise.app/api/v1/shop/iap/google/notifications` |
-| `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` | **pending** — exact Pub/Sub push service-account email (OIDC `email` claim) |
+| `IAP_GOOGLE_RTDN_AUDIENCE` | `https://fashionrise.app/api/v1/shop/iap/google/notifications` |
+| `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` | `fashionrise-rtdn-push@fashionrise.iam.gserviceaccount.com` |
 
-Connectivity check (no purchase): SA mints Android Publisher token · `oneTimeProducts` lists the three SKUs · bogus purchase token returns 400 (auth OK).
+Connectivity check (no purchase): SA mints Android Publisher token · bogus purchase token returns 400 (auth OK) · RTDN test notification `applied`.
 
-1. Keep public gates **false** until license-tester validation (Sandbox purchases only for allowlisted emails).
-2. RTDN: Play Console → Monetization setup → Real-time developer notifications → Pub/Sub → push to  
-   `https://fashionrise.app/api/v1/shop/iap/google/notifications`  
-   then set `IAP_GOOGLE_RTDN_AUDIENCE` to that exact URL **and** `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` to the push SA email.
+1. Keep public gates **false** until license-tester **ledger** validation (Sandbox purchases only for allowlisted emails). See `ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md`.
+2. RTDN Pub/Sub push is live; OIDC audience + expected push SA email set.
 3. Optional backfill: call `reconcile_voided_purchases` (Voided Purchases API, ≤30 days).
-3. Nginx must allowlist `POST` on that path (see shop allowlist docs).
-4. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
+4. Nginx allowlists `POST` on the notifications path (Authorization forwarded).
+5. Admin revenue: Play license-test purchases map to `environment=Sandbox` and stay excluded from Production revenue.
 
 Never trust client Stars/price. Credit only after `purchases.products.get` · purchaseState=Purchased · account bind · durable purchase-token idempotency · then client `consumePurchase`.
 
@@ -82,17 +80,15 @@ Repo keeps `web-ui/public/.well-known/*.template` — live host file is authorit
 ## D. Codemagic AAB
 
 - Workflow: `fashionrise-android-play-internal`
-- `versionName=1.0` · `versionCode=PROJECT_BUILD_NUMBER+ANDROID_VERSION_CODE_OFFSET` (offset **30** for this release)
+- `versionName=1.0` · `versionCode=PROJECT_BUILD_NUMBER+ANDROID_VERSION_CODE_OFFSET` (offset **60**; VC **156** owner-validated)
 - Signing: existing `fashionrise_android_upload`
 - Release R8: `minifyEnabled true` + `shrinkResources true` (Play DEX obfuscation)
-- Android 15: `EdgeToEdge.enable` in `MainActivity` + transparent system bars / cutout
-- Upload AAB manually to **Internal testing** — do not publish production track; do not recreate the tester track.
-- Do **not** start AAB until RTDN env (`AUDIENCE` + `EXPECTED_EMAIL`) is set.
+- Do **not** reintroduce native `EdgeToEdge` content padding — Capacitor StatusBar overlay + CSS `safe-area-inset-*` apply insets once (`postSplashScreenTheme` → `AppTheme.NoActionBar`)
+- Upload AAB manually to **Internal testing** — do not publish production track; do not recreate / alter Alpha closed testing (15 testers).
 
 ## E. Enablement order
 
-1. Ship FE/BE with Google gates **false** and Android push **false** until secrets exist.
-2. Publish assetlinks + fix nginx.
-3. Place FCM + Play SA files; inject `google-services.json` in Codemagic.
-4. Build signed Internal AAB; install on license testers.
-5. Enable Android push on staging/prod API; then Play license-tester emails; then public Play gates if authorized.
+1. ~~Secrets / assetlinks / FCM / Play SA / RTDN OIDC~~ — **done**
+2. ~~Internal AAB shell validation (VC 156)~~ — **done** (owner)
+3. License-tester sandbox **confirm + refund ledger** in production DB (see public-gate doc §B) — **required before public ON**
+4. PM-authorized public gate flip only via `ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md` §C — gates stay **false** until then

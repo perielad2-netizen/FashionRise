@@ -3,25 +3,36 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:45 Asia/Jerusalem — Android **edge-to-edge UI regression fix** (revert #526 native insets) · RTDN live · public purchase **OFF**
+**Last updated:** 2026-11-27 12:10 Asia/Jerusalem — Android release readiness **COMPLETE** (VC 156 owner-validated) · public Play billing gates **OFF** · Alpha closed preserved
 
-## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
+## COMPLETE — Android release readiness (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Symptom | Device VC **145**: native ActionBar/title + distorted icon, large top gap, white system bars, clipped viewport |
-| Cause | PR **#526** `EdgeToEdge.enable` + padding `android.R.id.content` with systemBars **double-applied** insets (Capacitor StatusBar overlay + CSS `safe-area-inset-*` already apply once) |
-| Fix | Revert `MainActivity` to empty `BridgeActivity`; restore Alpha `styles.xml`; `postSplashScreenTheme` → `AppTheme.NoActionBar`; **keep R8** minify/shrink |
-| Preserve | FCM, Play Billing, RTDN, deep links, signing · Alpha closed **114** + 15 testers untouched |
-| Gates | `PURCHASING=false` · `CREDIT=false` · license testers only |
-| AAB | Codemagic Internal `ANDROID_VERSION_CODE_OFFSET=60` (must exceed **145**) |
-| Exact next action | Merge fix → Internal AAB → install · confirm chrome matches Alpha · then sandbox buy/refund |
+| Status | **COMPLETE** for Internal/closed device readiness · public Play Stars gates remain **OFF** until PM flip |
+| AAB | Codemagic [6b095171…](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b09517117e6d611c9fb17af) · **VC 156** / 1.0 · owner-validated on device |
+| Device matrix | Login · FCM push · camera · deep links · restored native layout (no ActionBar / no double inset) · Play sandbox UI path exercised |
+| RTDN | Test notification `applied` (message_id `23636621182746101`) · zero wallet mutation |
+| Ledger verify | `platform=android` purchases in prod DB: **0** · `POST /shop/iap/confirm` for Android: **none observed** · `iap_stars_adjustments` android: **0** |
+| Sandbox revenue | Admin analytics excludes `environment=Sandbox` / test envs from Production revenue (code path verified); no Android Sandbox rows yet to exclude |
+| Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` · license-tester allowlist only |
+| Alpha closed | **VC 114** + **15** testers — **preserved** (untouched) |
+| Public activation prep | [`docs/deploy/ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md`](./deploy/ANDROID-STARS-PUBLIC-GATE-ACTIVATION.md) — checklist only; **do not** flip C1/C2 without §B ledger |
+| Exact next action | Complete license-tester sandbox **confirm + refund** ledger rows (B1–B4) → then PM may authorize public gates |
+
+## ARCHIVE — Android edge-to-edge UI regression fix (VC 145→156)
+
+| Field | Value |
+| --- | --- |
+| Cause | PR **#526** native `EdgeToEdge` + content padding double-applied safe-area |
+| Fix | [#529](https://github.com/perielad2-netizen/FashionRise/pull/529) revert MainActivity/styles; keep R8; `postSplashScreenTheme` → NoActionBar |
+| Outcome | VC **156** owner-validated |
 
 ## LIVE — Android RTDN (API) + billing verify (gates OFF)
 
 | Field | Value |
 | --- | --- |
-| Tip | `f7f2fb2c` (#526+#527) · RTDN OIDC live · test notification `applied` |
+| Tip | `f518881c` (#529) on main · RTDN OIDC live · test notification `applied` |
 | Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` |
 | Play SA / FCM | verification_configured · FCM auth OK |
 
