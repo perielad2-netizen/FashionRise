@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 11:45 Asia/Jerusalem — Android **edge-to-edge UI regression fix** (revert #526 native insets) · RTDN live · public purchase **OFF**
+**Last updated:** 2026-11-27 11:50 Asia/Jerusalem — Android edge-to-edge fix **merged** (#529) · Internal AAB **VC 156** · public purchase **OFF**
 
 ## FIX — Android native edge-to-edge UI regression (VC >145) (2026-11-27 Asia/Jerusalem)
 
@@ -14,8 +14,8 @@
 | Fix | Revert `MainActivity` to empty `BridgeActivity`; restore Alpha `styles.xml`; `postSplashScreenTheme` → `AppTheme.NoActionBar`; **keep R8** minify/shrink |
 | Preserve | FCM, Play Billing, RTDN, deep links, signing · Alpha closed **114** + 15 testers untouched |
 | Gates | `PURCHASING=false` · `CREDIT=false` · license testers only |
-| AAB | Codemagic Internal `ANDROID_VERSION_CODE_OFFSET=60` (must exceed **145**) |
-| Exact next action | Merge fix → Internal AAB → install · confirm chrome matches Alpha · then sandbox buy/refund |
+| AAB | Codemagic [6b09517117e6d611c9fb17af](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b09517117e6d611c9fb17af) **finished** · **versionCode 156** / 1.0 ( > 145) · offset **60** · Alpha **114** untouched |
+| Exact next action | Manual Internal upload of VC **156** · install · confirm chrome matches Alpha · license-tester sandbox buy/refund · gates stay OFF |
 
 ## LIVE — Android RTDN (API) + billing verify (gates OFF)
 
