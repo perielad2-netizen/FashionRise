@@ -852,12 +852,105 @@ def admin_reconciliation_snapshot(db: Session, *, sample_limit: int = 25) -> dic
         ).all()
     ]
 
+    last_failed = db.scalar(
+        select(GooglePlayReconcileRun)
+        .where(GooglePlayReconcileRun.status == "failed")
+        .order_by(GooglePlayReconcileRun.started_at.desc())
+        .limit(1)
+    )
+    fail_streak = 0
+    if last_failed is not None:
+        meta = last_failed.meta if isinstance(last_failed.meta, dict) else {}
+        fail_streak = max(0, int(meta.get("fail_streak") or 0))
+        # If a later success exists, streak is cleared for operators.
+        if last_success is not None and last_success.started_at >= last_failed.started_at:
+            fail_streak = 0
+
+    skipped_lock = int(
+        db.scalar(
+            select(func.count())
+            .select_from(GooglePlayReconcileRun)
+            .where(GooglePlayReconcileRun.status == "skipped_lock")
+        )
+        or 0
+    )
+    skipped_backoff = int(
+        db.scalar(
+            select(func.count())
+            .select_from(GooglePlayReconcileRun)
+            .where(GooglePlayReconcileRun.status == "skipped_backoff")
+        )
+        or 0
+    )
+
+    outstanding_purchases = int(
+        db.scalar(
+            select(func.count())
+            .select_from(IapPurchase)
+            .where(
+                IapPurchase.platform == "android",
+                IapPurchase.stars_credited > IapPurchase.stars_clawed_back,
+            )
+        )
+        or 0
+    )
+    outstanding_stars = int(
+        db.scalar(
+            select(
+                func.coalesce(
+                    func.sum(IapPurchase.stars_credited - IapPurchase.stars_clawed_back),
+                    0,
+                )
+            ).where(
+                IapPurchase.platform == "android",
+                IapPurchase.stars_credited > IapPurchase.stars_clawed_back,
+            )
+        )
+        or 0
+    )
+    review_pending = int(
+        db.scalar(
+            select(func.count())
+            .select_from(GooglePlayReconcileFinding)
+            .where(GooglePlayReconcileFinding.decision == "review")
+        )
+        or 0
+    )
+    recover_full_pending = int(
+        db.scalar(
+            select(func.count())
+            .select_from(GooglePlayReconcileFinding)
+            .where(GooglePlayReconcileFinding.decision == "recover_full")
+        )
+        or 0
+    )
+    from app.models.user import User
+
+    debt_users = int(
+        db.scalar(select(func.count()).select_from(User).where(User.ai_stars_iap_debt > 0))
+        or 0
+    )
+    debt_stars = int(
+        db.scalar(select(func.coalesce(func.sum(User.ai_stars_iap_debt), 0))) or 0
+    )
+
+    settings = get_settings()
+    interval = float(
+        getattr(settings, "iap_google_financial_reconcile_interval_seconds", 3600) or 3600
+    )
+    limit = int(getattr(settings, "iap_google_financial_reconcile_limit", 50) or 50)
+
     return {
         "kind": "persisted",
         "source": "postgresql",
         "reconcile_enabled": enabled,
         "dry_run": True if last_success is None else bool(last_success.dry_run),
         "apply_enabled": apply_enabled,
+        "scheduler": {
+            "interval_seconds": interval,
+            "batch_limit": limit,
+            "cluster_lock_key": "0x46524953_47505243",
+        },
         "last_successful_sync_at": (
             last_success.started_at.isoformat() if last_success else None
         ),
@@ -881,6 +974,24 @@ def admin_reconciliation_snapshot(db: Session, *, sample_limit: int = 25) -> dic
             if last_success
             else None
         ),
+        "last_failed_sync": (
+            {
+                "id": str(last_failed.id),
+                "status": last_failed.status,
+                "started_at": last_failed.started_at.isoformat(),
+                "error_code": last_failed.error_code,
+                # Never include purchase tokens or credentials in operator snapshots.
+                "error_detail": (last_failed.error_detail or "")[:200] or None,
+                "fail_streak": int(
+                    (last_failed.meta or {}).get("fail_streak") or 0
+                )
+                if isinstance(last_failed.meta, dict)
+                else 0,
+            }
+            if last_failed
+            else None
+        ),
+        "consecutive_failures": fail_streak,
         "last_run": (
             {
                 "id": str(last_any.id),
@@ -892,6 +1003,16 @@ def admin_reconciliation_snapshot(db: Session, *, sample_limit: int = 25) -> dic
             if last_any
             else None
         ),
+        "backlog": {
+            "android_purchases_with_outstanding_stars": outstanding_purchases,
+            "outstanding_stars": outstanding_stars,
+            "findings_recover_full": recover_full_pending,
+            "findings_review": review_pending,
+            "wallet_debt_users": debt_users,
+            "wallet_debt_stars": debt_stars,
+            "skipped_lock_runs": skipped_lock,
+            "skipped_backoff_runs": skipped_backoff,
+        },
         "sandbox": _env_bucket("Sandbox"),
         "production": _env_bucket("Production"),
         "unresolved_sample": unresolved_sample,
@@ -899,7 +1020,8 @@ def admin_reconciliation_snapshot(db: Session, *, sample_limit: int = 25) -> dic
             "Admin overview reads persisted reconcile runs/findings only — "
             "no orders.get / products.get on page load. "
             "Sandbox and Production are separated. "
-            "Mutations require IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true."
+            "Mutations require IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=true. "
+            "Alerts must never include purchase tokens or service-account material."
         ),
         "authority": ["orders.get", "purchases.products.get"],
     }

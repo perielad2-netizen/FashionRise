@@ -508,3 +508,13 @@ def test_admin_snapshot_reads_persisted_only(db_session: Session, monkeypatch: p
     assert snap["apply_enabled"] is False
     assert snap["last_successful_sync"]["scanned"] == 2
     assert "sandbox" in snap and "production" in snap
+    assert "backlog" in snap
+    assert "outstanding_stars" in snap["backlog"]
+    assert "wallet_debt_stars" in snap["backlog"]
+    assert "scheduler" in snap
+    assert snap["scheduler"]["batch_limit"] >= 1
+    assert "consecutive_failures" in snap
+    # Operator snapshots must never echo purchase tokens.
+    blob = str(snap)
+    assert "purchase_token" not in blob
+    assert "private_key" not in blob
