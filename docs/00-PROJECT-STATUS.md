@@ -17,7 +17,7 @@
 | BE deploy | `/opt/fashionrise/src` @ **`864bbc25`** · API restarted · runtime assert no `click_action` |
 | FE deploy | `/var/www/fashionrise/releases/864bbc25-push-tap-open` · `/version.json` → **`864bbc25`** · nginx devices allowlist assert **PASS** |
 | Controlled retest FCM | Sent **only** to Peri `b96f7f58-…` · title “FashionRise push test” · body “Tap-open retest — should open Runway.” · url `/studio/runway` · **no** `click_action` · FCM **ok** |
-| AAB | Codemagic build **`6b098ae56649b1e24f3aacbd`** (index **63**) · stamp **versionCode=241** · versionName **1.0** · offset **140** · **building** |
+| AAB | Codemagic build **`6b098ae56649b1e24f3aacbd`** (index **63**) · **versionCode=241** · versionName **1.0** · offset **140** · VPS `/var/www/fashionrise/artifacts/android/FashionRise-864bbc25-vc241-internal.aab` |
 | Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm`. Friend-request alerts: **no** push today. |
 | Push operational? | **No** — device must confirm tap opens app → `/studio/runway`. BE fix alone should open on VC **230**; full FE pending-nav needs AAB **241**. |
 | GPA.3329 apply | **DONE** · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` · GPA.3393 still once |
