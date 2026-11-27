@@ -22,17 +22,18 @@ Public probe: `GET /api/v1/push/native/capability` → `android_enabled: true`.
 
 ### Codemagic Android AAB (required before FCM works on device)
 
-Add to Codemagic env group **`fashionrise_native`** (variable, secret):
+Codemagic env group **`fashionrise_native`** (as of 2026-11-27 Asia/Jerusalem):
 
-| Variable | Source |
+| Variable | Status |
 | --- | --- |
-| `ANDROID_GOOGLE_SERVICES_JSON` | Cursor secret of the same name (client `google-services.json` only — **no** private key) |
+| `ANDROID_GOOGLE_SERVICES_JSON` | **Set** (secure) from Cursor secret — client config only, no private key |
+| Existing croquis notice vars | **Preserved** |
 
-Optional aliases: secure file `CM_GOOGLE_SERVICES_JSON`, or legacy `GOOGLE_SERVICES_JSON`.
+Optional aliases still accepted by the workflow: secure file `CM_GOOGLE_SERVICES_JSON`, or legacy `GOOGLE_SERVICES_JSON`.
 
 Workflow `fashionrise-android-play-internal` injects the file into `web-ui/android/app/google-services.json`, validates project/package, builds the AAB, then deletes the file so it is not an artifact.
 
-Smoke after Internal install: signed-in → Runway bell ON → like → tap opens `/studio…`.
+Do **not** start the AAB until Play Billing credentials are configured. Smoke after Internal install: signed-in → Runway bell ON → like → tap opens `/studio…`.
 
 Do **not** change Web Push or iOS APNs flags in this checklist.
 
