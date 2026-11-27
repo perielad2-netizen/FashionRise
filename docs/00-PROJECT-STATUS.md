@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 10:00 Asia/Jerusalem — Android FCM **LIVE** on API (`fashionrise-e2f01`); Codemagic google-services inject pending env var
+**Last updated:** 2026-11-27 10:10 Asia/Jerusalem — Android FCM **LIVE** (API + Codemagic `ANDROID_GOOGLE_SERVICES_JSON`); AAB not started; Play Billing pending
 
-## LIVE — Android FCM backend enabled (2026-11-27 Asia/Jerusalem)
+## LIVE — Android FCM (API + Codemagic inject ready) (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **LIVE (API)** — `NATIVE_PUSH_ANDROID_ENABLED=true` · project `fashionrise-e2f01` |
+| Status | **LIVE (API)** + **Codemagic env ready** — do **not** start AAB until Play Billing config is done |
+| Merged | PR **#523** → `main` (`e7d05340`) |
 | Capability | `GET /api/v1/push/native/capability` → `android_enabled: true` |
 | SA path | `/var/lib/fashionrise/secrets/fcm-firebase-sa.json` (mode 0640 · not in git) |
 | Env | `NATIVE_PUSH_FCM_PROJECT_ID=fashionrise-e2f01` · `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=<abs path>` |
-| Cursor secrets used | `FIREBASE_SERVICE_ACCOUNT_JSON` · `FIREBASE_PROJECT_ID` · `ANDROID_GOOGLE_SERVICES_JSON` (Codemagic only) |
-| Device delivery | Needs Internal AAB built with `ANDROID_GOOGLE_SERVICES_JSON` in Codemagic group `fashionrise_native` |
-| Untouched | Web Push · iOS APNs flags/credentials · generation keys |
-| Exact next action | Add `ANDROID_GOOGLE_SERVICES_JSON` to Codemagic `fashionrise_native` → run Play Internal AAB · Play Billing SA still pending |
+| Codemagic | Group `fashionrise_native` has secure `ANDROID_GOOGLE_SERVICES_JSON` (existing vars preserved) |
+| Untouched | Web Push · iOS APNs · signing credentials · no AAB triggered |
+| Exact next action | Finish Google Play Billing (Play SA + products + license testers + assetlinks SHA) → then Internal AAB |
 
 ## READY — Android release: Play Billing + App Links (FCM API done)
 

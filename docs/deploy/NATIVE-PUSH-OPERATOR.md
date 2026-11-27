@@ -44,7 +44,7 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
 | Prod env | `NATIVE_PUSH_ANDROID_ENABLED=true` · `NATIVE_PUSH_FCM_PROJECT_ID=fashionrise-e2f01` · `NATIVE_PUSH_FCM_SERVICE_ACCOUNT_JSON=<abs path>` |
 | Cursor secrets | `FIREBASE_SERVICE_ACCOUNT_JSON` (API host) · `ANDROID_GOOGLE_SERVICES_JSON` (Codemagic only) |
 
-1. Codemagic group `fashionrise_native`: set secret env `ANDROID_GOOGLE_SERVICES_JSON` (client config — **no** private key). Workflow injects `web-ui/android/app/google-services.json`, validates project/package, then deletes after `bundleRelease`.
+1. Codemagic group `fashionrise_native`: secret env `ANDROID_GOOGLE_SERVICES_JSON` is **configured** (client config — **no** private key; existing group vars preserved). Workflow injects `web-ui/android/app/google-services.json`, validates project/package, then deletes after `bundleRelease`. Do not start AAB until Play Billing is ready.
 2. Never commit `google-services.json` or the FCM service-account private key; never ship the SA inside the AAB.
 3. Play App Signing SHA-256 → `assetlinks.json` (see templates under `web-ui/public/.well-known/`).
 4. Runtime permission `POST_NOTIFICATIONS` is requested **after authentication** when the user has not opted out.
