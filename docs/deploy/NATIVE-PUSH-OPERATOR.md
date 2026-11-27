@@ -56,6 +56,7 @@ Push tap destinations are **only** `/studio…` and `/privacy`. Password-reset, 
    - Fix: **LIVE** allowlist + repo SoT `deploy/nginx-allowlists/native-push.conf.snippet` (assert via `deploy/nginx-allowlists/assert_native_push_allowlist.sh`). Backup `nginx-fashionrise.app.bak-native-devices-20261127T130828Z`. Smoke: OPTIONS **200**, unauth POST **401**, unknown path **403**. **No AAB rebuild required**; VC 230 can retest now.
    - After registration succeeds: inspect `native_push_devices`, then run a **separately controlled** delivery test to that device only. Do not declare push operational until real delivery is verified.
    - Do not declare fixed until Notifications **ON** + DB row + preference survives restart/re-login + gated real push.
+8. Prod QA (2026-11-27 ~15:31 Asia/Jerusalem): VC **230** registration **succeeded** after nginx fix — Peri android row `b96f7f58-…` (token fingerprint only). Controlled `_send_fcm` to that device only → **FCM accepted**. Device on-screen receipt is a separate check. Concurrent register POSTs could UniqueViolation 500; `upsert_native_device` now recovers that race.
 
 ## iOS (APNs) — entitlements & provisioning
 

@@ -13,6 +13,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -149,10 +150,15 @@ def list_user_subscriptions(db: Session, user_id: uuid.UUID) -> list[PushSubscri
 
 
 def upsert_native_device(db: Session, user: User, data: NativePushDeviceCreate) -> NativePushDevice:
+    """Idempotent register. Concurrent POSTs of the same token must not 500.
+
+    Unique token constraint races (listener + Settings sync) are recovered by
+    rolling back and re-binding the winning row to the current account.
+    """
     token = data.device_token.strip()
-    existing = db.scalar(select(NativePushDevice).where(NativePushDevice.device_token == token))
     version = (data.app_version or "").strip()[:64] or None
-    if existing:
+
+    def _bind(existing: NativePushDevice) -> NativePushDevice:
         # Reassign token to current account (account switch on same device).
         existing.user_id = user.id
         existing.platform = data.platform
@@ -162,6 +168,11 @@ def upsert_native_device(db: Session, user: User, data: NativePushDeviceCreate) 
         db.commit()
         db.refresh(existing)
         return existing
+
+    existing = db.scalar(select(NativePushDevice).where(NativePushDevice.device_token == token))
+    if existing:
+        return _bind(existing)
+
     row = NativePushDevice(
         user_id=user.id,
         platform=data.platform,
@@ -169,7 +180,14 @@ def upsert_native_device(db: Session, user: User, data: NativePushDeviceCreate) 
         app_version=version,
     )
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raced = db.scalar(select(NativePushDevice).where(NativePushDevice.device_token == token))
+        if raced is None:
+            raise
+        return _bind(raced)
     db.refresh(row)
     return row
 
