@@ -8,7 +8,6 @@ Android uses Google Play Developer API verification + RTDN clawbacks (fail-close
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import Any, Literal
 
@@ -342,12 +341,8 @@ def _confirm_android(
     if google_iap.is_canceled(verified) or not google_iap.is_purchased(verified):
         raise ForbiddenError("Google purchase is not in a purchased state")
 
-    # Serialize confirm vs RTDN clawback on this purchase token.
-    lock_key = int.from_bytes(
-        hashlib.sha256(f"fr.google.iap:{token}".encode()).digest()[:8],
-        "big",
-        signed=True,
-    )
+    # Serialize confirm vs RTDN / voided-reconcile clawback on this purchase token.
+    lock_key = google_iap.purchase_token_lock_key(token)
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
 
     existing = db.scalar(

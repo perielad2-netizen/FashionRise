@@ -3,23 +3,28 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 10:55 Asia/Jerusalem — Play App Signing assetlinks **LIVE** · Play SA verify **configured** · public purchase **OFF** · AAB hold (RTDN next)
+**Last updated:** 2026-11-27 11:20 Asia/Jerusalem — Android billing RTDN readiness (OIDC identity + voided reconcile + R8/edge-to-edge); public purchase **OFF**; AAB hold
 
-## LIVE — Android App Links + Play Billing verify (gates OFF) (2026-11-27 Asia/Jerusalem)
+## READY — Android billing RTDN + Play Console build hygiene (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **assetlinks LIVE** · Play Developer SA on API · `IAP_GOOGLE_PURCHASING_ENABLED=false` / `CREDIT=false` |
-| Package | `app.fashionrise.studio` |
-| App Signing SHA-256 | `D8:2D:D6:16:…:79:16` published at `/.well-known/assetlinks.json` (apex + www) |
-| DAL API | `statements:list` returns package + fingerprint for `https://fashionrise.app` |
-| Play SA | `/var/lib/fashionrise/secrets/google-play-sa.json` (0640) · Cursor `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` |
-| Env | `IAP_GOOGLE_SERVICE_ACCOUNT_JSON=<abs path>` · package `app.fashionrise.studio` |
-| Products (API) | `stars_50` / `stars_150` / `stars_500` — all **ACTIVE** via `oneTimeProducts` |
-| Public purchase | **OFF** until license-tester validation · `IAP_GOOGLE_LICENSE_TESTER_EMAILS` still empty (set FashionRise account emails when ready) |
-| Dep | Prod venv now has `google-auth` (required for FCM + Play verify) |
-| Untouched | No AAB · no RTDN audience yet · Web Push / iOS unchanged |
-| Exact next action | RTDN Pub/Sub → set `IAP_GOOGLE_RTDN_AUDIENCE` · add license-tester emails · then Internal AAB |
+| Status | Code ready for Pub/Sub RTDN · public `PURCHASING`/`CREDIT` still **false** · no AAB yet |
+| RTDN OIDC | Requires `IAP_GOOGLE_RTDN_AUDIENCE` + exact `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` + `email_verified` |
+| Clawbacks | Authoritative Play state before refund · purchase-token advisory lock · no double Stars deduct |
+| Voided reconcile | `reconcile_voided_purchases` → `purchases.voidedpurchases.list` (≤30d, in-app) |
+| License testers | Allowlist emails only; verified **Sandbox**/test purchases only while public gates OFF |
+| Android build | R8 minify+shrink on · EdgeToEdge in `MainActivity` · transparent system bars |
+| Assetlinks / Play SA | Still live from prior step |
+| Exact next action | Finish Pub/Sub → set `IAP_GOOGLE_RTDN_AUDIENCE` + `IAP_GOOGLE_RTDN_EXPECTED_EMAIL` · license-tester emails · then Internal AAB |
+
+## LIVE — Android App Links + Play Billing verify (gates OFF)
+
+| Field | Value |
+| --- | --- |
+| Assetlinks | Play App Signing SHA-256 live (apex + www) |
+| Play SA | `/var/lib/fashionrise/secrets/google-play-sa.json` · products ACTIVE |
+| Gates | `IAP_GOOGLE_PURCHASING_ENABLED=false` · `CREDIT=false` |
 
 ## LIVE — Android FCM (API + Codemagic inject ready)
 

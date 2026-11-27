@@ -492,6 +492,9 @@ class Settings(BaseSettings):
     # RTDN Pub/Sub push OIDC verification (audience = full HTTPS webhook URL).
     iap_google_rtdn_verify_oidc: bool = True
     iap_google_rtdn_audience: str = ""
+    # Exact Pub/Sub push service-account email (OIDC ``email`` claim). Required when
+    # OIDC verify is on in production — never accept arbitrary *.gserviceaccount.com.
+    iap_google_rtdn_expected_email: str = ""
     # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also
     # refuses unverified credit even in non-prod — send signed sandbox JWS instead.
     iap_allow_unverified_sandbox: bool = False

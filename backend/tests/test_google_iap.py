@@ -217,6 +217,217 @@ def test_rtdn_test_notification(db_session: Session, monkeypatch: pytest.MonkeyP
     assert again["duplicate"] is True
 
 
+def test_rtdn_oidc_requires_exact_email(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("google.oauth2.id_token")
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "true")
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_AUDIENCE",
+        "https://fashionrise.app/api/v1/shop/iap/google/notifications",
+    )
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_EXPECTED_EMAIL",
+        "rtdn-push@fashionrise.iam.gserviceaccount.com",
+    )
+    get_settings.cache_clear()
+
+    def _verify(token, _req, audience):
+        assert audience.endswith("/iap/google/notifications")
+        return {
+            "email": "other@fashionrise.iam.gserviceaccount.com",
+            "email_verified": True,
+        }
+
+    import google.oauth2.id_token as id_token_mod
+
+    monkeypatch.setattr(id_token_mod, "verify_oauth2_token", _verify)
+    with pytest.raises(ForbiddenError):
+        google_rtdn._maybe_verify_oidc("Bearer fake-token")
+
+
+def test_rtdn_oidc_accepts_expected_verified_email(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("google.oauth2.id_token")
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "true")
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_AUDIENCE",
+        "https://fashionrise.app/api/v1/shop/iap/google/notifications",
+    )
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_EXPECTED_EMAIL",
+        "rtdn-push@fashionrise.iam.gserviceaccount.com",
+    )
+    get_settings.cache_clear()
+
+    def _verify(token, _req, audience):
+        return {
+            "email": "rtdn-push@fashionrise.iam.gserviceaccount.com",
+            "email_verified": True,
+        }
+
+    import google.oauth2.id_token as id_token_mod
+
+    monkeypatch.setattr(id_token_mod, "verify_oauth2_token", _verify)
+    google_rtdn._maybe_verify_oidc("Bearer fake-token")
+
+
+def test_rtdn_oidc_rejects_unverified_email_claim(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("google.oauth2.id_token")
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "true")
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_AUDIENCE",
+        "https://fashionrise.app/api/v1/shop/iap/google/notifications",
+    )
+    monkeypatch.setenv(
+        "IAP_GOOGLE_RTDN_EXPECTED_EMAIL",
+        "rtdn-push@fashionrise.iam.gserviceaccount.com",
+    )
+    get_settings.cache_clear()
+
+    def _verify(token, _req, audience):
+        return {
+            "email": "rtdn-push@fashionrise.iam.gserviceaccount.com",
+            "email_verified": False,
+        }
+
+    import google.oauth2.id_token as id_token_mod
+
+    monkeypatch.setattr(id_token_mod, "verify_oauth2_token", _verify)
+    with pytest.raises(ForbiddenError):
+        google_rtdn._maybe_verify_oidc("Bearer fake-token")
+
+def test_rtdn_voided_clawback_idempotent(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+    from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
+
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "false")
+    get_settings.cache_clear()
+    user = _user(db_session)
+    user.ai_stars = 50
+    db_session.commit()
+
+    purchase = IapPurchase(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        platform="android",
+        product_id="stars_50",
+        transaction_id="GPA.void-1",
+        original_transaction_id="GPA.void-1",
+        purchase_token="void-token-1",
+        stars_credited=50,
+        stars_clawed_back=0,
+        status=STATUS_ACTIVE,
+        environment="Sandbox",
+    )
+    db_session.add(purchase)
+    db_session.commit()
+
+    canceled = google_iap.VerifiedGooglePurchase(
+        product_id="stars_50",
+        purchase_token="void-token-1",
+        order_id="GPA.void-1",
+        package_name="app.fashionrise.studio",
+        purchase_state=1,
+        consumption_state=1,
+        acknowledgement_state=1,
+        obfuscated_external_account_id=None,
+        environment="Sandbox",
+        quantity=1,
+        raw={},
+    )
+    monkeypatch.setattr(google_iap, "verify_product_purchase", lambda **_k: canceled)
+    real_execute = db_session.execute
+
+    def _execute(stmt, *args, **kwargs):
+        sql = str(getattr(stmt, "text", stmt))
+        if "pg_advisory_xact_lock" in sql:
+            return MagicMock()
+        return real_execute(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", _execute)
+
+    payload = {
+        "voidedPurchaseNotification": {
+            "purchaseToken": "void-token-1",
+            "orderId": "GPA.void-1",
+        },
+        "packageName": "app.fashionrise.studio",
+    }
+    data = base64.b64encode(json.dumps(payload).encode()).decode()
+    body = {"message": {"messageId": "void-msg-1", "data": data}}
+    out = google_rtdn.process_google_rtdn(db_session, body=body, authorization=None)
+    assert out["ok"] is True
+    db_session.refresh(user)
+    db_session.refresh(purchase)
+    assert int(user.ai_stars) == 0
+    assert int(purchase.stars_clawed_back) == 50
+
+    # Duplicate message — no second clawback
+    again = google_rtdn.process_google_rtdn(db_session, body=body, authorization=None)
+    assert again["duplicate"] is True
+    db_session.refresh(user)
+    assert int(user.ai_stars) == 0
+
+
+def test_reconcile_voided_purchases(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+    from app.models.iap_purchase import STATUS_ACTIVE, IapPurchase
+
+    monkeypatch.setenv("IAP_GOOGLE_RTDN_VERIFY_OIDC", "false")
+    get_settings.cache_clear()
+    user = _user(db_session, email="reconcile@fashionrise.app")
+    user.ai_stars = 150
+    db_session.commit()
+    purchase = IapPurchase(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        platform="android",
+        product_id="stars_150",
+        transaction_id="GPA.rec-1",
+        original_transaction_id="GPA.rec-1",
+        purchase_token="rec-token-1",
+        stars_credited=150,
+        stars_clawed_back=0,
+        status=STATUS_ACTIVE,
+        environment="Sandbox",
+    )
+    db_session.add(purchase)
+    db_session.commit()
+
+    monkeypatch.setattr(google_iap, "google_iap_configured", lambda: True)
+    monkeypatch.setattr(
+        google_iap,
+        "list_voided_purchases",
+        lambda **_k: [
+            google_iap.VoidedGooglePurchase(
+                purchase_token="rec-token-1",
+                order_id="GPA.rec-1",
+                voided_time_millis=1,
+                raw={},
+            )
+        ],
+    )
+    real_execute = db_session.execute
+
+    def _execute(stmt, *args, **kwargs):
+        sql = str(getattr(stmt, "text", stmt))
+        if "pg_advisory_xact_lock" in sql:
+            return MagicMock()
+        return real_execute(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", _execute)
+
+    first = google_rtdn.reconcile_voided_purchases(db_session, lookback_days=7)
+    assert first["ok"] is True
+    assert first["applied"] == 1
+    db_session.refresh(user)
+    db_session.refresh(purchase)
+    assert int(user.ai_stars) == 0
+    assert int(purchase.stars_clawed_back) == 150
+
+    second = google_rtdn.reconcile_voided_purchases(db_session, lookback_days=7)
+    assert second["duplicates"] >= 1
+    assert second["applied"] == 0
+    db_session.refresh(user)
+    assert int(user.ai_stars) == 0
+
+
 def test_license_tester_gate(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("IAP_GOOGLE_PURCHASING_ENABLED", "false")
     monkeypatch.setenv("IAP_GOOGLE_CREDIT_ENABLED", "false")
@@ -227,3 +438,42 @@ def test_license_tester_gate(monkeypatch: pytest.MonkeyPatch):
     assert google_iap.google_credit_enabled_for(user) is True
     other = MagicMock(email="other@example.com")
     assert google_iap.google_purchasing_enabled_for(other) is False
+
+
+def test_license_tester_rejects_production_purchase(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("IAP_GOOGLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_GOOGLE_CREDIT_ENABLED", "false")
+    monkeypatch.setenv("IAP_GOOGLE_LICENSE_TESTER_EMAILS", "android.tester@fashionrise.app")
+    monkeypatch.setenv(
+        "IAP_GOOGLE_SERVICE_ACCOUNT_JSON",
+        '{"type":"service_account","client_email":"x@y.iam.gserviceaccount.com","private_key":"x"}',
+    )
+    get_settings.cache_clear()
+    user = _user(db_session)
+    account = app_account_token_for_user(user.id)
+    verified = google_iap.VerifiedGooglePurchase(
+        product_id="stars_50",
+        purchase_token="prod-tok",
+        order_id="GPA.prod",
+        package_name="app.fashionrise.studio",
+        purchase_state=0,
+        consumption_state=0,
+        acknowledgement_state=0,
+        obfuscated_external_account_id=account,
+        environment="Production",
+        quantity=1,
+        raw={},
+    )
+    monkeypatch.setattr(google_iap, "google_iap_configured", lambda: True)
+    monkeypatch.setattr(google_iap, "verify_product_purchase", lambda **_k: verified)
+    with pytest.raises(ForbiddenError):
+        iap_service.confirm_purchase(
+            db_session,
+            user,
+            platform="android",
+            product_id="stars_50",
+            transaction_id="GPA.prod",
+            purchase_token="prod-tok",
+        )
