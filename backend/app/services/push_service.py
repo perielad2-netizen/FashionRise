@@ -387,6 +387,35 @@ def _send_native(device: NativePushDevice, payload: dict[str, Any]) -> tuple[boo
     return False, False
 
 
+def build_fcm_message_body(device_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """FCM HTTP v1 message body for Android (and shared data keys for taps).
+
+    Never set a custom ``click_action`` — FashionRise MainActivity only declares
+    MAIN/LAUNCHER + VIEW deep links. A custom action (historically OPEN_URI)
+    made notification taps fail to open the app while FCM still accepted the send.
+    """
+    tag = str(payload.get("tag") or "fashionrise-runway")
+    url = str(payload.get("url") or "/studio/runway")
+    android_notification: dict[str, Any] = {
+        "channel_id": "fashionrise_social",
+    }
+    return {
+        "message": {
+            "token": device_token,
+            "notification": {"title": payload["title"], "body": payload["body"]},
+            "data": {
+                "url": url,
+                "tag": tag,
+            },
+            "android": {
+                "collapse_key": tag[:64],
+                "priority": "HIGH",
+                "notification": android_notification,
+            },
+        }
+    }
+
+
 def _send_fcm(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool, bool]:
     settings = get_settings()
     sa_path = (settings.native_push_fcm_service_account_json or "").strip()
@@ -407,24 +436,7 @@ def _send_fcm(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool, 
             scopes=["https://www.googleapis.com/auth/firebase.messaging"],
         )
         creds.refresh(google.auth.transport.requests.Request())
-        body = {
-            "message": {
-                "token": device.device_token,
-                "notification": {"title": payload["title"], "body": payload["body"]},
-                "data": {
-                    "url": str(payload.get("url") or "/studio/runway"),
-                    "tag": str(payload.get("tag") or "fashionrise-runway"),
-                },
-                "android": {
-                    "collapse_key": str(payload.get("tag") or "fashionrise-runway")[:64],
-                    "priority": "HIGH",
-                    "notification": {
-                        "channel_id": "fashionrise_social",
-                        "click_action": "OPEN_URI",
-                    },
-                },
-            }
-        }
+        body = build_fcm_message_body(device.device_token, payload)
         req = urllib.request.Request(
             f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send",
             data=json.dumps(body).encode("utf-8"),

@@ -16,9 +16,8 @@
 import { PushNotifications } from '@capacitor/push-notifications'
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
+import { handleNotificationDestination } from './notificationNavigation'
 import { isNativeShell, nativePlatform } from './platform'
-import { sanitizePushDestination } from './pushDestination'
-import { navigateInApp } from './urlPolicy'
 
 export type NativePushCapability = {
   android_enabled: boolean
@@ -212,8 +211,9 @@ export async function deleteNativePushDevice(deviceToken: string): Promise<void>
 }
 
 function openNotificationUrl(rawUrl: unknown): void {
-  // Push taps never open reset/verify/OAuth or any token-bearing URL.
-  navigateInApp(sanitizePushDestination(rawUrl))
+  // Centralized path for all notification types (likes, comments, operator tests).
+  // Queues until auth/router ready; rejects unsafe destinations.
+  handleNotificationDestination(rawUrl)
 }
 
 const ANDROID_CHANNEL_ID = 'fashionrise_social'
@@ -235,7 +235,13 @@ async function ensureAndroidChannels(): Promise<void> {
   }
 }
 
-async function installListeners(): Promise<void> {
+/**
+ * Install tap/receive listeners as early as possible (cold start).
+ * Safe before auth — destinations queue until navigation is marked ready.
+ * Registration listeners still require a later syncNativePushAfterAuth.
+ */
+export async function installNativePushInteractionListeners(): Promise<void> {
+  if (!isNativeShell()) return
   if (listenersInstalled) return
   listenersInstalled = true
 
@@ -276,6 +282,10 @@ async function installListeners(): Promise<void> {
     const data = (action?.notification?.data || {}) as Record<string, unknown>
     openNotificationUrl(data.url ?? data.path)
   })
+}
+
+async function installListeners(): Promise<void> {
+  await installNativePushInteractionListeners()
 }
 
 export function getLastNativePushRegistrationError(): string | null {
@@ -487,6 +497,10 @@ export async function clearNativePushForLogout(): Promise<void> {
   }
   listenersInstalled = false
   resolveTokenWaiters(null)
+  // Re-install tap listeners so a notification tap during/after logout still queues.
+  void installNativePushInteractionListeners().catch(() => {
+    /* ignore */
+  })
   // Keep local FCM/APNs token string for re-register after next login.
 }
 

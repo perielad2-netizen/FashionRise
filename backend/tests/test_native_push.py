@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from app.models.native_push_device import NativePushDevice
@@ -90,6 +91,29 @@ def test_register_list_unregister_native_device(client, db_session, monkeypatch)
     )
     assert deleted.status_code == 204, deleted.text
     assert client.get("/api/v1/push/native/devices", headers=_auth(tokens_b)).json() == []
+
+
+def test_fcm_message_omits_custom_click_action():
+    """Regression: custom click_action OPEN_URI prevented Android tap-to-open."""
+    body = push_service.build_fcm_message_body(
+        "fcm-token-example",
+        {
+            "title": "FashionRise push test",
+            "body": "Controlled delivery test — tap to open Runway.",
+            "url": "/studio/runway",
+            "tag": "operator-push-test",
+        },
+    )
+    msg = body["message"]
+    assert msg["notification"]["title"] == "FashionRise push test"
+    assert msg["data"]["url"] == "/studio/runway"
+    assert msg["data"]["tag"] == "operator-push-test"
+    android_n = msg["android"]["notification"]
+    assert android_n["channel_id"] == "fashionrise_social"
+    assert "click_action" not in android_n
+    # Entire serialized body must not reintroduce the broken action.
+    assert "OPEN_URI" not in json.dumps(body)
+    assert "click_action" not in json.dumps(body)
 
 
 def test_sanitize_push_url_allowlist():

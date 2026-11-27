@@ -32,6 +32,7 @@ import {
   clearNativePushForLogout,
   syncNativePushAfterAuth,
 } from '@/services/native/nativePush'
+import { setNotificationNavigationReady } from '@/services/native/notificationNavigation'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import { postStreakCheckIn } from '@/services/competitionsApi'
 
@@ -157,6 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Shared AI default tiles are public; warm them once a session is alive.
     if (user?.id) void preloadDefaultFabricTiles()
   }, [user?.id])
+
+  // Cold/warm push taps may arrive before auth restores — flush when ready.
+  useEffect(() => {
+    if (!isNativeShell()) return
+    const ready = Boolean(user?.id) && !bootstrapping
+    setNotificationNavigationReady(ready)
+  }, [user?.id, bootstrapping])
 
   // Mid-session refresh failure (apiRequest): drop identity without leaving a zombie session.
   useEffect(() => {

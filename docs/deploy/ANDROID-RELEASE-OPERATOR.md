@@ -97,7 +97,7 @@ Repo keeps `web-ui/public/.well-known/*.template` — live host file is authorit
 ## D. Codemagic AAB
 
 - Workflow: `fashionrise-android-play-internal`
-- `versionName=1.0` · `versionCode=PROJECT_BUILD_NUMBER+ANDROID_VERSION_CODE_OFFSET` (offset **30** for this release)
+- `versionName=1.0` · `versionCode=PROJECT_BUILD_NUMBER+ANDROID_VERSION_CODE_OFFSET` (offset **140** — must stamp **>** Play Internal latest; VC **230** shipped; next tap-open AAB must be **>230**)
 - Signing: existing `fashionrise_android_upload`
 - Release R8: `minifyEnabled true` + `shrinkResources true` (Play DEX obfuscation)
 - Android 15: `EdgeToEdge.enable` in `MainActivity` + transparent system bars / cutout

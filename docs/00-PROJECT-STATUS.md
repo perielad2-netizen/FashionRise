@@ -3,7 +3,51 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 15:50 Asia/Jerusalem — VC 230 push registered · FCM accepted for Peri device · upsert race fix · GPA.3329 apply still pending
+**Last updated:** 2026-11-27 16:00 Asia/Jerusalem — BE+FE tap fix live · controlled retest FCM sent · AAB VC 241 building · GPA.3329 recovered
+
+## LIVE — Push tap defect + GPA.3329 scoped recover (2026-11-27 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Device receipt | **Confirmed** 15:40 IL · SM-S921B VC **230** · title “FashionRise push test” · body runway tap copy · FashionRise icon · settings survived restart/re-login |
+| Tap | **FAILED** on VC 230 payload — notification did **not** open the app |
+| Tap root cause | FCM `click_action: "OPEN_URI"` with no MainActivity intent-filter → system tray cannot resolve Activity. Registration/delivery ≠ interaction. |
+| Fix | BE: omit custom `click_action` (`build_fcm_message_body`) · FE: early listeners + `notificationNavigation` · tests · offset **140** |
+| PR | **#540** `cursor/web-push-tap-refund-recover-77c6` tip **`864bbc25`** |
+| BE deploy | `/opt/fashionrise/src` @ **`864bbc25`** · API restarted · runtime assert no `click_action` |
+| FE deploy | `/var/www/fashionrise/releases/864bbc25-push-tap-open` · `/version.json` → **`864bbc25`** · nginx devices allowlist assert **PASS** |
+| Controlled retest FCM | Sent **only** to Peri `b96f7f58-…` · title “FashionRise push test” · body “Tap-open retest — should open Runway.” · url `/studio/runway` · **no** `click_action` · FCM **ok** |
+| AAB | Codemagic build **`6b098ae56649b1e24f3aacbd`** (index **63**) · **versionCode=241** · versionName **1.0** · offset **140** · VPS `/var/www/fashionrise/artifacts/android/FashionRise-864bbc25-vc241-internal.aab` |
+| Social paths | Likes / comments / comment-likes / scores → same `notify_user` → `_send_fcm`. Friend-request alerts: **no** push today. |
+| Push operational? | **No** — device must confirm tap opens app → `/studio/runway`. BE fix alone should open on VC **230**; full FE pending-nav needs AAB **241**. |
+| GPA.3329 apply | **DONE** · recovered **50** · wallet **999397→999347** · clawed **50** · post dry-run `already_recovered` · GPA.3393 still once |
+| Persistent gates | purchasing **false** · credit **false** · reconcile apply **false** |
+| Permanent auto-apply | **Not enabled** — readiness blockers below; needs separate PM approval |
+
+### Device retest (operator)
+
+1. Prefer install Internal AAB **VC 241** when ready (bundled FE). Interim: VC **230** can validate **open** after BE fix (tap may still race on cold start without pending-nav AAB).
+2. App states: foreground / background / removed from recents / locked→unlock / after restart+re-login.
+3. Tap the “Tap-open retest” notification → FashionRise opens → lands on **`/studio/runway`**.
+4. Repeat tap once; no duplicate navigation storm.
+5. Optional bounded social: like/comment from a second test account to Peri only — same infrastructure; do not broadcast.
+
+### Permanent hourly reconcile readiness (assessment only — NOT enabled)
+
+| Topic | Status |
+| --- | --- |
+| Candidate selection | Fair cursor + refunded/outstanding stars; order-scoped path proven |
+| Batch limits | Worker limit env present; keep bounded |
+| Cluster locking | Advisory lock + purchase-token lock + durable message id — OK |
+| Provider outages / retry | Dry-run path tolerates; apply must stay fail-closed on ambiguity |
+| Refund without revoke | Classifies `review` (no blind deduct) — keep |
+| Partial refunds | Needs explicit policy before unattended apply |
+| Insufficient balance / debt | `ai_stars_iap_debt` path exists; monitor alerts required before unattended |
+| Duplicate RTDN + reconcile | Idempotent message ids — OK for applied recoveries |
+| Historical unrecovered | Sandbox gap (no cancel RTDN) → reconcile is the fallback; backlog must be reviewed before blanket apply |
+| Ledger / audit | `iap_google_notifications` + purchase clawback fields; no separate stars ledger table |
+| Emergency disable | `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (current) |
+| **Verdict** | Detection + scoped apply OK. **Blockers for permanent ON:** ops alerts, partial-refund policy, debt/shortfall runbook, backlog review, dual-sign enablement. Do **not** flip persistent apply without PM approval. |
 
 ## LIVE — VC 230 push registration + controlled FCM test (2026-11-27 Asia/Jerusalem)
 
