@@ -3,18 +3,41 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-26 01:58 Asia/Jerusalem — Admin Customers Classification multi-select checkbox filter (pending tip deploy)
+**Last updated:** 2026-11-27 09:40 Asia/Jerusalem — Real AI financial reporting **LIVE** (OpenAI Costs + FASHN credits)
 
-## READY — Admin Classification multi-select checkbox filter
+## LIVE — Real AI financial reporting activated (2026-11-27 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Status | **Implemented** — Customers Classification filter is checkbox multi-select (not single radio/select) |
-| Branch | `cursor/admin-class-checkbox-filter-77c6` |
-| API | `GET /admin/customers?classification=QA_AUTOMATION,INTERNAL_TESTER` (comma-separated) |
-| UX | Details panel with checkboxes; summary shows All / one / first+N |
-| Prerequisite | #514/#515 merged on `main`; stale #510 closed |
-| Exact next action | Merge → FE+BE tip deploy |
+| Status | **LIVE** — provider sync **ON**; Admin AI & Costs / Revenue show actual OpenAI + FASHN balance |
+| Activation PR | **#520** · `cursor/web-ai-financial-activate-77c6` (cluster advisory lock + one-shot sync script) |
+| Schema PR | **#512** · Alembic **045** (already applied) |
+| BE tip | **`b3c8a35f`** @ `/opt/fashionrise/src` · `APP_REVISION` stamped · API + `ai-worker@{1..3}` restarted |
+| Project | `proj_KLM1MVrEHCZcpqKwLRZejesm` via `OPENAI_BILLING_PROJECT_ID` |
+| Credentials | `OPENAI_ADMIN_API_KEY` (Costs API only; ≠ generation key) · existing `FASHN_API_KEY` reused |
+| Flags | `OPENAI_COST_SYNC_ENABLED=true` · `OPENAI_COST_SYNC_LOOKBACK_DAYS=180` · `FASHN_CREDIT_SYNC_ENABLED=true` · `FASHN_OPERATOR_CREDIT_USD=0.075` · `FASHN_LOW_CREDITS_THRESHOLD=50` · `AI_COST_SYNC_INTERVAL_SECONDS=3600` |
+| Cluster sync | Postgres advisory lock + DB interval — **one** hourly cycle across all three AI workers (not per-worker) |
+| Initial sync | OpenAI **success** · **899** daily line rows · FASHN **success** · **1** credit snapshot |
+| OpenAI project total (≤180d actual) | **$49.59552137** |
+| OpenAI this month (Nov 2026 UTC) | **$24.78105136** |
+| OpenAI today (UTC) | **$0.00** (Costs API lag / incomplete day — not treated as zero spend forever) |
+| OpenAI history span | 180 distinct days · `2026-05-31` → `2026-11-26` UTC buckets |
+| FASHN remaining credits | **870** on-demand (subscription **0**) · snapshot est. value **$65.25** at $0.075/credit |
+| FASHN ledger consumption | **10** actual credits · estimated **$0.75** (not cash invoice) |
+| Recorded ops | `ai_provider_operations`: OpenAI **15** · FASHN **4** · `fashn_prediction_costs` rows **4** |
+| FASHN cash invoices | **unavailable** (no public invoice API) — use `operator_expense_records` / `fashn_invoice` when verified |
+| Store net proceeds | **unavailable** (Apple/Google not imported) |
+| Safety | No paid AI generations for activation · generation key unchanged · secrets not committed · no provider pricing/auto-top-up changes |
+| Exact next action | Hard-refresh `/admin` → AI & Costs / Revenue. Optional: enter verified FASHN invoice rows when available. |
+
+### Credential setup (AI financial sync) — completed in prod
+
+Do **not** paste secrets into chat, commits, or Admin API responses.
+
+1. **OpenAI Admin key (Costs API only)** — set as `OPENAI_ADMIN_API_KEY`; project id `OPENAI_BILLING_PROJECT_ID`; generation traffic stays on `OPENAI_API_KEY`.
+2. **FASHN credits** — existing `FASHN_API_KEY`; operator rate `FASHN_OPERATOR_CREDIT_USD=0.075`; low-credit alert threshold 50.
+3. **Sync** — enabled with hourly central tick; one-shot: `python scripts/run_ai_cost_sync_once.py` from `/opt/fashionrise/src/backend`.
+4. **Still unavailable without invoices** — FASHN actual cash; Apple/Google net proceeds.
 
 ## LIVE — Stable Admin mobile UX (sticky + Customers toolbar) (2026-11-26 Asia/Jerusalem)
 
@@ -23,53 +46,26 @@
 | Status | **LIVE** — sticky filters fixed + compact Customers search (no giant input) |
 | PR | **#514** · branch `cursor/admin-overview-sticky-fix-77c6` (includes cherry-picks of #509+#511 UX) |
 | Supersedes open | #509 (sticky), #511 (Customers toolbar) — same UX onto `main` tip |
-| Deployed FE SHA | **`cd988519`** · `/var/www/fashionrise/releases/cd988519-admin-stable-ux` |
-| Previous FE | `/var/www/fashionrise/releases/208357df-admin-ai-financial` (**preserved**) |
-| BE | Unchanged tip **`208357df`** · Alembic **045** · sync flags still **false** |
+| Deployed FE SHA | later tips superseded; see share-caption / classification deploys above this section historically |
+| BE | Sync now **ON** — see **LIVE — Real AI financial reporting** |
 | Fixes | Slim sticky title; mobile Audience/Range selects; Customers search height capped at 44px; labeled Classification/Sort |
-| Exact next action | Hard-refresh `/admin` on phone. Sync remains **OFF**. #509 closed earlier; #511 closed as superseded. |
 
-
-## READY — Admin OpenAI + FASHN AI financial intelligence (migration 045)
+## ARCHIVE — Admin OpenAI + FASHN AI financial intelligence (migration 045) — implemented then activated
 
 | Field | Value |
 | --- | --- |
-| Status | **Implemented** — Admin 2.0 Phase D provider cost surfaces; provider sync **fail-closed OFF** |
+| Status | **Activated** — see LIVE section above (was fail-closed OFF until 2026-11-27) |
 | Branch | `cursor/admin-ai-financial-intel-77c6` |
 | Alembic | **045** revises **044** — `provider_pricing_versions`, `fashn_prediction_costs`, `ai_provider_operations`, `openai_cost_daily`, `fashn_credit_snapshots`, `operator_expense_records`, `provider_sync_runs` |
 | OpenAI | `GET /v1/organization/costs` sync client; project vs org-unattributed separation; idempotent daily upsert |
 | FASHN | `GET /v1/credits` balance snapshots; `x-fashn-credits-used` ledger (idempotent per prediction); missing header → **unavailable** (not zero) |
 | Admin UI | Revenue → income vs expenses (operating mode); AI & Costs → actual vs estimated provider cards, by feature/classification, daily OpenAI trend when synced |
-| Sync flags (default) | `OPENAI_COST_SYNC_ENABLED=false` · `FASHN_CREDIT_SYNC_ENABLED=false` · worker tick respects interval + gates |
+| Sync flags (default in code) | still default `false` in repo Settings — **production overrides to true** |
 | Safety | No paid AI generations in tests; admin key never used for image generation; secrets redacted from sync errors; no auto top-up |
-| Credential setup | See **Credential setup (AI financial sync)** below — do **not** enable sync until keys + project id verified |
-| Exact next action | Merge → apply Alembic **045** on prod → deploy FE+BE with sync flags **left false** → separately authorize credential setup + sync enable |
 
 ### Credential setup (AI financial sync)
 
-Do **not** paste secrets into chat, commits, or Admin API responses.
-
-1. **OpenAI Admin key (Costs API only)**  
-   - Create an organization Admin API key in OpenAI with read access to organization usage/costs.  
-   - Set on the API host only: `OPENAI_ADMIN_API_KEY=...`  
-   - Optional but recommended: `OPENAI_BILLING_PROJECT_ID=<FashionRise project id>` so project costs stay separate from org-unattributed charges.  
-   - Keep generation traffic on the existing `OPENAI_API_KEY` — never point image/edit workers at the admin key.
-
-2. **FASHN credits**  
-   - Uses existing `FASHN_API_KEY` for `GET https://api.fashn.ai/v1/credits` only when sync is enabled.  
-   - Optional: `FASHN_LOW_CREDITS_THRESHOLD=50` (dashboard alert).  
-   - Optional actual purchase rate: `FASHN_OPERATOR_CREDIT_USD=0.075` (USD per credit from your invoice; leave `0` until known).
-
-3. **Enable sync only after a dry check**  
-   - Confirm env present on the API/worker host (values never logged).  
-   - Flip independently: `OPENAI_COST_SYNC_ENABLED=true` and/or `FASHN_CREDIT_SYNC_ENABLED=true`.  
-   - Optional: `AI_COST_SYNC_INTERVAL_SECONDS=3600` (default hourly throttle).  
-   - Restart `fashionrise-api` + `fashionrise-ai-worker@{1..3}`.  
-   - Admin → AI & Costs / Revenue financial summary should populate from snapshots.
-
-4. **Still unavailable without invoices**  
-   - FASHN actual cash (no public invoice API) — use `operator_expense_records` / category `fashn_invoice` when an invoice is verified.  
-   - Apple/Google net proceeds remain unavailable.
+**Completed in production 2026-11-27** — see LIVE section above. Repo Settings still default sync flags to `false`; production `.env` overrides. Never paste secrets into chat, commits, or Admin API responses.
 
 ### Admin classification UX (same tip)
 
