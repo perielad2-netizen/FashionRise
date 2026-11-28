@@ -3,7 +3,68 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 22:00 Asia/Jerusalem — Android AAB **VC 308** ready (no Play upload) · iOS TF **1.0.2 / 206** · #549+#551 on `2af5d36c` · finance gates unchanged
+**Last updated:** 2026-11-28 22:20 Asia/Jerusalem — commercial advance · physical accept **ALL PASS** · iOS **1.0.2/206** App Store submit **manual** · Android Alpha **VC 308** live · no new builds/code
+
+## LIVE — Commercial release advance (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Physical acceptance | **COMPLETE** — owner confirmed **Android + iOS + Web + PWA** all passed |
+| Source commit | **`2af5d36c`** (#549 live comments · #551 tap-dest · #550 APNs h2) — **no new builds / no app code changes** |
+| iOS App Store | **1.0.2 / CFBundleVersion 206** authorized for review + **automatic release after approval** |
+| iOS submit status | **Blocked on manual ASC** — agent credentials are **In-App Purchase** API key only (`4N9N354RG3`); App Store Connect **Apps** API returns `401 NOT_AUTHORIZED`. Codemagic IPA already uploaded for TF; `submit_to_app_store` stays false (no rebuild) |
+| Android Alpha | Play **alpha** closed track already shows release **`308 (1.0)`** · **status=completed** · tester Google Group **`testers-community@googlegroups.com`** preserved · **no** new track · **no** tester-list replace · **14-day period not interrupted by agent** |
+| Apple billing | **PRESERVED** as live: `IAP_APPLE_PURCHASING_ENABLED=true` · `IAP_APPLE_CREDIT_ENABLED=true` |
+| Google billing | **PRESERVED**: PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
+
+### What's New (paste into ASC 1.0.2)
+
+```text
+FashionRise 1.0.2
+
+• Live social comments — see new comments and likes update while you browse
+• Smarter notification navigation — taps open the right design and comment destination
+• More reliable iOS push delivery and destination handling
+• Stability and polish across Design Studio, FashionRise feed, and friends
+```
+
+### Exact App Store Connect submit (owner — App Manager / Admin)
+
+1. Open [App Store Connect → FashionRise (Apple ID `6832116469`)](https://appstoreconnect.apple.com/apps/6832116469) → **iOS App** → version **1.0.2** (create the version if missing; do **not** reopen closed **1.0** / **1.0.1**).
+2. **Build** → select **206** (commit `2af5d36c` / Codemagic `6b0b2f08639b7b011204916a`). Wait until the build is **Ready to Submit** (export compliance answered).
+3. Verify metadata before submit:
+   - Privacy Policy URL → `https://fashionrise.app/privacy` (live **200**)
+   - Support / marketing URLs as already configured
+   - Screenshots (iPhone; iPad if the listing requires them)
+   - Age rating / content rights / DSA trader contact complete
+   - Consumables `stars_50` / `stars_150` / `stars_500` attached with this version if still required for first public IAP
+   - App Review contact + demo credentials (or public email register) so reviewers can sign in
+4. **App Review Information → Notes** (suggested):
+
+```text
+FashionRise is an AI fashion design studio. Stars are consumable in-app credits (StoreKit) used for AI features such as Magic.
+
+Review path:
+1) Create / sign in with email
+2) Open FashionRise feed and a design — comments/likes update live
+3) From a notification (if available) or Friends — confirm tap opens the correct design/comment
+4) Stars shop — StoreKit sheet for stars_50 / stars_150 / stars_500; purchase credits Magic usage
+
+No custom checkout. Apple IAP only. Privacy: https://fashionrise.app/privacy
+```
+
+5. **Pricing and Availability** / version release → choose **Automatically release this version** after Apple approval.
+6. **Add for Review** → **Submit to App Review**.
+7. Optional automation later: create an ASC **App Manager/Admin** API key (not the IAP-only `4N9N354RG3`) and store it for agents — do **not** rebuild IPA `206`.
+
+### Remaining launch blockers
+
+| Blocker | Owner action |
+| --- | --- |
+| ASC review submit | Complete steps 1–6 above (agent cannot call Apps API with IAP key) |
+| ASC metadata completeness | Confirm screenshots, age rating, DSA, export compliance, review login in ASC UI |
+| Play production | **Not authorized** — Alpha closed only; public Google purchasing/credit stay **false** |
+| New binaries | **Do not** start Codemagic rebuilds unless Apple/Play rejects the existing binary |
 
 ## LIVE — Android AAB VC 308 (#549 + #551) (2026-11-28 Asia/Jerusalem)
 
@@ -12,9 +73,11 @@
 | Commit | **`2af5d36c`** (`main` — live comments **#549** + tap-dest harden **#551**) |
 | Codemagic | workflow `fashionrise-android-play-internal` · build **[6b0b30f1ac831da2867f025a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b30f1ac831da2867f025a)** · index **67** · **finished** |
 | versionCode | **308** (`PROJECT_BUILD_NUMBER=108` + offset **200**) · versionName **1.0** · package `app.fashionrise.studio` |
-| AAB artifact | [app-release.aab](https://api.codemagic.io/artifacts/3f973d20-37d2-43eb-8635-31f7e658073f/e06e12cb-bb1a-4766-8774-6ed1fbf5ae33/app-release.aab) · ~21 MB · R8 `mapping.txt` also published |
+| AAB artifact (Codemagic) | [app-release.aab](https://api.codemagic.io/artifacts/3f973d20-37d2-43eb-8635-31f7e658073f/e06e12cb-bb1a-4766-8774-6ed1fbf5ae33/app-release.aab) |
+| AAB artifact (VPS) | `/var/www/fashionrise/artifacts/android/FashionRise-2af5d36c-vc308-alpha.aab` |
 | Preserved | Signing · R8 · FCM · Google Play Billing · native permissions · validated VC **303** functionality |
-| Play upload | **Not done** (artifact only — no `google_play` publish block) |
+| Play Alpha closed | **Already live** — track `alpha` release **`308 (1.0)`** `completed` · group `testers-community@googlegroups.com` · Internal also lists 308 · **do not** recreate track / replace testers / cut 14-day testing |
+| Manual re-upload (only if Console UI diverges) | Play Console → **Testing → Closed testing (Alpha)** → create release → upload the AAB above → retain existing testers → review/rollout **without** starting a new track |
 | Finance | Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 | Parallel | Built alongside iOS IPA **206** without interrupting it |
 
@@ -22,12 +85,12 @@
 
 | Field | Value |
 | --- | --- |
-| Checkpoint | **CLOSED** — owner confirmed on TF **1.0.2 / build 205** |
-| Receipt | Native APNs alert received |
+| Checkpoint | **CLOSED** — then expanded: owner confirmed **all** physical acceptance across **Android + iOS + Web + PWA** |
+| Receipt | Native APNs alert received (iOS) · Android FCM + Web/PWA contracts accepted |
 | Tap navigation | Opens **correct design** + **correct comment destination** |
-| Follow-through | **#551 MERGED** · **#549** on main · FE tip **`2af5d36-live-comments-tap-dest`** · consolidated IPA **206** TF · Android AAB **VC 308** |
-| Unchanged | APNs production · HTTP/2 · auth/signing · billing · Google reconcile APPLY=true / 300s · purchasing+credit **false** |
-| Out of scope | Further APNs investigation · Play Console upload · App Store submission |
+| Follow-through | IPA **206** TF · Android Alpha **VC 308** · App Store submit **manual** (see Commercial release advance) |
+| Unchanged | APNs production · HTTP/2 · auth/signing · Apple billing preserved · Google reconcile APPLY=true / 300s · Google purchasing+credit **false** |
+| Out of scope | New Codemagic builds · Play production · replacing Alpha testers |
 
 ## LIVE — Consolidated iOS IPA (#549 + #551) (2026-11-28 Asia/Jerusalem)
 
