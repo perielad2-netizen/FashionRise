@@ -3,7 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 20:00 Asia/Jerusalem — Finance CLOSED · #545 final release corrections (no account Web Push suppression)
+**Last updated:** 2026-11-28 20:05 Asia/Jerusalem — #545 live · migration 048 · Android AAB VC **303** ready (no Play upload)
+
+## LIVE — Push destination contract #545 shipped (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#545 MERGED** `e1256d48` (final: drop account `prefer_native_push`; v1 keeps `friends=1`) |
+| FE | `/var/www/fashionrise/current` → `e1256d48-push-dest-contract` · `/version.json`=`e1256d48` |
+| BE | `/opt/fashionrise/src` @ **`e1256d48`** · API + AI workers restarted |
+| Migration | **048** applied (`destination_contract_version` on `native_push_devices`) · alembic head **048** |
+| Delivery | Web Push + native both fan out · per-browser toggle only · no UA/#544 suppress · no account prefer-native |
+| Capability | `android_enabled=true` · `ios_enabled=true` · VAPID public key served · nginx devices allowlist **PASS** |
+| Finance | **UNCHANGED / CLOSED** · PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
+| Android AAB | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** (index **65**) · **versionCode=303** · versionName **1.0** · offset **200** · **no Play upload** |
+| AAB artifact | [app-release.aab](https://api.codemagic.io/artifacts/da7d712b-4263-4ab5-ab87-ed1261377442/ac64d183-be85-49bc-b36a-ad099d087f0d/app-release.aab) · VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
+| iOS IPA | **Not built** — published iOS remains on v1 destination compatibility · stop for physical-device acceptance |
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
 
