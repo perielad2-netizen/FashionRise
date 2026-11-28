@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from pathlib import Path
 
 from app.services import push_destinations as dest
 from app.services import push_service
@@ -11,6 +13,8 @@ from app.services import push_service
 ITEM = uuid.UUID("11111111-1111-4111-8111-111111111111")
 COMMENT = uuid.UUID("22222222-2222-4222-8222-222222222222")
 FRIENDSHIP = uuid.UUID("33333333-3333-4333-8333-333333333333")
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "push_destination_contract_cases.json"
 
 
 def test_builders_and_sanitize_roundtrip():
@@ -26,6 +30,12 @@ def test_builders_and_sanitize_roundtrip():
     assert dest.sanitize_push_url(req) == req
     acc = dest.build_friend_accepted_url(FRIENDSHIP)
     assert dest.sanitize_push_url(acc) == acc
+
+
+def test_shared_contract_fixtures():
+    cases = json.loads(_FIXTURES.read_text())
+    for row in cases:
+        assert dest.sanitize_push_url(row["input"]) == row["expected"], row["id"]
 
 
 def test_sanitize_rejects_unsafe_and_preserves_legacy_paths():

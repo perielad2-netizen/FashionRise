@@ -27,10 +27,11 @@ Fallback for unsafe input: ``/studio/fashionrise``.
 
 from __future__ import annotations
 
+import posixpath
 import re
 import uuid
 from typing import Literal
-from urllib.parse import parse_qsl, urlencode, urlparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse
 
 _FALLBACK = "/studio/fashionrise"
 _ALLOWED_PATH_PREFIXES = ("/studio", "/privacy")
@@ -47,6 +48,7 @@ _TOKENISH = re.compile(
     re.I,
 )
 _ALLOWED_HOSTS = frozenset({"fashionrise.app", "www.fashionrise.app"})
+_ALLOWED_ABSOLUTE_SCHEMES = frozenset({"http", "https"})
 _FRIENDS_SECTIONS = frozenset({"requests", "accepted"})
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -56,6 +58,27 @@ _UUID_RE = re.compile(
 
 def _is_uuid(value: str) -> bool:
     return bool(_UUID_RE.match((value or "").strip()))
+
+
+def _normalize_path(path: str) -> str | None:
+    """Return a clean absolute path or None when traversal / backslash is present."""
+    raw = (path or "").strip() or "/"
+    if "\\" in raw or raw.startswith("//"):
+        return None
+    lowered = raw.lower()
+    if "%2e" in lowered or "%5c" in lowered:
+        raw = unquote(raw)
+        if "\\" in raw:
+            return None
+    segments = raw.split("/")
+    if any(seg == ".." or seg.lower() == "%2e%2e" for seg in segments):
+        return None
+    normalized = posixpath.normpath(raw)
+    if not normalized.startswith("/") or normalized.startswith("//"):
+        return None
+    if ".." in normalized.split("/"):
+        return None
+    return normalized
 
 
 def _path_allowed(path: str) -> bool:
@@ -160,10 +183,21 @@ def sanitize_push_url(url: str | None, *, fallback: str | None = None) -> str:
     fb = fallback or _FALLBACK
     raw = (url or "").strip() or fb
 
+    if "\\" in raw:
+        return fb
+
     if "://" in raw or raw.startswith("//"):
+        # Protocol-relative and non-http(s) schemes are rejected.
+        if raw.startswith("//"):
+            return fb
         try:
-            parsed = urlparse(raw if "://" in raw else f"https:{raw}")
+            parsed = urlparse(raw)
         except Exception:  # noqa: BLE001
+            return fb
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in _ALLOWED_ABSOLUTE_SCHEMES:
+            return fb
+        if parsed.username is not None or parsed.password is not None:
             return fb
         host = (parsed.hostname or "").lower()
         if host not in _ALLOWED_HOSTS:
@@ -175,12 +209,13 @@ def sanitize_push_url(url: str | None, *, fallback: str | None = None) -> str:
     if _TOKENISH.search(raw):
         return fb
 
-    path = raw.split("?", 1)[0].split("#", 1)[0] or "/"
+    path_raw = raw.split("?", 1)[0].split("#", 1)[0] or "/"
     query_raw = ""
     if "?" in raw:
         query_raw = raw.split("?", 1)[1].split("#", 1)[0]
 
-    if not _path_allowed(path):
+    path = _normalize_path(path_raw)
+    if path is None or not _path_allowed(path):
         return fb
 
     if not query_raw:

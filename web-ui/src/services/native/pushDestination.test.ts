@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import cases from './__fixtures__/push_destination_contract_cases.json'
 import {
   isPushDestinationPath,
   parsePushDestination,
@@ -18,6 +19,12 @@ describe('pushDestination', () => {
     expect(isPushDestinationPath('/verify-email')).toBe(false)
     expect(isPushDestinationPath('/forgot-password')).toBe(false)
     expect(isPushDestinationPath('/auth/google/complete')).toBe(false)
+  })
+
+  it('shared contract fixtures (BE/FE/SW lockstep)', () => {
+    for (const row of cases) {
+      expect(sanitizePushDestination(row.input), row.id).toBe(row.expected)
+    }
   })
 
   it('strips and rejects credential-bearing push URLs', () => {

@@ -30,6 +30,29 @@ function pathAllowed(path) {
   return PUSH_PATH_ALLOWLIST.some((p) => path === p || path.startsWith(`${p}/`))
 }
 
+function normalizePushPath(path) {
+  let raw = String(path || '').trim() || '/'
+  if (raw.includes('\\') || raw.startsWith('//')) return null
+  const lowered = raw.toLowerCase()
+  if (lowered.includes('%2e') || lowered.includes('%5c')) {
+    try {
+      raw = decodeURIComponent(raw)
+    } catch {
+      return null
+    }
+    if (raw.includes('\\')) return null
+  }
+  const segments = raw.split('/')
+  if (segments.some((seg) => seg === '..')) return null
+  const stack = []
+  for (const seg of segments) {
+    if (!seg || seg === '.') continue
+    if (seg === '..') return null
+    stack.push(seg)
+  }
+  return `/${stack.join('/')}`
+}
+
 function sanitizeFashionriseQuery(params) {
   const keys = []
   params.forEach((_, key) => keys.push(key))
@@ -81,9 +104,14 @@ function sanitizeFashionriseQuery(params) {
 
 function sanitizePushUrl(raw) {
   let url = typeof raw === 'string' && raw.trim() ? raw.trim() : FALLBACK
+  if (url.includes('\\')) return FALLBACK
   try {
-    if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
-      const u = new URL(url.startsWith('//') ? `https:${url}` : url)
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) {
+      if (url.startsWith('//')) return FALLBACK
+      const u = new URL(url)
+      const scheme = String(u.protocol || '').replace(/:$/, '').toLowerCase()
+      if (scheme !== 'http' && scheme !== 'https') return FALLBACK
+      if (u.username || u.password) return FALLBACK
       if (!ALLOWED_HOSTS.has(String(u.hostname || '').toLowerCase())) return FALLBACK
       url = `${u.pathname}${u.search}`
     }
@@ -92,8 +120,9 @@ function sanitizePushUrl(raw) {
   }
   if (!url.startsWith('/') || url.startsWith('//')) return FALLBACK
   if (TOKENISH.test(url)) return FALLBACK
-  const path = url.split('?')[0].split('#')[0] || '/'
-  if (!pathAllowed(path)) return FALLBACK
+  const pathRaw = url.split('?')[0].split('#')[0] || '/'
+  const path = normalizePushPath(pathRaw)
+  if (!path || !pathAllowed(path)) return FALLBACK
   const query = (url.split('?')[1] || '').split('#')[0]
   if (!query) return path
   if (path === '/studio/fashionrise') {
@@ -103,6 +132,9 @@ function sanitizePushUrl(raw) {
   }
   return path
 }
+
+// Exported for Node unit tests (Workbox import still uses listeners below).
+self.__frSanitizePushUrl = sanitizePushUrl
 
 self.addEventListener('push', (event) => {
   let data = {

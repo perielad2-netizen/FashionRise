@@ -96,13 +96,9 @@ export function LoginPage() {
   function onGoogle() {
     if (busy) return
     const androidNative = isNativeShell() && nativePlatform() === 'android'
-    // OAuth next must remain a simple in-app path; push query destinations use native pending queue.
-    const nextPath =
-      postLoginPath.startsWith('/studio/fashionrise?') || postLoginPath.startsWith('/studio/runway?')
-        ? '/studio/fashionrise'
-        : postLoginPath.startsWith('/studio')
-          ? postLoginPath.split('?')[0]
-          : '/studio/home'
+    // Preserve the full validated destination (incl. typed FashionRise query) in
+    // signed OAuth state. Backend re-sanitizes `next` before minting state.
+    const nextPath = safePostLoginPath(postLoginPath)
     const startUrl = getGoogleOAuthStartUrl(nextPath, {
       client: androidNative ? 'android' : 'web',
     })

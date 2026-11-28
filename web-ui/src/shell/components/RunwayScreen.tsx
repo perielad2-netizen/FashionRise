@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -238,6 +239,7 @@ export function RunwayScreen({
   const [cardAutoOpenComments, setCardAutoOpenComments] = useState(false)
   const [cardFocusCommentId, setCardFocusCommentId] = useState<string | null>(null)
   const galleryFocusGenRef = useRef(0)
+  const pinnedCardRef = useRef<HTMLLIElement | null>(null)
   const [pushOn, setPushOn] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushLocked, setPushLocked] = useState(false)
@@ -287,10 +289,15 @@ export function RunwayScreen({
     onFriendsConsumed?.()
   }, [openFriends, friendsSection, focusFriendshipId, onFriendsConsumed])
 
-  // Push / deep-link: pin exact GalleryItem at top of Discover without paging the feed.
+  // Push / deep-link: pin exact GalleryItem and scroll it into view.
   useEffect(() => {
     const itemId = (focusGalleryItemId || '').trim()
-    if (!itemId) return
+    if (!itemId) {
+      // Leaving a notification target clears pin when URL focus is gone after consume
+      // only if we are no longer on discover with an active pin from a prior gen — keep pin
+      // until a new focus or explicit removal.
+      return
+    }
     const gen = ++galleryFocusGenRef.current
     setViewingDesigner(null)
     setBrowseSheet(null)
@@ -299,6 +306,7 @@ export function RunwayScreen({
     setFocusNotice(null)
     setCardAutoOpenComments(false)
     setCardFocusCommentId(null)
+    setPinnedFocusItem(null)
     let cancelled = false
     void getGalleryItem(itemId)
       .then((item) => {
@@ -311,6 +319,8 @@ export function RunwayScreen({
       .catch(() => {
         if (cancelled || gen !== galleryFocusGenRef.current) return
         setPinnedFocusItem(null)
+        setCardAutoOpenComments(false)
+        setCardFocusCommentId(null)
         setFocusNotice('That look is no longer available.')
         onGalleryFocusConsumed?.()
       })
@@ -323,6 +333,15 @@ export function RunwayScreen({
     focusCommentId,
     onGalleryFocusConsumed,
   ])
+
+  useEffect(() => {
+    if (!pinnedFocusItem) return
+    const el = pinnedCardRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
+  }, [pinnedFocusItem?.id, cardFocusCommentId, cardAutoOpenComments])
 
   const immersiveFeed = !viewingDesigner && tab !== 'friends'
   useEffect(() => {
@@ -799,6 +818,9 @@ export function RunwayScreen({
   )
 
   const patchItem = useCallback((next: GalleryItem) => {
+    setPinnedFocusItem((prev) =>
+      prev && prev.id === next.id ? { ...prev, ...next } : prev,
+    )
     setState((prev) => {
       if (prev.status !== 'ready') return prev
       const rewrite = (rows: GalleryItem[]) =>
@@ -815,6 +837,15 @@ export function RunwayScreen({
 
   /** Drop deleted/orphan publishes that fail image load (black empty reel). */
   const removeUnavailableItem = useCallback((galleryItemId: string) => {
+    setPinnedFocusItem((prev) => {
+      if (prev && prev.id === galleryItemId) {
+        setFocusNotice('That look is no longer available.')
+        setCardAutoOpenComments(false)
+        setCardFocusCommentId(null)
+        return null
+      }
+      return prev
+    })
     setState((prev) => {
       if (prev.status !== 'ready') return prev
       const drop = (rows: GalleryItem[]) => rows.filter((row) => row.id !== galleryItemId)
@@ -1095,7 +1126,7 @@ export function RunwayScreen({
               </button>
             }
           />
-        ) : displayFeedItems.length === 0 ? (
+        ) : displayFeedItems.length === 0 && !focusNotice ? (
           <EmptyState
             title={
               tab === 'top'
@@ -1139,6 +1170,7 @@ export function RunwayScreen({
                 {focusNotice}
               </p>
             ) : null}
+            {displayFeedItems.length === 0 ? null : (
             <ul className={`${styles.immersiveFeed} ${styles.feedSnap}`} aria-label={feedLabel}>
               {displayFeedItems.map((item, index) => (
                 <RunwayCard
@@ -1164,6 +1196,11 @@ export function RunwayScreen({
                     setCardAutoOpenComments(false)
                     setCardFocusCommentId(null)
                   }}
+                  rootRef={
+                    pinnedFocusItem && item.id === pinnedFocusItem.id
+                      ? pinnedCardRef
+                      : undefined
+                  }
                   onVisibleImpression={
                     tab === 'discover' && viewerId && item.user_id !== viewerId
                       ? reportDiscoverImpression
@@ -1186,6 +1223,7 @@ export function RunwayScreen({
                 </li>
               ) : null}
             </ul>
+            )}
           </>
         )}
       </div>
@@ -1916,6 +1954,7 @@ function RunwayCard({
   autoOpenComments = false,
   focusCommentId = null,
   onFocusCommentsConsumed,
+  rootRef,
 }: {
   item: GalleryItem
   rank?: number
@@ -1936,12 +1975,23 @@ function RunwayCard({
   autoOpenComments?: boolean
   focusCommentId?: string | null
   onFocusCommentsConsumed?: () => void
+  /** Optional external ref (e.g. scroll pinned notification target into view). */
+  rootRef?: RefObject<HTMLLIElement | null>
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
   const mediaGone =
     Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
   const cardRef = useRef<HTMLLIElement | null>(null)
+  const setCardNode = useCallback(
+    (node: HTMLLIElement | null) => {
+      cardRef.current = node
+      if (rootRef) {
+        ;(rootRef as { current: HTMLLIElement | null }).current = node
+      }
+    },
+    [rootRef],
+  )
   const impressionSentRef = useRef(false)
   /** Immersive double-tap like — Instagram-style (like only + heart burst). */
   const tapStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1992,7 +2042,6 @@ function RunwayCard({
         if (cancelled) return
         setComments(rows)
         setCommentsCount(rows.length)
-        onItemChange({ ...item, comments_count: rows.length })
         const want = (focusCommentId || '').trim()
         if (want) {
           const match = rows.find((row) => row.id === want)
@@ -2003,12 +2052,20 @@ function RunwayCard({
             setCommentFocusNotice('That comment is no longer available.')
           }
         }
-        onFocusCommentsConsumed?.()
+        // Defer consuming focus flags so autoOpenComments stays true through this paint
+        // (parent clearing it must not cancel before comments commit).
+        queueMicrotask(() => {
+          if (cancelled) return
+          onItemChange({ ...item, comments_count: rows.length })
+          onFocusCommentsConsumed?.()
+        })
       })
       .catch((err) => {
         if (cancelled) return
         setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
-        onFocusCommentsConsumed?.()
+        queueMicrotask(() => {
+          if (!cancelled) onFocusCommentsConsumed?.()
+        })
       })
     return () => {
       cancelled = true
@@ -2028,12 +2085,17 @@ function RunwayCard({
     onMediaUnavailable(item.id)
   }, [item.id, mediaGone, onMediaUnavailable])
 
+  const prevItemIdRef = useRef(item.id)
   useEffect(() => {
+    if (prevItemIdRef.current === item.id) return
+    prevItemIdRef.current = item.id
     setComments(null)
     setCommentsOpen(false)
     setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
+    setHighlightedCommentId(null)
+    setCommentFocusNotice(null)
     // Only reset when the card switches looks — bumping comments_count after load must not clear rows.
-  }, [item.id])
+  }, [item.id, item.comments_count])
 
   useEffect(() => {
     if (comments != null) return
@@ -2623,7 +2685,7 @@ function RunwayCard({
 
   return (
     <li
-      ref={cardRef}
+      ref={setCardNode}
       className={cardClass}
       data-gallery-item-id={item.id}
       data-testid={onVisibleImpression ? `runway-discover-card-${item.id}` : undefined}

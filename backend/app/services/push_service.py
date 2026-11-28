@@ -121,12 +121,16 @@ def upsert_native_device(db: Session, user: User, data: NativePushDeviceCreate) 
     token = data.device_token.strip()
     version = (data.app_version or "").strip()[:64] or None
 
+    dest_ver = int(getattr(data, "destination_contract_version", 1) or 1)
+    dest_ver = max(1, min(10, dest_ver))
+
     def _bind(existing: NativePushDevice) -> NativePushDevice:
         # Reassign token to current account (account switch on same device).
         existing.user_id = user.id
         existing.platform = data.platform
         if version:
             existing.app_version = version
+        existing.destination_contract_version = dest_ver
         db.add(existing)
         db.commit()
         db.refresh(existing)
@@ -141,6 +145,7 @@ def upsert_native_device(db: Session, user: User, data: NativePushDeviceCreate) 
         platform=data.platform,
         device_token=token,
         app_version=version,
+        destination_contract_version=dest_ver,
     )
     db.add(row)
     try:
@@ -197,11 +202,16 @@ def notify_user(
     Duplicate prevention: same ``tag`` collapses OS notifications per device channel;
     use entity-scoped tags so unrelated designs/comments do not replace each other.
 
-    Cross-channel note: Web Push and native FCM/APNs both deliver when registered.
-    UA/platform matching is **not** reliable physical-device association, so this
-    fan-out does not suppress Web Push merely because a native token exists.
+    Cross-channel note: Web Push and native FCM/APNs both deliver when registered
+    unless the user opts into ``prefer_native_push`` (then Web Push is skipped
+    while at least one native device remains — subscriptions are not deleted).
+    UA/platform matching is **not** reliable physical-device association.
     """
     safe_url = sanitize_push_url(url)
+    # Legacy-safe base for installed clients that strip typed queries.
+    legacy_url = safe_url.split("?", 1)[0] or "/studio/fashionrise"
+    if not legacy_url.startswith("/studio"):
+        legacy_url = "/studio/fashionrise"
     payload = {
         "title": title[:120],
         "body": body[:240],
@@ -210,7 +220,11 @@ def notify_user(
     }
     sent = 0
 
-    if push_enabled():
+    devices = list_user_native_devices(db, user_id)
+    user = db.get(User, user_id)
+    prefer_native = bool(user and getattr(user, "prefer_native_push", False) and devices)
+
+    if push_enabled() and not prefer_native:
         rows = list_user_subscriptions(db, user_id)
         stale: list[PushSubscription] = []
         for row in rows:
@@ -227,14 +241,19 @@ def notify_user(
                 db.rollback()
                 logger.exception("push_subscription_cleanup_failed id=%s", row.id)
 
-    devices = list_user_native_devices(db, user_id)
     stale_native: list[NativePushDevice] = []
     for device in devices:
         if device.platform == "android" and not native_android_enabled():
             continue
         if device.platform == "ios" and not native_ios_enabled():
             continue
-        ok, gone = _send_native(device, payload)
+        dest_ver = int(getattr(device, "destination_contract_version", 1) or 1)
+        device_payload = dict(payload)
+        if dest_ver < 2:
+            # Backward compatible: open FashionRise Social without typed queries
+            # so old sanitizers cannot land on rankings or strip into a dead path.
+            device_payload["url"] = legacy_url if legacy_url == "/studio/fashionrise" else "/studio/fashionrise"
+        ok, gone = _send_native(device, device_payload)
         if ok:
             sent += 1
         elif gone:

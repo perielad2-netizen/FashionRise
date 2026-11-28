@@ -13,6 +13,8 @@ from app.schemas.push import (
     NativePushDeviceCreate,
     NativePushDeviceDelete,
     NativePushDeviceRead,
+    PushDeliveryPreference,
+    PushDeliveryPreferenceUpdate,
     PushSubscriptionCreate,
     PushSubscriptionDelete,
     PushSubscriptionRead,
@@ -106,3 +108,28 @@ def list_my_native_devices(
 ) -> list[NativePushDeviceRead]:
     rows = ps.list_user_native_devices(db, user.id)
     return [NativePushDeviceRead.model_validate(r) for r in rows]
+
+
+@router.get("/delivery-preference", response_model=PushDeliveryPreference)
+def get_delivery_preference(user: CurrentUser) -> PushDeliveryPreference:
+    return PushDeliveryPreference(
+        prefer_native_push=bool(getattr(user, "prefer_native_push", False)),
+    )
+
+
+@router.put("/delivery-preference", response_model=PushDeliveryPreference)
+def put_delivery_preference(
+    body: PushDeliveryPreferenceUpdate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PushDeliveryPreference:
+    """Prefer FashionRise app notifications over browser Web Push when both exist.
+
+    Does not delete Web Push subscriptions — only skips fan-out while native
+    devices remain registered.
+    """
+    user.prefer_native_push = bool(body.prefer_native_push)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return PushDeliveryPreference(prefer_native_push=bool(user.prefer_native_push))

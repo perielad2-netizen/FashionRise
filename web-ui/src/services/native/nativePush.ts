@@ -196,10 +196,14 @@ export async function registerNativePushDevice(input: {
   platform: 'android' | 'ios'
   device_token: string
   app_version?: string
+  destination_contract_version?: number
 }): Promise<NativePushDeviceRow> {
   return apiRequest<NativePushDeviceRow>('/push/native/devices', {
     method: 'POST',
-    body: input,
+    body: {
+      ...input,
+      destination_contract_version: input.destination_contract_version ?? 2,
+    },
   })
 }
 
@@ -262,6 +266,7 @@ export async function installNativePushInteractionListeners(): Promise<void> {
       platform,
       device_token: value,
       app_version: undefined,
+      destination_contract_version: 2,
     }).catch(() => {
       /* server may be fail-closed — resume sync retries */
     })

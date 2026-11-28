@@ -73,8 +73,26 @@ def _normalize_client(client: str | None) -> Literal["web", "android"]:
     return "web"
 
 
+def _safe_oauth_next(next_path: str) -> str:
+    """Preserve validated Studio deep links (incl. push query) in signed state."""
+    from app.services.push_destinations import sanitize_push_url
+
+    raw = (next_path or "/studio").strip()
+    if not raw.startswith("/") or raw.startswith("//") or "\\" in raw:
+        return "/studio"
+    if raw.startswith("/studio/fashionrise") or raw.startswith("/studio/runway") or raw.startswith(
+        "/privacy"
+    ):
+        return sanitize_push_url(raw)
+    if raw.startswith("/studio/") and "?" not in raw and "#" not in raw:
+        return raw
+    if raw in ("/studio", "/studio/home"):
+        return raw if raw == "/studio/home" else "/studio"
+    return "/studio"
+
+
 def mint_oauth_state(*, next_path: str = "/studio", client: str = "web") -> str:
-    safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/studio"
+    safe_next = _safe_oauth_next(next_path)
     payload = {
         "n": secrets.token_urlsafe(16),
         "next": safe_next,
@@ -303,7 +321,7 @@ def complete_login_redirect(
 ) -> str:
     settings = get_settings()
     app = (settings.public_app_url or "https://fashionrise.app").rstrip("/")
-    safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/studio"
+    safe_next = _safe_oauth_next(next_path)
     if _normalize_client(client) == "android":
         # Custom scheme opens the Capacitor Android app. Code is one-time; no JWTs in the URL.
         code = mint_native_handoff(access=access, refresh=refresh, next_path=safe_next)

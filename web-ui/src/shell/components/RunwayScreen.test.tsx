@@ -1287,4 +1287,126 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(unpublishLookFromRunway).toHaveBeenCalledWith('look-mine'))
     await waitFor(() => expect(screen.queryByTestId('runway-unpublish-mine-1')).toBeNull())
   })
+
+  it('pins a gallery item outside the initially loaded feed and opens comments', async () => {
+    const focusId = '11111111-1111-4111-8111-111111111111'
+    const commentId = '22222222-2222-4222-8222-222222222222'
+    const onConsumed = vi.fn()
+    getGalleryItem.mockResolvedValue({
+      ...circleItem,
+      id: focusId,
+      title: 'Pinned outside feed',
+      username: 'focus_designer',
+      comments_count: 1,
+    })
+    listGalleryComments.mockResolvedValue([
+      {
+        id: commentId,
+        gallery_item_id: focusId,
+        body: 'Exact comment body',
+        user_id: 'c1',
+        username: 'commenter',
+        moderation_status: 'ok',
+        created_at: '2026-11-28T00:00:00Z',
+        likes_count: 0,
+        liked_by_me: false,
+      },
+    ])
+    Element.prototype.scrollIntoView = vi.fn()
+
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        focusGalleryItemId={focusId}
+        focusOpenComments
+        focusCommentId={commentId}
+        onGalleryFocusConsumed={onConsumed}
+      />,
+    )
+
+    await waitFor(() => expect(getGalleryItem).toHaveBeenCalledWith(focusId))
+    expect(await screen.findByText(/Pinned outside feed/i)).toBeInTheDocument()
+    await waitFor(() => expect(onConsumed).toHaveBeenCalled())
+    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith(focusId))
+    expect(await screen.findByText(/Exact comment body/i)).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /Pinned outside feed/i })).toBeInTheDocument()
+  })
+
+  it('shows unavailable notice when focused look is missing even if feed is empty', async () => {
+    listGallery.mockResolvedValue([])
+    getGalleryItem.mockRejectedValue(new Error('gone'))
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        focusGalleryItemId="aaaaaaaa-1111-4111-8111-111111111111"
+        onGalleryFocusConsumed={vi.fn()}
+      />,
+    )
+    expect(await screen.findByTestId('runway-focus-notice')).toHaveTextContent(
+      /no longer available/i,
+    )
+  })
+
+  it('opens friends requests section from focus props', async () => {
+    listFriendRequests.mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        status: 'pending',
+        requester_id: 'u2',
+        addressee_id: 'viewer-1',
+        created_at: '2026-11-28T00:00:00Z',
+        accepted_at: null,
+        friend: {
+          user_id: 'u2',
+          username: 'requester',
+          display_name: 'Requester',
+          avatar_url: null,
+        },
+      },
+    ])
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        openFriends
+        friendsSection="requests"
+        focusFriendshipId="33333333-3333-4333-8333-333333333333"
+        onFriendsConsumed={vi.fn()}
+      />,
+    )
+    expect(await screen.findByTestId('friend-requests-list')).toBeInTheDocument()
+    expect(screen.getByTestId('request-open-u2')).toBeInTheDocument()
+  })
+
+  it('rapid consecutive focus targets keep the latest pinned item', async () => {
+    const first = '11111111-1111-4111-8111-111111111111'
+    const second = '44444444-4444-4444-8444-444444444444'
+    getGalleryItem.mockImplementation(async (id: string) => ({
+      ...circleItem,
+      id,
+      title: id === first ? 'First pin' : 'Second pin',
+      username: 'focus_designer',
+    }))
+    const { rerender } = render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        focusGalleryItemId={first}
+        onGalleryFocusConsumed={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(getGalleryItem).toHaveBeenCalledWith(first))
+    rerender(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        focusGalleryItemId={second}
+        onGalleryFocusConsumed={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText(/Second pin/i)).toBeInTheDocument()
+    expect(screen.queryByText(/First pin/i)).not.toBeInTheDocument()
+  })
 })

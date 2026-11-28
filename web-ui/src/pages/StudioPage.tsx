@@ -15,6 +15,7 @@ import { TechpackScreen } from '@/shell/components/TechpackScreen'
 import { OpenDesignDialog } from '@/shell/components/OpenDesignDialog'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
 import { useStudioEditor } from '@/hooks/useStudioEditor'
+import { parsePushDestination } from '@/services/native/pushDestination'
 import '@/shell/shellTokens.css'
 import styles from './StudioPage.module.css'
 
@@ -101,18 +102,17 @@ export function StudioPage() {
   )
   const focusLookId = searchParams.get('look')
   const openOwnProfile = searchParams.get('profile') === 'me'
-  const openFriends = searchParams.get('friends') === '1'
-  /** Push / deep-link: public GalleryItem id (not My Looks `look=` MagicLook id). */
-  const focusGalleryItemId = searchParams.get('item')
-  const focusOpenComments =
-    searchParams.get('comments') === '1' || Boolean(searchParams.get('comment'))
-  const focusCommentId = searchParams.get('comment')
-  const friendsSectionRaw = searchParams.get('section')
-  const friendsSection =
-    friendsSectionRaw === 'requests' || friendsSectionRaw === 'accepted'
-      ? friendsSectionRaw
-      : null
-  const focusFriendshipId = searchParams.get('friendship')
+  /** Push / deep-link focus — only trust the validated destination parser. */
+  const pushFocus = useMemo(() => {
+    if (view !== 'fashionrise') return null
+    return parsePushDestination(`${path}${location.search || ''}`)
+  }, [view, path, location.search])
+  const openFriends = pushFocus?.kind === 'friends'
+  const focusGalleryItemId = pushFocus?.kind === 'item' ? pushFocus.itemId : null
+  const focusOpenComments = pushFocus?.kind === 'item' ? pushFocus.openComments : false
+  const focusCommentId = pushFocus?.kind === 'item' ? pushFocus.commentId : null
+  const friendsSection = pushFocus?.kind === 'friends' ? pushFocus.section : null
+  const focusFriendshipId = pushFocus?.kind === 'friends' ? pushFocus.friendshipId : null
   /** false while designer profile / Friends manage (or left FashionRise feed) — keeps GlobalHeader visible. */
   const [fashionRiseImmersiveFeed, setFashionRiseImmersiveFeed] = useState(true)
   const [fashionRiseFeedFocusToken, setFashionRiseFeedFocusToken] = useState(0)
