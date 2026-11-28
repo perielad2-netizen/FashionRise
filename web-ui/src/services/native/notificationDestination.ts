@@ -3,6 +3,10 @@
  *
  * Android FCM (flat extras) and iOS APNs (userInfo including nested `aps`) do
  * not expose identical shapes — never assume `notification.data.url` alone.
+ *
+ * Only **explicit destination fields** are read (`url` / `path` / `link` at the
+ * data root, under nested `data`, or `notification.link`). Arbitrary userInfo
+ * string keys are never scanned.
  */
 
 type NotificationLike = {
@@ -16,15 +20,8 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
-function pushCandidate(value: unknown): string | null {
-  const s = asNonEmptyString(value)
-  if (!s) return null
-  // Prefer studio/privacy destinations; still return other strings for sanitizer.
-  return s
-}
-
 /**
- * Best-effort destination from a Cap `pushNotificationActionPerformed` notification.
+ * Destination from a Cap `pushNotificationActionPerformed` notification.
  * Returns the raw candidate string (may be absolute or relative); caller sanitizes.
  */
 export function extractNotificationDestinationUrl(
@@ -42,15 +39,8 @@ export function extractNotificationDestinationUrl(
   }
 
   for (const c of candidates) {
-    const hit = pushCandidate(c)
+    const hit = asNonEmptyString(c)
     if (hit) return hit
-  }
-
-  // iOS userInfo may leave custom keys beside `aps`; scan string values once.
-  for (const [key, value] of Object.entries(data)) {
-    if (key === 'aps' || key === 'data') continue
-    const hit = pushCandidate(value)
-    if (hit && (hit.startsWith('/') || hit.startsWith('http'))) return hit
   }
 
   return null

@@ -76,4 +76,19 @@ describe('extractNotificationDestinationUrl', () => {
       }),
     ).toBe(COMMENT_URL)
   })
+
+  it('ignores non-destination userInfo string keys (no arbitrary scan)', () => {
+    expect(
+      extractNotificationDestinationUrl({
+        data: {
+          aps: { alert: { title: 't', body: 'b' } },
+          tag: 'fr-comment-x',
+          google_c_sender_id: '123',
+          // Lookalike path that is NOT an explicit destination field
+          deep_link: COMMENT_URL,
+          href: LIKE_URL,
+        },
+      }),
+    ).toBeNull()
+  })
 })

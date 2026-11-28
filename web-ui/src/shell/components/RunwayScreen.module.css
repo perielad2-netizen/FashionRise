@@ -1871,9 +1871,35 @@
 }
 
 .chatBody {
+  position: relative;
   min-height: 0;
   overflow: auto;
   padding: 12px 14px;
+}
+
+.newCommentsHint {
+  position: sticky;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  margin: 8px auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(18, 22, 34, 0.92);
+  color: #f4f1ea;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.newCommentsHint:hover {
+  background: rgba(28, 34, 50, 0.96);
 }
 
 .chatForm {
