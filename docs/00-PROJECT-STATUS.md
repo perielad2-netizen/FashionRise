@@ -3,17 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 20:30 Asia/Jerusalem — Android push **ACCEPTED** VC **303** · iOS train bump **1.0.2** (90186 closed 1.0.1)
+**Last updated:** 2026-11-28 20:45 Asia/Jerusalem — iOS **1.0.2 (205)** ASC uploaded · Android push ACCEPTED VC **303** · finance unchanged
 
-## LIVE — iOS TestFlight IPA — marketing train 1.0.2 (2026-11-28 Asia/Jerusalem)
+## LIVE — iOS TestFlight IPA READY (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Blocker | ASC **90186** — train **1.0.1** closed for new submissions (build `6b0b1ae8…` IPA **built** as 1.0.1 / CFBundleVersion **204**, ASC publish failed) |
-| Fix | Bump `IOS_MARKETING_VERSION` / `EXPECTED_IOS_MARKETING_VERSION` / Xcode `MARKETING_VERSION` → **1.0.2** |
-| Preserved | Xcode **26.5** (ITMS-90725 is Apr 2027 warning only) · APNs production entitlements · App Store signing · auth · Apple IAP gates · `submit_to_app_store=false` · `submit_to_testflight=false` |
-| Prior IPA artifact | Still downloadable from failed publish build (not on ASC) |
-| Rebuild | One new Codemagic `fashionrise-ios-app-store` after merge — ASC upload for TestFlight processing only |
+| Status | **ASC upload OK** — Codemagic build **finished** (prior 1.0.1 attempt failed **90186**; train bumped to **1.0.2**) |
+| Build | **[6b0b1d8d82c7069b0c9d6895](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b1d8d82c7069b0c9d6895)** (index **38**) · `main` @ `3527d410` |
+| Version | **CFBundleShortVersionString=1.0.2** · **CFBundleVersion=205** |
+| Workflow | `fashionrise-ios-app-store` · Xcode **26.5** · App Store signing · APNs production entitlements |
+| Publish flags | `submit_to_testflight=false` · `submit_to_app_store=false` (ASC processing / TestFlight readiness only — **no App Store submit**) |
+| IPA download | [public link (expires 2026-12-12 20:42 Asia/Jerusalem)](https://api.codemagic.io/artifacts/.eJwVwduSgiAAANB_6Z2ZXUnRR7yVbbECidlLo2ZGFl7QNvv6Zs9Z1PifO3izF1x5H3Jq5QGDazOLtSG3Z4Wv_qs8CQm2vyYDVOVKA22HD1b3hr7c_45PBWD3bYjDG3bwzWscuu28ASOOq2SMfaukyRUfBs-TS3vGyLpxhpyi2jdRTekEhsp6ro6tTSPJUtmc7GPCqJ27l3xAjex9k5H5jte7ewqe6AfeGArIfthwjlLhOtwsBM2yErUlWRm-ek1APCrHIV-uKKZ5t_EIAPEyHzO6FTTSys2L1mxHArvo_CqCdq2gNpKoKfUULT6dNliM.ZSU5c1W2V3hH9ecnL0GSS4ZIjBw) |
+| VPS copy | `/var/www/fashionrise/artifacts/ios/FashionRise-3527d410-ios-1.0.2-b205.ipa` |
+| Next | TestFlight physical-device notification acceptance · **do not** App Store submit yet |
+| Failed prior | `6b0b1ae8…` 1.0.1/(204) — publish-only failure; superseded |
 
 ## LIVE — Android notification acceptance COMPLETE (2026-11-28 Asia/Jerusalem)
 
@@ -50,7 +54,7 @@
 | Finance | **UNCHANGED / CLOSED** · Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 | Android AAB | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** · **versionCode=303** · **PM acceptance PASS** · **no Play upload** · **no more Android builds** |
 | AAB artifact | VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
-| iOS IPA | Build **`6b0b1ae8…`** failed ASC publish (**90186** / closed **1.0.1**) · IPA existed as 1.0.1/(204) · **rebuilding on train 1.0.2** — no App Store submit |
+| iOS IPA | **1.0.2 (205)** ASC uploaded · Codemagic `6b0b1d8d…` · TestFlight acceptance next · **no App Store submit** |
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
 
