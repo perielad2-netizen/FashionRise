@@ -40,7 +40,6 @@ import {
   likeGalleryItem,
   listGallery,
   likeGalleryComment,
-  listGalleryComments,
   postGalleryComment,
   rateGalleryItem,
   recordGalleryImpressions,
@@ -49,6 +48,7 @@ import {
   type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
+import { useLiveGalleryComments } from '@/lib/useLiveGalleryComments'
 import {
   acceptFriendRequest,
   listFriendRequests,
@@ -2004,16 +2004,49 @@ function RunwayCard({
   const [reportOpen, setReportOpen] = useState(false)
   const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
-  const [comments, setComments] = useState<GalleryComment[] | null>(null)
-  const [commentsError, setCommentsError] = useState<string | null>(null)
-  const [commentsCount, setCommentsCount] = useState(() =>
-    Math.max(0, Number(item.comments_count ?? 0)),
-  )
   const [draft, setDraft] = useState('')
   const [followingDesigner, setFollowingDesigner] = useState(false)
   const [followKnown, setFollowKnown] = useState(false)
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
   const [commentFocusNotice, setCommentFocusNotice] = useState<string | null>(null)
+  const itemRef = useRef(item)
+  itemRef.current = item
+  const onItemChangeRef = useRef(onItemChange)
+  onItemChangeRef.current = onItemChange
+  const onFocusCommentsConsumedRef = useRef(onFocusCommentsConsumed)
+  onFocusCommentsConsumedRef.current = onFocusCommentsConsumed
+
+  const {
+    comments,
+    commentsError,
+    commentsCount,
+    newCommentsBelow,
+    listRef: commentsListRef,
+    upsertLocalComment,
+    patchCommentLike,
+    scrollToLatest,
+  } = useLiveGalleryComments({
+    galleryItemId: item.id,
+    enabled: commentsOpen,
+    focusCommentId: commentsOpen ? focusCommentId : null,
+    onCountChange: (count) => {
+      const current = itemRef.current
+      onItemChangeRef.current({ ...current, comments_count: count })
+    },
+    onFocusCommentResolved: ({ found, commentId }) => {
+      if (commentId) {
+        if (found) {
+          setHighlightedCommentId(commentId)
+        } else {
+          setHighlightedCommentId(null)
+          setCommentFocusNotice('That comment is no longer available.')
+        }
+      }
+      queueMicrotask(() => onFocusCommentsConsumedRef.current?.())
+    },
+  })
+  const displayCommentsCount =
+    comments != null ? commentsCount : Math.max(0, Number(item.comments_count ?? 0))
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
   const immersive = layout === 'immersive'
@@ -2036,41 +2069,10 @@ function RunwayCard({
     if (!autoOpenComments) return
     setCommentsOpen(true)
     setCommentFocusNotice(null)
-    let cancelled = false
-    void listGalleryComments(item.id)
-      .then((rows) => {
-        if (cancelled) return
-        setComments(rows)
-        setCommentsCount(rows.length)
-        const want = (focusCommentId || '').trim()
-        if (want) {
-          const match = rows.find((row) => row.id === want)
-          if (match) {
-            setHighlightedCommentId(match.id)
-          } else {
-            setHighlightedCommentId(null)
-            setCommentFocusNotice('That comment is no longer available.')
-          }
-        }
-        // Defer consuming focus flags so autoOpenComments stays true through this paint
-        // (parent clearing it must not cancel before comments commit).
-        queueMicrotask(() => {
-          if (cancelled) return
-          onItemChange({ ...item, comments_count: rows.length })
-          onFocusCommentsConsumed?.()
-        })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
-        queueMicrotask(() => {
-          if (!cancelled) onFocusCommentsConsumed?.()
-        })
-      })
-    return () => {
-      cancelled = true
+    // Focus highlight resolves inside useLiveGalleryComments; consume empty focus here.
+    if (!(focusCommentId || '').trim()) {
+      queueMicrotask(() => onFocusCommentsConsumedRef.current?.())
     }
-    // Intentionally keyed on autoOpenComments + ids — avoid re-running on item object churn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenComments, focusCommentId, item.id])
 
@@ -2089,18 +2091,12 @@ function RunwayCard({
   useEffect(() => {
     if (prevItemIdRef.current === item.id) return
     prevItemIdRef.current = item.id
-    setComments(null)
     setCommentsOpen(false)
-    setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
     setHighlightedCommentId(null)
     setCommentFocusNotice(null)
+    setDraft('')
     // Only reset when the card switches looks — bumping comments_count after load must not clear rows.
-  }, [item.id, item.comments_count])
-
-  useEffect(() => {
-    if (comments != null) return
-    setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
-  }, [comments, item.comments_count])
+  }, [item.id])
 
   useEffect(() => {
     if (!immersive || isOwn || !viewerId) {
@@ -2207,22 +2203,10 @@ function RunwayCard({
     return fresh
   }, [item.id, onItemChange])
 
-  const loadComments = useCallback(async () => {
-    setCommentsError(null)
-    try {
-      const rows = await listGalleryComments(item.id)
-      setComments(rows)
-      setCommentsCount(rows.length)
-      onItemChange({ ...item, comments_count: rows.length })
-    } catch (err) {
-      setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
-    }
-  }, [item, onItemChange])
-
   const openComments = useCallback(() => {
+    setCommentFocusNotice(null)
     setCommentsOpen(true)
-    void loadComments()
-  }, [loadComments])
+  }, [])
 
   const closeComments = useCallback(() => {
     setCommentsOpen(false)
@@ -2391,19 +2375,11 @@ function RunwayCard({
       try {
         const row = await postGalleryComment(item.id, body)
         setDraft('')
-        setComments((prev) => {
-          const next = [
-            ...(prev ?? []),
-            {
-              ...row,
-              likes_count: row.likes_count ?? 0,
-              liked_by_me: false,
-              username: row.username || viewerUsername,
-            },
-          ]
-          setCommentsCount(next.length)
-          onItemChange({ ...item, comments_count: next.length })
-          return next
+        upsertLocalComment({
+          ...row,
+          likes_count: row.likes_count ?? 0,
+          liked_by_me: false,
+          username: row.username || viewerUsername,
         })
         setCommentsOpen(true)
       } catch (err) {
@@ -2412,7 +2388,7 @@ function RunwayCard({
         setBusy(null)
       }
     },
-    [busy, draft, item, onItemChange, viewerUsername],
+    [busy, draft, item.id, upsertLocalComment, viewerUsername],
   )
 
   const onToggleCommentLike = useCallback(
@@ -2420,32 +2396,29 @@ function RunwayCard({
       if (!viewerId || comment.user_id === viewerId || busy) return
       const liked = Boolean(comment.liked_by_me)
       const prevCount = comment.likes_count ?? 0
-      setComments((prev) =>
-        (prev ?? []).map((row) =>
-          row.id === comment.id
-            ? {
-                ...row,
-                liked_by_me: !liked,
-                likes_count: Math.max(0, prevCount + (liked ? -1 : 1)),
-              }
-            : row,
-        ),
-      )
-      try {
-        if (liked) await unlikeGalleryComment(comment.id)
-        else await likeGalleryComment(comment.id)
-      } catch (err) {
-        setComments((prev) =>
-          (prev ?? []).map((row) =>
-            row.id === comment.id
-              ? { ...row, liked_by_me: liked, likes_count: prevCount }
-              : row,
-          ),
-        )
-        setActionError(err instanceof ApiError ? err.message : 'Could not update comment like.')
+      const next = {
+        liked_by_me: !liked,
+        likes_count: Math.max(0, prevCount + (liked ? -1 : 1)),
       }
+      const settle = (async () => {
+        try {
+          if (liked) await unlikeGalleryComment(comment.id)
+          else await likeGalleryComment(comment.id)
+        } catch (err) {
+          patchCommentLike(
+            comment.id,
+            { liked_by_me: liked, likes_count: prevCount },
+            Promise.resolve(),
+          )
+          setActionError(
+            err instanceof ApiError ? err.message : 'Could not update comment like.',
+          )
+          throw err
+        }
+      })()
+      patchCommentLike(comment.id, next, settle)
     },
-    [busy, viewerId],
+    [busy, patchCommentLike, viewerId],
   )
 
   const canTryOn =
@@ -2610,7 +2583,7 @@ function RunwayCard({
         >
           <MessageCircle size={immersive ? 26 : 12} aria-hidden />
           <span className={immersive ? styles.actionCount : undefined}>
-            {comments ? comments.length : immersive ? String(commentsCount) : 'Chat'}
+            {comments ? comments.length : immersive ? String(displayCommentsCount) : 'Chat'}
           </span>
         </button>
       ) : null}
@@ -2914,7 +2887,7 @@ function RunwayCard({
                   </button>
                 </header>
 
-                <div className={styles.chatBody}>
+                <div className={styles.chatBody} ref={commentsListRef}>
                   {commentsError ? (
                     <p className={styles.cardError} role="alert">
                       {commentsError}
@@ -2986,6 +2959,18 @@ function RunwayCard({
                       })}
                     </ul>
                   )}
+                  {newCommentsBelow > 0 ? (
+                    <button
+                      type="button"
+                      className={styles.newCommentsHint}
+                      data-testid="runway-new-comments-hint"
+                      onClick={scrollToLatest}
+                    >
+                      {newCommentsBelow === 1
+                        ? '1 new comment'
+                        : `${newCommentsBelow} new comments`}
+                    </button>
+                  ) : null}
                 </div>
 
                 <form className={styles.chatForm} onSubmit={(e) => void onPostComment(e)}>

@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 20:30 Asia/Jerusalem — Android push **ACCEPTED** VC **303** · iOS train bump **1.0.2** (90186 closed 1.0.1)
+**Last updated:** 2026-11-28 20:55 Asia/Jerusalem — Live social comments poll (shared React) ready for PM review · Android VC **303** accepted · iOS **1.0.2** train unchanged
+
+## READY FOR PM — Live social comments sync (shared React poll) (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Problem | Comments modal did not refresh while open — Peri/Yaniv device testing: peer comments only appeared after close/reopen |
+| Fix | Shared `useLiveGalleryComments` + `listGalleryComments` **3s** poll while modal open + app active (Web / PWA / Android / iOS shells) |
+| Scope | FE-only · no WebSockets / Redis / migrations · no native rebuilds |
+| Behaviors | Dedupe by comment id · chrono order · protect optimistic likes · own post upsert · silent poll (no spinner/flicker) · near-bottom auto-scroll else new-comments hint · abort + backoff on failure · stop on close / background / logout · immediate refresh on foreground |
+| Tests | `liveGalleryComments.test.ts` · `useLiveGalleryComments.test.tsx` · Runway deep-link + chat popup regression |
+| Preserved | Moderation/auth · notification comment highlight · draft/focus/scroll · finance gates · Android VC **303** · iOS release process (no new IPA/AAB) |
+| Next | PM review → merge → FE tip only |
 
 ## LIVE — iOS TestFlight IPA — marketing train 1.0.2 (2026-11-28 Asia/Jerusalem)
 
@@ -3978,10 +3990,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Web Stars purchase policy):** Technical PM review of draft **web-only Stars purchase restriction** PR. After merge: FE-only tip deploy (no native rebuild). Confirm browser Stars shop shows App Store link + Google Play Coming soon; iOS/Android shells unchanged. Do **not** enable Play Billing or flip payment gates in this change.
+0. **Exact next action (Live social comments):** PM review of live comments poll PR. After merge: **FE tip only** (no Android AAB, no iOS IPA). Verify Peri↔Yaniv comments appear while the modal stays open on Web/PWA and native shells. Do **not** start native builds or change finance/push gates.
 
-
-1. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing.
+1. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
 2. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
 3. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
 4. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.

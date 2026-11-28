@@ -174,6 +174,20 @@ vi.mock('@/services/auth/AuthProvider', () => ({
   }),
 }))
 
+vi.mock('@/services/auth/tokenStore', () => ({
+  tokenStore: {
+    get: () => ({ accessToken: 'access', refreshToken: 'refresh' }),
+    set: vi.fn(),
+    clear: vi.fn(),
+  },
+}))
+
+vi.mock('@capacitor/app', () => ({
+  App: {
+    addListener: vi.fn(async () => ({ remove: vi.fn() })),
+  },
+}))
+
 const circleItem = {
   id: 'circle-1',
   design_id: null,
@@ -780,7 +794,9 @@ describe('RunwayScreen', () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     const circle = await openCircleSheet()
     fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
-    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
+    await waitFor(() =>
+      expect(listGalleryComments).toHaveBeenCalledWith('circle-1', expect.any(AbortSignal)),
+    )
 
     const dialog = await screen.findByRole('dialog', { name: /Friend circle look/i })
     expect(within(dialog).getByText('Love this silhouette')).toBeInTheDocument()
@@ -1328,7 +1344,9 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(getGalleryItem).toHaveBeenCalledWith(focusId))
     expect(await screen.findByText(/Pinned outside feed/i)).toBeInTheDocument()
     await waitFor(() => expect(onConsumed).toHaveBeenCalled())
-    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith(focusId))
+    await waitFor(() =>
+      expect(listGalleryComments).toHaveBeenCalledWith(focusId, expect.any(AbortSignal)),
+    )
     expect(await screen.findByText(/Exact comment body/i)).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: /Pinned outside feed/i })).toBeInTheDocument()
   })
