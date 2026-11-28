@@ -3,18 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:30 Asia/Jerusalem — Live comments #549 bounded like-guards + empty-count sync · merge + FE tip · APNs #550 preserved · iOS tap-dest #551 independent · no AAB/IPA
+**Last updated:** 2026-11-28 21:35 Asia/Jerusalem — Live comments **#549 MERGED** + FE tip `af94b28` · APNs #550 preserved · iOS tap-dest #551 independent · no AAB/IPA
 
 ## LIVE — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | **#549** · merge + **web FE tip** (no AAB/IPA) |
+| PR | **#549 MERGED** `af94b280` · **web FE tip** `af94b28-live-comments` · `/version.json`=`af94b28` |
 | Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
 | Prior PM corrections | Authoritative snapshots · like protect until settle · lifecycle abort · pure updaters · Cap cleanup |
 | Bounded pre-merge | Per-comment like/unlike **in-flight guard** · seq-aware **revert** (stale failure cannot clobber newer success) · empty snapshot **force-syncs** parent `comments_count` → 0 |
 | Verify | `tsc -b` · targeted live-comments/Runway tests **53** · `npm run build` **PASS** |
-| Independent | iOS tap destination **#551** · APNs delivery **#550** — do not couple or overwrite |
+| Independent | iOS tap destination **#551** · APNs delivery **#550** — do not couple or overwrite · VPS kept tap-dest `build_apns_message_body` on API while tipping #549 FE |
 | Unchanged | Finance/billing/wallets/schema · Android VC **303** · iOS TF **1.0.2 / 205** · no new AAB/IPA |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
@@ -4007,7 +4007,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Live social comments #549):** Merge #549 → **FE tip deploy only**. Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post + like guard). No AAB/IPA.
+0. **Exact next action (Live social comments #549):** **MERGED + FE tip `af94b28` live.** Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post + like guard). No AAB/IPA.
 
 1. **Exact next action (iOS tap destination #551):** Independent of #549 — human TF tap of **comment-URL** probe (not rankings). Keep APNs #550 delivery checkpoint. No IPA until PM asks.
 
