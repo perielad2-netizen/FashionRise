@@ -14,11 +14,12 @@
 | Code defect fixed | APNs/FCM builders defaulted missing `url` to **`/studio/runway`**. Contract fallback is **`/studio/fashionrise`**. APNs body now also nests `data.url` for Cap parity. |
 | Cap event shapes (verified) | **Android:** flat FCM extras → `notification.data.url`. **iOS:** `userInfo` (incl. `aps`) → `notification.data` (`PushNotificationsHandler.swift`). Do **not** assume identical bags. FE: `extractNotificationDestinationUrl`. |
 | Real comments | Producers already emit `/studio/fashionrise?item=&comments=1&comment=` · iOS devices **dest v2** · same `notify_user` path as FCM. |
-| BE deploy | Sufficient for default/nested payload + comment-URL probes — **no IPA required** for that slice. |
-| FE / IPA | `extractNotificationDestinationUrl` + #549 live comments need **one** consolidated IPA later. Build **205** already has dest-contract FE; do **not** start IPA until PM asks. |
-| Unchanged | Android FCM tap · Web/PWA · billing/finance gates · URL validation/auth · no AAB |
+| BE deploy | **Done** on VPS (`977417de` branch) — defaults + nested APNs · **no IPA** for this slice |
+| Targeted probe | Comment URL → both iOS TF tokens · Apple **ok** · dest **v2** · app **1.0.2 (205)** · host `https://api.push.apple.com/3/device/…` · FCM↔APNs url **identical** · sanitizer preserves full comment dest |
+| FE / IPA | `extractNotificationDestinationUrl` + #549 live comments → **one** consolidated IPA later. Build **205** already has dest-contract FE; **do not** start IPA until PM asks after human tap QA |
+| Unchanged | Android FCM tap · Web/PWA · billing/finance gates · URL validation/auth · no AAB · `http2_ok` retained |
 | Docs coord | Preserve this block + APNs #550 block when merging **#549** live-comments PROJECT-STATUS (do not overwrite either checkpoint). |
-| iOS push status | Delivery OK after #550. Exact tap→comment dest **not** declared operational until physical-device receipt of a **real comment URL** probe (not rankings). |
+| iOS push status | Delivery OK after #550. Exact tap→comment dest **not** declared operational until human TF tap of this **comment URL** probe lands on design + comments (not rankings). |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
 
