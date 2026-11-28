@@ -3,7 +3,44 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 20:00 Asia/Jerusalem — Finance CLOSED · #545 final release corrections (no account Web Push suppression)
+**Last updated:** 2026-11-28 20:20 Asia/Jerusalem — Android push **ACCEPTED** VC **303** · Web/PWA verify PASS · iOS IPA for TestFlight
+
+## LIVE — Android notification acceptance COMPLETE (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Checkpoint | **COMPLETE** — PM confirmed **all 10** Android physical-device notification acceptance checks **passed** |
+| Tested build | **versionCode=303** · versionName **1.0** · Codemagic build **`6b0b151bb8635dd0d8dee1b5`** (index **65**) |
+| Contract | Unified destinations from **#545** / `e1256d48` (no account Web Push suppression) |
+| Next Android | **No further Android builds or notification development** unless a concrete defect is found |
+| Play upload | **Not done** (sideload / internal artifact only) |
+
+## LIVE — Web/PWA notification acceptance verification (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| FE tip | `/version.json`=`e1256d48` · release `e1256d48-push-dest-contract` |
+| SW / handlers | Live `push-sw-handlers.js` **byte-identical** to repo · `Cache-Control: no-store` on `sw.js` / handlers / version |
+| Contract tests | SW fixtures **3/3** · FE `pushDestination` + `notificationNavigation` + Login OAuth next **PASS** |
+| SPA Settings | Live bundle: per-browser copy (“this browser only”) · **no** `prefer_native_push` / delivery-preference UI |
+| Backend | alembic **048** · VAPID **enabled** · capability android+ios **true** · web subs **4** · native devices **10** (v2:**4** / v1:**6**) |
+| Nginx | devices allowlist **PASS** |
+| Human browser receipt | Still recommended on desktop Chrome/PWA for tap→exact destination; automated contract + live asset parity **PASS** |
+
+## LIVE — Push destination contract #545 shipped (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#545 MERGED** `e1256d48` (final: drop account `prefer_native_push`; v1 keeps `friends=1`) |
+| FE | `/var/www/fashionrise/current` → `e1256d48-push-dest-contract` · `/version.json`=`e1256d48` |
+| BE | `/opt/fashionrise/src` @ **`e1256d48`** · API + AI workers restarted |
+| Migration | **048** applied (`destination_contract_version` on `native_push_devices`) · alembic head **048** |
+| Delivery | Web Push + native both fan out · per-browser toggle only · no UA/#544 suppress · no account prefer-native |
+| Capability | `android_enabled=true` · `ios_enabled=true` · VAPID public key served · nginx devices allowlist **PASS** |
+| Finance | **UNCHANGED / CLOSED** · Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
+| Android AAB | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** · **versionCode=303** · **PM acceptance PASS** · **no Play upload** · **no more Android builds** |
+| AAB artifact | VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
+| iOS IPA | Codemagic **[build 6b0b1ae8cce9c99a0ad48337](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b1ae8cce9c99a0ad48337)** (index **37**) · workflow `fashionrise-ios-app-store` · `main` @ `e1256d48` · marketing **1.0.1** · offset **100** · ASC upload for TestFlight processing · **submit_to_testflight=false** · **submit_to_app_store=false** |
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
 
