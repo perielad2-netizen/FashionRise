@@ -102,6 +102,17 @@ export function StudioPage() {
   const focusLookId = searchParams.get('look')
   const openOwnProfile = searchParams.get('profile') === 'me'
   const openFriends = searchParams.get('friends') === '1'
+  /** Push / deep-link: public GalleryItem id (not My Looks `look=` MagicLook id). */
+  const focusGalleryItemId = searchParams.get('item')
+  const focusOpenComments =
+    searchParams.get('comments') === '1' || Boolean(searchParams.get('comment'))
+  const focusCommentId = searchParams.get('comment')
+  const friendsSectionRaw = searchParams.get('section')
+  const friendsSection =
+    friendsSectionRaw === 'requests' || friendsSectionRaw === 'accepted'
+      ? friendsSectionRaw
+      : null
+  const focusFriendshipId = searchParams.get('friendship')
   /** false while designer profile / Friends manage (or left FashionRise feed) — keeps GlobalHeader visible. */
   const [fashionRiseImmersiveFeed, setFashionRiseImmersiveFeed] = useState(true)
   const [fashionRiseFeedFocusToken, setFashionRiseFeedFocusToken] = useState(0)
@@ -121,9 +132,31 @@ export function StudioPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
   const clearFriendsParam = useCallback(() => {
-    if (!searchParams.has('friends')) return
+    if (
+      !searchParams.has('friends') &&
+      !searchParams.has('section') &&
+      !searchParams.has('friendship')
+    ) {
+      return
+    }
     const next = new URLSearchParams(searchParams)
     next.delete('friends')
+    next.delete('section')
+    next.delete('friendship')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+  const clearGalleryFocusParams = useCallback(() => {
+    if (
+      !searchParams.has('item') &&
+      !searchParams.has('comments') &&
+      !searchParams.has('comment')
+    ) {
+      return
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete('item')
+    next.delete('comments')
+    next.delete('comment')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
   const openMyProfile = useCallback(() => {
@@ -194,7 +227,13 @@ export function StudioPage() {
             openOwnProfile={openOwnProfile}
             onOwnProfileConsumed={clearOwnProfileParam}
             openFriends={openFriends}
+            friendsSection={friendsSection}
+            focusFriendshipId={focusFriendshipId}
             onFriendsConsumed={clearFriendsParam}
+            focusGalleryItemId={focusGalleryItemId}
+            focusOpenComments={focusOpenComments}
+            focusCommentId={focusCommentId}
+            onGalleryFocusConsumed={clearGalleryFocusParams}
             onImmersiveFeedChange={setFashionRiseImmersiveFeed}
             feedFocusToken={fashionRiseFeedFocusToken}
           />

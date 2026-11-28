@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
 from typing import Any
 
@@ -21,24 +20,15 @@ from app.models.native_push_device import NativePushDevice
 from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.schemas.push import NativePushDeviceCreate, PushSubscriptionCreate
+from app.services.push_destinations import (
+    build_friend_accepted_url,
+    build_friend_request_url,
+    build_social_comment_url,
+    build_social_item_url,
+    sanitize_push_url,
+)
 
 logger = logging.getLogger(__name__)
-
-# Push-tap SPA destinations only. Never password-reset, verify-email, OAuth, or token URLs.
-# (Email deep links use a separate client urlPolicy and are not push destinations.)
-_ALLOWED_PUSH_PATH_PREFIXES = (
-    "/studio",
-    "/privacy",
-)
-_BLOCKED_PUSH_PATH_PREFIXES = (
-    "/reset-password",
-    "/verify-email",
-    "/forgot-password",
-    "/auth/google",
-    "/auth/cf-access",
-    "/api/",
-)
-_TOKENISH = re.compile(r"(?:^|[?#&])(?:token|code|access_token|refresh_token|id_token|handoff)=", re.I)
 
 
 def push_enabled() -> bool:
@@ -71,48 +61,6 @@ def native_ios_enabled() -> bool:
         and (s.native_push_apns_team_id or "").strip()
         and (s.native_push_apns_topic or "").strip()
     )
-
-
-# Safe, non-credential query strings permitted on specific Studio paths only.
-_ALLOWED_PUSH_QUERIES: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("/studio/fashionrise", "friends=1"),
-    }
-)
-
-
-def sanitize_push_url(url: str | None) -> str:
-    """Allow only non-credential Studio/privacy paths for push taps."""
-    fallback = "/studio/runway"
-    raw = (url or fallback).strip() or fallback
-    if raw.startswith("https://fashionrise.app") or raw.startswith("http://fashionrise.app"):
-        try:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(raw)
-            raw = f"{parsed.path or '/'}{('?' + parsed.query) if parsed.query else ''}"
-        except Exception:  # noqa: BLE001
-            return fallback
-    if not raw.startswith("/") or raw.startswith("//"):
-        return fallback
-    if _TOKENISH.search(raw):
-        return fallback
-    path = raw.split("?", 1)[0].split("#", 1)[0]
-    query = ""
-    if "?" in raw:
-        query = raw.split("?", 1)[1].split("#", 1)[0].strip()
-    if any(path == p or path.startswith(p) for p in _BLOCKED_PUSH_PATH_PREFIXES):
-        return fallback
-    if path != "/" and not any(
-        path == p or path.startswith(f"{p}/") for p in _ALLOWED_PUSH_PATH_PREFIXES
-    ):
-        return fallback
-    if path == "/":
-        return fallback
-    # Drop query/hash by default; allow only explicitly safe pairs (e.g. friends sheet).
-    if query and (path, query) in _ALLOWED_PUSH_QUERIES:
-        return f"{path}?{query}"
-    return path
 
 
 def upsert_subscription(
@@ -234,89 +182,38 @@ def list_user_native_devices(db: Session, user_id: uuid.UUID) -> list[NativePush
     return list(db.scalars(select(NativePushDevice).where(NativePushDevice.user_id == user_id)).all())
 
 
-def web_push_ua_platform(user_agent: str | None) -> str | None:
-    """Best-effort browser platform from stored Web Push user-agent.
-
-    Returns ``android``, ``ios``, or ``None`` (desktop / unknown). Used only to
-    prefer native FCM/APNs on the same mobile device — never deletes subscriptions.
-    """
-    ua = (user_agent or "").lower()
-    if not ua:
-        return None
-    if "android" in ua:
-        return "android"
-    if "iphone" in ua or "ipad" in ua or "ipod" in ua:
-        return "ios"
-    return None
-
-
-def active_native_platforms(devices: list[NativePushDevice]) -> set[str]:
-    """Platforms with a registered native token that this process can deliver to."""
-    active: set[str] = set()
-    for device in devices:
-        platform = (device.platform or "").strip().lower()
-        if platform == "android" and native_android_enabled():
-            active.add("android")
-        elif platform == "ios" and native_ios_enabled():
-            active.add("ios")
-    return active
-
-
-def should_skip_web_push_for_native(
-    *, user_agent: str | None, native_platforms: set[str]
-) -> bool:
-    """Skip Web Push when the subscription UA matches an active native platform.
-
-    Desktop / other-browser subscriptions keep Web Push. Subscriptions without a
-    usable UA are not skipped (fail open for non-mobile).
-    """
-    ua_platform = web_push_ua_platform(user_agent)
-    return bool(ua_platform and ua_platform in native_platforms)
-
-
 def notify_user(
     db: Session,
     user_id: uuid.UUID,
     *,
     title: str,
     body: str,
-    url: str = "/studio/runway",
+    url: str = "/studio/fashionrise",
     tag: str | None = None,
 ) -> int:
     """Fan-out to Web Push and (when enabled) native devices. Returns successful send count.
 
     Never raises to callers — engagement APIs must stay reliable if push fails.
-    Duplicate prevention: same tag collapses OS notifications per device; other devices stay.
-    Same-device cross-channel: when an active native Android/iOS registration exists,
-    skip Web Push subscriptions whose user-agent matches that mobile platform so the
-    user is not double-notified (Chrome Web Push + native FCM). Desktop browsers keep
-    Web Push. Subscriptions are never deleted by this preference.
+    Duplicate prevention: same ``tag`` collapses OS notifications per device channel;
+    use entity-scoped tags so unrelated designs/comments do not replace each other.
+
+    Cross-channel note: Web Push and native FCM/APNs both deliver when registered.
+    UA/platform matching is **not** reliable physical-device association, so this
+    fan-out does not suppress Web Push merely because a native token exists.
     """
     safe_url = sanitize_push_url(url)
     payload = {
         "title": title[:120],
         "body": body[:240],
         "url": safe_url,
-        "tag": tag or "fashionrise-runway",
+        "tag": tag or "fashionrise-social",
     }
     sent = 0
-
-    devices = list_user_native_devices(db, user_id)
-    native_platforms = active_native_platforms(devices)
 
     if push_enabled():
         rows = list_user_subscriptions(db, user_id)
         stale: list[PushSubscription] = []
         for row in rows:
-            if should_skip_web_push_for_native(
-                user_agent=row.user_agent, native_platforms=native_platforms
-            ):
-                logger.info(
-                    "push_skip_web_prefer_native user_id=%s platform=%s",
-                    user_id,
-                    web_push_ua_platform(row.user_agent),
-                )
-                continue
             ok, gone = _send_one(row, payload)
             if ok:
                 sent += 1
@@ -330,6 +227,7 @@ def notify_user(
                 db.rollback()
                 logger.exception("push_subscription_cleanup_failed id=%s", row.id)
 
+    devices = list_user_native_devices(db, user_id)
     stale_native: list[NativePushDevice] = []
     for device in devices:
         if device.platform == "android" and not native_android_enabled():
@@ -353,7 +251,12 @@ def notify_user(
 
 
 def notify_runway_like(
-    db: Session, *, owner_id: uuid.UUID, actor: User, look_title: str | None
+    db: Session,
+    *,
+    owner_id: uuid.UUID,
+    actor: User,
+    look_title: str | None,
+    gallery_item_id: uuid.UUID,
 ) -> None:
     if owner_id == actor.id:
         return
@@ -361,14 +264,21 @@ def notify_runway_like(
     notify_user(
         db,
         owner_id,
-        title="New like on Runway",
+        title="New like on FashionRise",
         body=f"@{actor.username} liked {label}",
-        tag=f"runway-like-{owner_id}",
+        url=build_social_item_url(gallery_item_id),
+        tag=f"fr-like-{gallery_item_id}",
     )
 
 
 def notify_runway_score(
-    db: Session, *, owner_id: uuid.UUID, actor: User, score: int, look_title: str | None
+    db: Session,
+    *,
+    owner_id: uuid.UUID,
+    actor: User,
+    score: int,
+    look_title: str | None,
+    gallery_item_id: uuid.UUID,
 ) -> None:
     if owner_id == actor.id:
         return
@@ -376,14 +286,22 @@ def notify_runway_score(
     notify_user(
         db,
         owner_id,
-        title="New score on Runway",
+        title="New score on FashionRise",
         body=f"@{actor.username} scored {label}: {score}/10",
-        tag=f"runway-score-{owner_id}",
+        url=build_social_item_url(gallery_item_id),
+        tag=f"fr-score-{gallery_item_id}",
     )
 
 
 def notify_runway_comment(
-    db: Session, *, owner_id: uuid.UUID, actor: User, look_title: str | None, snippet: str
+    db: Session,
+    *,
+    owner_id: uuid.UUID,
+    actor: User,
+    look_title: str | None,
+    snippet: str,
+    gallery_item_id: uuid.UUID,
+    comment_id: uuid.UUID,
 ) -> None:
     if owner_id == actor.id:
         return
@@ -394,13 +312,26 @@ def notify_runway_comment(
     notify_user(
         db,
         owner_id,
-        title="New comment on Runway",
-        body=f"@{actor.username} on {label}: {preview}" if preview else f"@{actor.username} commented on {label}",
-        tag=f"runway-comment-{owner_id}",
+        title="New comment on FashionRise",
+        body=(
+            f"@{actor.username} on {label}: {preview}"
+            if preview
+            else f"@{actor.username} commented on {label}"
+        ),
+        url=build_social_comment_url(gallery_item_id, comment_id),
+        tag=f"fr-comment-{comment_id}",
     )
 
 
-def notify_comment_like(db: Session, *, author_id: uuid.UUID, actor: User, snippet: str) -> None:
+def notify_comment_like(
+    db: Session,
+    *,
+    author_id: uuid.UUID,
+    actor: User,
+    snippet: str,
+    gallery_item_id: uuid.UUID,
+    comment_id: uuid.UUID,
+) -> None:
     if author_id == actor.id:
         return
     preview = (snippet or "").strip()
@@ -410,12 +341,19 @@ def notify_comment_like(db: Session, *, author_id: uuid.UUID, actor: User, snipp
         db,
         author_id,
         title="Someone liked your comment",
-        body=f"@{actor.username} liked “{preview}”" if preview else f"@{actor.username} liked your comment",
-        tag=f"runway-comment-like-{author_id}",
+        body=(
+            f"@{actor.username} liked “{preview}”"
+            if preview
+            else f"@{actor.username} liked your comment"
+        ),
+        url=build_social_comment_url(gallery_item_id, comment_id),
+        tag=f"fr-comment-like-{comment_id}",
     )
 
 
-def notify_friend_request(db: Session, *, addressee_id: uuid.UUID, actor: User) -> None:
+def notify_friend_request(
+    db: Session, *, addressee_id: uuid.UUID, actor: User, friendship_id: uuid.UUID
+) -> None:
     """Notify the invitee of a pending friend request (Settings: friend alerts)."""
     if addressee_id == actor.id:
         return
@@ -424,12 +362,14 @@ def notify_friend_request(db: Session, *, addressee_id: uuid.UUID, actor: User) 
         addressee_id,
         title="New friend request",
         body=f"@{actor.username} wants to be friends",
-        url="/studio/fashionrise?friends=1",
-        tag=f"friend-request-{addressee_id}",
+        url=build_friend_request_url(friendship_id),
+        tag=f"fr-friend-request-{friendship_id}",
     )
 
 
-def notify_friend_accepted(db: Session, *, requester_id: uuid.UUID, actor: User) -> None:
+def notify_friend_accepted(
+    db: Session, *, requester_id: uuid.UUID, actor: User, friendship_id: uuid.UUID
+) -> None:
     """Notify the original requester that their friend request was accepted."""
     if requester_id == actor.id:
         return
@@ -438,8 +378,8 @@ def notify_friend_accepted(db: Session, *, requester_id: uuid.UUID, actor: User)
         requester_id,
         title="Friend request accepted",
         body=f"@{actor.username} accepted your friend request",
-        url="/studio/fashionrise?friends=1",
-        tag=f"friend-accepted-{requester_id}",
+        url=build_friend_accepted_url(friendship_id),
+        tag=f"fr-friend-accepted-{friendship_id}",
     )
 
 

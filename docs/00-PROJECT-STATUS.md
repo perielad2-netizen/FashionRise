@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 18:20 Asia/Jerusalem — license testers synced · native social FCM confirmed · GPA.3363 recover_full would 50 · apply OFF · native/web dedupe shipping
+**Last updated:** 2026-11-28 18:45 Asia/Jerusalem — unified push destination contract PR ready (await PM) · GPA.3363 recover_full would 50 · apply OFF
+
+## LIVE — Unified notification destinations (awaiting PM) (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Problem | Native comment tap opens Runway **rankings**, not the exact design/comment |
+| Contract | `docs/deploy/PUSH-DESTINATION-CONTRACT.md` — shared BE / SPA / SW |
+| Producers | likes/scores/comments/comment-likes/friends emit `item` / `comment` / `friendship` UUIDs + entity tags |
+| Sanitizers | Typed FashionRise queries; SW no longer strips `friends=1` / content params |
+| SPA | `RunwayScreen` pins GalleryItem, opens comments, highlights comment/friendship |
+| Auth | ProtectedRoute keeps query; Login honors return/`pending` destination |
+| Cross-channel | UA-based Web Push suppression **removed** (not reliable device association) |
+| Gates / billing | **Unchanged** — no financial edits |
+| Status | **Stop for PM review** before merge / web deploy / AAB / IPA |
 
 ## LIVE — License testers + native FCM + GPA.3363 (2026-11-28 Asia/Jerusalem)
 

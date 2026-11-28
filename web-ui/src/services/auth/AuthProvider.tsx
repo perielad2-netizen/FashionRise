@@ -32,7 +32,10 @@ import {
   clearNativePushForLogout,
   syncNativePushAfterAuth,
 } from '@/services/native/nativePush'
-import { setNotificationNavigationReady } from '@/services/native/notificationNavigation'
+import {
+  clearPendingNotificationDestination,
+  setNotificationNavigationReady,
+} from '@/services/native/notificationNavigation'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import { postStreakCheckIn } from '@/services/competitionsApi'
 
@@ -126,6 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     void clearNativePushForLogout()
+    clearPendingNotificationDestination()
+    setNotificationNavigationReady(false)
     logoutLocal()
     bindFabricCacheToUser(null)
     setUser(null)
@@ -160,8 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.id])
 
   // Cold/warm push taps may arrive before auth restores — flush when ready.
+  // Web Push uses SW navigate for most taps; native + pending queue still need this.
   useEffect(() => {
-    if (!isNativeShell()) return
     const ready = Boolean(user?.id) && !bootstrapping
     setNotificationNavigationReady(ready)
   }, [user?.id, bootstrapping])

@@ -101,6 +101,15 @@ export function peekPendingNotificationDestination(): string | null {
   return pendingPath || readPersistedPending()
 }
 
+/**
+ * Drop queued destinations on logout / account switch so the next user cannot
+ * inherit another account's notification target.
+ */
+export function clearPendingNotificationDestination(): void {
+  pendingPath = null
+  persistPending(null)
+}
+
 /** Test helper — clear module state between unit tests. */
 export function _resetNotificationNavigationForTests(): void {
   pendingPath = null

@@ -194,5 +194,5 @@ def get_gallery_item(
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ) -> GalleryRead:
-    item = gallery_service.get_gallery_item(db, gallery_item_id)
+    item = gallery_service.get_gallery_item(db, gallery_item_id, viewer=user)
     return gallery_service.to_gallery_reads_for_viewer(db, [item], user)[0]
