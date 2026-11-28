@@ -234,6 +234,46 @@ def list_user_native_devices(db: Session, user_id: uuid.UUID) -> list[NativePush
     return list(db.scalars(select(NativePushDevice).where(NativePushDevice.user_id == user_id)).all())
 
 
+def web_push_ua_platform(user_agent: str | None) -> str | None:
+    """Best-effort browser platform from stored Web Push user-agent.
+
+    Returns ``android``, ``ios``, or ``None`` (desktop / unknown). Used only to
+    prefer native FCM/APNs on the same mobile device — never deletes subscriptions.
+    """
+    ua = (user_agent or "").lower()
+    if not ua:
+        return None
+    if "android" in ua:
+        return "android"
+    if "iphone" in ua or "ipad" in ua or "ipod" in ua:
+        return "ios"
+    return None
+
+
+def active_native_platforms(devices: list[NativePushDevice]) -> set[str]:
+    """Platforms with a registered native token that this process can deliver to."""
+    active: set[str] = set()
+    for device in devices:
+        platform = (device.platform or "").strip().lower()
+        if platform == "android" and native_android_enabled():
+            active.add("android")
+        elif platform == "ios" and native_ios_enabled():
+            active.add("ios")
+    return active
+
+
+def should_skip_web_push_for_native(
+    *, user_agent: str | None, native_platforms: set[str]
+) -> bool:
+    """Skip Web Push when the subscription UA matches an active native platform.
+
+    Desktop / other-browser subscriptions keep Web Push. Subscriptions without a
+    usable UA are not skipped (fail open for non-mobile).
+    """
+    ua_platform = web_push_ua_platform(user_agent)
+    return bool(ua_platform and ua_platform in native_platforms)
+
+
 def notify_user(
     db: Session,
     user_id: uuid.UUID,
@@ -247,6 +287,10 @@ def notify_user(
 
     Never raises to callers — engagement APIs must stay reliable if push fails.
     Duplicate prevention: same tag collapses OS notifications per device; other devices stay.
+    Same-device cross-channel: when an active native Android/iOS registration exists,
+    skip Web Push subscriptions whose user-agent matches that mobile platform so the
+    user is not double-notified (Chrome Web Push + native FCM). Desktop browsers keep
+    Web Push. Subscriptions are never deleted by this preference.
     """
     safe_url = sanitize_push_url(url)
     payload = {
@@ -257,10 +301,22 @@ def notify_user(
     }
     sent = 0
 
+    devices = list_user_native_devices(db, user_id)
+    native_platforms = active_native_platforms(devices)
+
     if push_enabled():
         rows = list_user_subscriptions(db, user_id)
         stale: list[PushSubscription] = []
         for row in rows:
+            if should_skip_web_push_for_native(
+                user_agent=row.user_agent, native_platforms=native_platforms
+            ):
+                logger.info(
+                    "push_skip_web_prefer_native user_id=%s platform=%s",
+                    user_id,
+                    web_push_ua_platform(row.user_agent),
+                )
+                continue
             ok, gone = _send_one(row, payload)
             if ok:
                 sent += 1
@@ -274,7 +330,6 @@ def notify_user(
                 db.rollback()
                 logger.exception("push_subscription_cleanup_failed id=%s", row.id)
 
-    devices = list_user_native_devices(db, user_id)
     stale_native: list[NativePushDevice] = []
     for device in devices:
         if device.platform == "android" and not native_android_enabled():

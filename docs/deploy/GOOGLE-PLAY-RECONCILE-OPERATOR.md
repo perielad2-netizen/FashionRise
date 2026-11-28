@@ -95,22 +95,19 @@ Policy (unchanged — document only):
 **Customer-facing debt messaging:** do not change without PM review. Operators see
 debt on Admin customer rows (`ai_stars_iap_debt`).
 
-## Historical backlog (2026-11-27 Asia/Jerusalem — read-only)
+## Historical backlog (2026-11-28 Asia/Jerusalem — read-only)
 
-Android `iap_purchases` inventory (no additional mutations):
+Android `iap_purchases` inventory (no additional mutations during assessment):
 
 | Metric | Value |
 | --- | --- |
-| Total Android purchases | 4 (all Sandbox) |
-| Active | 1 |
-| Refunded | 3 |
-| Fully clawed | 3 |
-| Outstanding Stars | **50** on active `GPA.3387-8819-3710-21379` (not a refund — not recoverable) |
+| Notable recoverable | **`GPA.3363-8286-3414-93081`** Sandbox `stars_50` · `REFUNDED` + entitlement canceled · dry-run **`recover_full` would 50** · wallet still **999397** · RTDN **absent** (Sandbox) · blocked solely by apply gate OFF |
+| Prior recovered | GPA.3393 + GPA.3329 clawed exactly once each |
+| Other outstanding | Active non-refund rows may still show Stars (e.g. prior `GPA.3387…`) — **not** recoverable without refund+revoke |
 | Wallet debt users / Stars | 0 / 0 |
-| Recoverable refund backlog | **0** after GPA.3393 + GPA.3329 |
 | Production purchases | 0 |
 
-Do **not** apply against `GPA.3387` without separate authorization and refund evidence.
+Do **not** apply against active non-refunded orders. GPA.3363 is ready for the **first scheduled apply tick** after PM enablement — no manual wallet edit.
 
 ## Scheduler safety
 
