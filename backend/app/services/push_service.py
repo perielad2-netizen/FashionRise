@@ -576,7 +576,13 @@ def _send_apns(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool,
             "url": str(payload.get("url") or "/studio/runway"),
             "tag": str(payload.get("tag") or "fashionrise-runway"),
         }
-        with httpx.Client(http2=True, timeout=12.0) as client:
+        try:
+            client = httpx.Client(http2=True, timeout=12.0)
+        except ImportError:
+            # httpx without the http2 extra (`h2` missing) — never reached Apple.
+            logger.warning("apns_http2_unavailable")
+            return False, False
+        with client:
             resp = client.post(
                 f"https://{host}/3/device/{device.device_token}",
                 content=json.dumps(apns_body).encode("utf-8"),
@@ -594,10 +600,20 @@ def _send_apns(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool,
         if resp.status_code == 410:
             logger.info("apns_token_gone suffix=%s", device.device_token[-12:])
             return False, True
-        logger.warning("apns_send_failed status=%s", resp.status_code)
+        reason = ""
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                reason = str(body.get("reason") or "")[:80]
+        except Exception:  # noqa: BLE001
+            reason = ""
+        if reason:
+            logger.warning("apns_send_failed status=%s reason=%s", resp.status_code, reason)
+        else:
+            logger.warning("apns_send_failed status=%s", resp.status_code)
         return False, False
     except TypeError:
-        # httpx without http2 extra
+        # Older httpx raised TypeError when http2 kwargs were unsupported.
         logger.warning("apns_http2_unavailable")
         return False, False
     except Exception as exc:  # noqa: BLE001
