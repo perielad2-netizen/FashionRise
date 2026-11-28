@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 22:20 Asia/Jerusalem — commercial advance · physical accept **ALL PASS** · iOS **1.0.2/206** App Store submit **manual** · Android Alpha **VC 308** live · no new builds/code
+**Last updated:** 2026-11-28 22:41 Asia/Jerusalem — iOS **1.0.2/206** App Review **Waiting for Review** · Android Alpha **VC 308** (12 testers / ~Dec 11) · physical accept **ALL PASS** · docs only
+
+## LIVE — iOS App Review submitted (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Version | **FashionRise 1.0.2** · CFBundleVersion **206** · commit **`2af5d36c`** |
+| Submitted | **2026-11-28 22:29 Asia/Jerusalem** |
+| Status | **Waiting for Review** |
+| Submission ID | **`273fcc52-d5fe-466c-9b69-d661506e55ce`** |
+| Release | Automatic after Apple approval (as authorized) |
+| Physical acceptance | **COMPLETE** — Android + iOS + Web + PWA all passed |
+| Unchanged | No new builds · no app code · no deploys · Apple billing preserved · Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 
 ## LIVE — Commercial release advance (2026-11-28 Asia/Jerusalem)
 
@@ -11,9 +23,8 @@
 | --- | --- |
 | Physical acceptance | **COMPLETE** — owner confirmed **Android + iOS + Web + PWA** all passed |
 | Source commit | **`2af5d36c`** (#549 live comments · #551 tap-dest · #550 APNs h2) — **no new builds / no app code changes** |
-| iOS App Store | **1.0.2 / CFBundleVersion 206** authorized for review + **automatic release after approval** |
-| iOS submit status | **Blocked on manual ASC** — agent credentials are **In-App Purchase** API key only (`4N9N354RG3`); App Store Connect **Apps** API returns `401 NOT_AUTHORIZED`. Codemagic IPA already uploaded for TF; `submit_to_app_store` stays false (no rebuild) |
-| Android Alpha | Play **alpha** closed track already shows release **`308 (1.0)`** · **status=completed** · tester Google Group **`testers-community@googlegroups.com`** preserved · **no** new track · **no** tester-list replace · **14-day period not interrupted by agent** |
+| iOS App Store | **1.0.2 / CFBundleVersion 206** · **submitted** 2026-11-28 **22:29** Asia/Jerusalem · status **Waiting for Review** · submission ID **`273fcc52-d5fe-466c-9b69-d661506e55ce`** · automatic release after approval |
+| Android Alpha | Play **alpha** closed track · release **`308 (1.0)`** **live** · Google Play confirms **12 testers** continuously opted in for **one day** · estimated testing completion **2026-12-11** (subject to continuous participation) · tester group preserved · **no** new track |
 | Apple billing | **PRESERVED** as live: `IAP_APPLE_PURCHASING_ENABLED=true` · `IAP_APPLE_CREDIT_ENABLED=true` |
 | Google billing | **PRESERVED**: PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 
@@ -61,8 +72,8 @@ No custom checkout. Apple IAP only. Privacy: https://fashionrise.app/privacy
 
 | Blocker | Owner action |
 | --- | --- |
-| ASC review submit | Complete steps 1–6 above (agent cannot call Apps API with IAP key) |
-| ASC metadata completeness | Confirm screenshots, age rating, DSA, export compliance, review login in ASC UI |
+| Apple App Review | Wait for **Waiting for Review** → review outcome on submission **`273fcc52-d5fe-466c-9b69-d661506e55ce`** (auto-release when approved) |
+| Play Alpha closed testing | Keep **12** continuous testers through estimated **2026-12-11** · do not replace list / recreate track |
 | Play production | **Not authorized** — Alpha closed only; public Google purchasing/credit stay **false** |
 | New binaries | **Do not** start Codemagic rebuilds unless Apple/Play rejects the existing binary |
 
@@ -76,7 +87,7 @@ No custom checkout. Apple IAP only. Privacy: https://fashionrise.app/privacy
 | AAB artifact (Codemagic) | [app-release.aab](https://api.codemagic.io/artifacts/3f973d20-37d2-43eb-8635-31f7e658073f/e06e12cb-bb1a-4766-8774-6ed1fbf5ae33/app-release.aab) |
 | AAB artifact (VPS) | `/var/www/fashionrise/artifacts/android/FashionRise-2af5d36c-vc308-alpha.aab` |
 | Preserved | Signing · R8 · FCM · Google Play Billing · native permissions · validated VC **303** functionality |
-| Play Alpha closed | **Already live** — track `alpha` release **`308 (1.0)`** `completed` · group `testers-community@googlegroups.com` · Internal also lists 308 · **do not** recreate track / replace testers / cut 14-day testing |
+| Play Alpha closed | **Live** — track `alpha` release **`308 (1.0)`** · **12 testers** continuously opted in for **1 day** (Play Console) · estimated completion **2026-12-11** (subject to continuous participation) · group `testers-community@googlegroups.com` · **do not** recreate track / replace testers |
 | Manual re-upload (only if Console UI diverges) | Play Console → **Testing → Closed testing (Alpha)** → create release → upload the AAB above → retain existing testers → review/rollout **without** starting a new track |
 | Finance | Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 | Parallel | Built alongside iOS IPA **206** without interrupting it |
