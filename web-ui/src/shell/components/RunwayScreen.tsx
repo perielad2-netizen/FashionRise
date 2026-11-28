@@ -48,7 +48,10 @@ import {
   type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
-import { useLiveGalleryComments } from '@/lib/useLiveGalleryComments'
+import {
+  useLiveGalleryComments,
+  type CommentLikeMutationHandle,
+} from '@/lib/useLiveGalleryComments'
 import {
   acceptFriendRequest,
   listFriendRequests,
@@ -2400,23 +2403,22 @@ function RunwayCard({
         liked_by_me: !liked,
         likes_count: Math.max(0, prevCount + (liked ? -1 : 1)),
       }
+      const handleRef: { current: CommentLikeMutationHandle | null } = { current: null }
       const settle = (async () => {
         try {
           if (liked) await unlikeGalleryComment(comment.id)
           else await likeGalleryComment(comment.id)
         } catch (err) {
-          patchCommentLike(
-            comment.id,
-            { liked_by_me: liked, likes_count: prevCount },
-            Promise.resolve(),
-          )
+          // Seq-aware revert — older failures must not overwrite a newer mutation.
+          handleRef.current?.revert({ liked_by_me: liked, likes_count: prevCount })
           setActionError(
             err instanceof ApiError ? err.message : 'Could not update comment like.',
           )
-          // Do not rethrow — patchCommentLike swallows settle rejection; avoid unhandled rejection.
+          // Do not rethrow — settle resolves so the hook can release the in-flight lock.
         }
       })()
-      patchCommentLike(comment.id, next, settle)
+      handleRef.current = patchCommentLike(comment.id, next, settle)
+      // Overlapping like/unlike on the same comment is rejected by the hook guard.
     },
     [busy, patchCommentLike, viewerId],
   )

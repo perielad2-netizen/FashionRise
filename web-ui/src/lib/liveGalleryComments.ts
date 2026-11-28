@@ -33,10 +33,13 @@ export function mergeGalleryComments(
   remote: GalleryComment[],
   options?: MergeGalleryCommentsOptions | ReadonlyMap<string, ProtectedCommentLike>,
 ): GalleryComment[] {
+  // Narrow Map vs options bag — ReadonlyMap is not eliminated by `instanceof Map` alone.
   const opts: MergeGalleryCommentsOptions =
-    options instanceof Map || options === undefined
-      ? { protectLikes: options }
-      : options
+    options == null
+      ? {}
+      : options instanceof Map
+        ? { protectLikes: options }
+        : (options as MergeGalleryCommentsOptions)
   const protectLikes = opts.protectLikes
   const retainLocalIds = opts.retainLocalIds
 

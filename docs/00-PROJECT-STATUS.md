@@ -3,19 +3,36 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:15 Asia/Jerusalem — Live comments PR #549 PM corrections done · merge + FE tip authorized · APNs #550 independent · no AAB/IPA
+**Last updated:** 2026-11-28 21:30 Asia/Jerusalem — Live comments #549 bounded like-guards + empty-count sync · merge + FE tip · APNs #550 preserved · iOS tap-dest #551 independent · no AAB/IPA
 
-## AUTHORIZED — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
+## LIVE — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| PR | **#549** · head after PM corrections (authoritative merge, like barriers, lifecycle, pure updaters) |
+| PR | **#549** · merge + **web FE tip** (no AAB/IPA) |
 | Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
-| PM corrections | Authoritative snapshots drop deleted/moderated · retain own post only vs older requests · like protect until settle + in-flight gens · no unhandled reject · clear errors on success · backoff on initial fail · Cap listener cleanup · pure state + scroll after render · count notify only when changed |
-| Tests | `liveGalleryComments` · `useLiveGalleryComments` · `useAppIsActive` · Runway deep-link/chat regression — **50** targeted pass |
-| Deploy | **PM authorized** merge + **web FE tip only** |
-| Independent | iOS APNs investigation / #550 — do not block or couple |
-| Unchanged | Finance/billing/wallets/schema · Android VC **303** · no new AAB/IPA |
+| Prior PM corrections | Authoritative snapshots · like protect until settle · lifecycle abort · pure updaters · Cap cleanup |
+| Bounded pre-merge | Per-comment like/unlike **in-flight guard** · seq-aware **revert** (stale failure cannot clobber newer success) · empty snapshot **force-syncs** parent `comments_count` → 0 |
+| Verify | `tsc -b` · targeted live-comments/Runway tests **53** · `npm run build` **PASS** |
+| Independent | iOS tap destination **#551** · APNs delivery **#550** — do not couple or overwrite |
+| Unchanged | Finance/billing/wallets/schema · Android VC **303** · iOS TF **1.0.2 / 205** · no new AAB/IPA |
+
+## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | Two TestFlight iPhones (notifications ON) exchanged comments — **no native alerts**; Android on same FashionRise accounts **did** receive |
+| Root cause | Production API venv had `httpx` **without** HTTP/2 extra (`h2` missing). `_send_apns` failed before contacting Apple: journal `apns_send_failed err=ImportError` |
+| Not the cause | Sandbox flag (already `false`) · topic/key/team · nginx Capacitor CORS · missing iOS registration · wrong IPA entitlements · Android FCM |
+| Config (effective) | `NATIVE_PUSH_IOS_ENABLED=true` · `NATIVE_PUSH_APNS_USE_SANDBOX=false` · topic `app.fashionrise.studio` · Key ID `8DHL67FA3U` · Team `3U3MA53L9P` · `.p8` mode 0640 group-readable · capability `ios_enabled:true` |
+| Devices | **android 12 / 4 users** · **ios 2 / 2 users** — `perielad@` + `perielad2@` iOS **1.0.2 (205)** dest **v2**; `perielad2@` also keeps Android (platforms do **not** replace each other) |
+| Registration | OPTIONS/POST `/push/native/devices` **200/201** from iPhone clients; `capacitor://localhost` CORS **OK** |
+| Signed IPA | `/var/www/fashionrise/artifacts/ios/FashionRise-3527d410-ios-1.0.2-b205.ipa` · `aps-environment=production` · App Store distribution · bundle/team match |
+| VPS fix | `pip install 'httpx[http2]>=0.26.0,<0.28.0'` → installed `h2`/`hpack`/`hyperframe` · `systemctl restart fashionrise-api` |
+| Controlled probe | `_send_apns` to both iOS tokens → **Apple accepted** (`ok=True`, `gone=False`) — confirm on-device banner next |
+| Repo harden | `requirements.txt` now pins `httpx[http2]`; `_send_apns` logs `apns_http2_unavailable` + Apple `reason` · **#550 MERGED** |
+| Unchanged | Android FCM · Web Push · finance/reconcile gates · no new IPA/AAB |
+| Next | Human confirm both TestFlight phones show the controlled probe + a real comment; then resume normal social QA · tap-dest follow-up on **#551** (independent) |
 
 ## LIVE — iOS TestFlight IPA — marketing train 1.0.2 (2026-11-28 Asia/Jerusalem)
 
@@ -3990,14 +4007,17 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Live social comments #549):** Merge #549 → **FE tip deploy only**. Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post). No AAB/IPA. Keep APNs #550 independent.
+0. **Exact next action (Live social comments #549):** Merge #549 → **FE tip deploy only**. Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post + like guard). No AAB/IPA.
 
-1. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
-2. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
-3. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
-4. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
-5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
-6. **Operator residual:** expired Access session test (still PENDING).
+1. **Exact next action (iOS tap destination #551):** Independent of #549 — human TF tap of **comment-URL** probe (not rankings). Keep APNs #550 delivery checkpoint. No IPA until PM asks.
+
+2. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
+
+3. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
+4. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
+5. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
+6. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
+7. **Operator residual:** expired Access session test (still PENDING).
 
 ---
 

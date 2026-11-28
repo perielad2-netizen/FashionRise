@@ -47,6 +47,16 @@ export type UseLiveGalleryCommentsOptions = {
   }) => void
 }
 
+/** Handle for an accepted like/unlike mutation (null when blocked by in-flight guard). */
+export type CommentLikeMutationHandle = {
+  seq: number
+  /**
+   * Revert optimistic state only if this mutation is still the latest for the comment.
+   * Older failures must not overwrite a newer successful mutation.
+   */
+  revert: (prev: ProtectedCommentLike) => void
+}
+
 export type UseLiveGalleryCommentsResult = {
   comments: GalleryComment[] | null
   commentsError: string | null
@@ -59,7 +69,7 @@ export type UseLiveGalleryCommentsResult = {
     commentId: string,
     next: ProtectedCommentLike,
     settle: Promise<unknown>,
-  ) => void
+  ) => CommentLikeMutationHandle | null
   scrollToLatest: () => void
   clearNewCommentsIndicator: () => void
 }
@@ -101,11 +111,15 @@ export function useLiveGalleryComments(
   const protectLikesRef = useRef(new Map<string, ProtectedLikeEntry>())
   const pendingLocalRef = useRef(new Map<string, PendingLocalEntry>())
   const likeSeqRef = useRef(new Map<string, number>())
+  /** commentId → seq of the mutation currently in flight (API not settled). */
+  const likeInFlightRef = useRef(new Map<string, number>())
   const backoffMsRef = useRef(LIVE_COMMENTS_POLL_MS)
   const wasActiveRef = useRef(appActive)
   const hasLoadedRef = useRef(false)
   const focusHandledRef = useRef(false)
   const scrollAfterRenderRef = useRef(false)
+  /** Parent feed count synced at least once from an authoritative snapshot. */
+  const countSyncedRef = useRef(false)
   const onCountChangeRef = useRef(onCountChange)
   const onFocusResolvedRef = useRef(onFocusCommentResolved)
   onCountChangeRef.current = onCountChange
@@ -118,10 +132,14 @@ export function useLiveGalleryComments(
     genRef.current += 1
   }, [])
 
-  const publishCount = useCallback((count: number) => {
-    if (commentsCountRef.current === count) return
+  const publishCount = useCallback((count: number, forceParentSync = false) => {
+    const unchanged = commentsCountRef.current === count
     commentsCountRef.current = count
     setCommentsCount(count)
+    // Authoritative snapshots must sync parent even when local count was already 0
+    // (e.g. empty list after a nonzero feed comments_count).
+    if (unchanged && countSyncedRef.current && !forceParentSync) return
+    countSyncedRef.current = true
     onCountChangeRef.current?.(count)
   }, [])
 
@@ -169,7 +187,8 @@ export function useLiveGalleryComments(
 
       commentsRef.current = next
       setComments(next)
-      publishCount(next.length)
+      // Always push authoritative length to parent (incl. empty → 0).
+      publishCount(next.length, true)
       setCommentsError(null)
 
       if (mode === 'silent' && incoming > 0) {
@@ -253,6 +272,8 @@ export function useLiveGalleryComments(
     protectLikesRef.current.clear()
     pendingLocalRef.current.clear()
     likeSeqRef.current.clear()
+    likeInFlightRef.current.clear()
+    countSyncedRef.current = false
     backoffMsRef.current = LIVE_COMMENTS_POLL_MS
     invalidateInFlight()
   }, [galleryItemId, invalidateInFlight])
@@ -345,29 +366,63 @@ export function useLiveGalleryComments(
     [publishCount],
   )
 
+  const applyLikeFields = useCallback((commentId: string, fields: ProtectedCommentLike) => {
+    const prev = commentsRef.current
+    const merged = (prev ?? []).map((row) =>
+      row.id === commentId
+        ? { ...row, liked_by_me: fields.liked_by_me, likes_count: fields.likes_count }
+        : row,
+    )
+    commentsRef.current = merged
+    setComments(merged)
+  }, [])
+
   const patchCommentLike = useCallback(
-    (commentId: string, next: ProtectedCommentLike, settle: Promise<unknown>) => {
+    (
+      commentId: string,
+      next: ProtectedCommentLike,
+      settle: Promise<unknown>,
+    ): CommentLikeMutationHandle | null => {
+      // Per-comment guard: overlapping like/unlike on the same row is rejected.
+      if (likeInFlightRef.current.has(commentId)) return null
+
       const seq = (likeSeqRef.current.get(commentId) ?? 0) + 1
       likeSeqRef.current.set(commentId, seq)
+      likeInFlightRef.current.set(commentId, seq)
       protectLikesRef.current.set(commentId, {
         ...next,
         barrierGen: LIKE_PENDING_BARRIER,
         seq,
       })
-      const prev = commentsRef.current
-      const merged = (prev ?? []).map((row) =>
-        row.id === commentId
-          ? { ...row, liked_by_me: next.liked_by_me, likes_count: next.likes_count }
-          : row,
-      )
-      commentsRef.current = merged
-      setComments(merged)
+      applyLikeFields(commentId, next)
+
+      const releaseInFlight = () => {
+        if (likeInFlightRef.current.get(commentId) === seq) {
+          likeInFlightRef.current.delete(commentId)
+        }
+      }
+
+      const handle: CommentLikeMutationHandle = {
+        seq,
+        revert: (prevState) => {
+          // Stale failure must not undo a newer successful mutation.
+          if (likeSeqRef.current.get(commentId) !== seq) return
+          releaseInFlight()
+          protectLikesRef.current.set(commentId, {
+            ...prevState,
+            barrierGen: genRef.current,
+            seq,
+          })
+          applyLikeFields(commentId, prevState)
+        },
+      }
 
       void Promise.resolve(settle).then(
         () => {
           if (likeSeqRef.current.get(commentId) !== seq) return
           const cur = protectLikesRef.current.get(commentId)
           if (!cur || cur.seq !== seq) return
+          releaseInFlight()
           // Polls that already started before settle must not clobber this result.
           protectLikesRef.current.set(commentId, {
             ...cur,
@@ -375,11 +430,22 @@ export function useLiveGalleryComments(
           })
         },
         () => {
-          // Rejection is handled by the caller (revert via another patch) or ignored.
+          // Rejection without revert — release lock so the caller can retry.
+          if (likeSeqRef.current.get(commentId) !== seq) return
+          releaseInFlight()
+          const cur = protectLikesRef.current.get(commentId)
+          if (cur?.seq === seq) {
+            protectLikesRef.current.set(commentId, {
+              ...cur,
+              barrierGen: genRef.current,
+            })
+          }
         },
       )
+
+      return handle
     },
-    [],
+    [applyLikeFields],
   )
 
   const scrollToLatest = useCallback(() => {

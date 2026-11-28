@@ -247,9 +247,15 @@ describe('useLiveGalleryComments', () => {
     // Prevent Vitest from treating this as an unhandled rejection before the hook attaches.
     rejected.catch(() => undefined)
 
+    let handle: ReturnType<typeof result.current.patchCommentLike> = null
     act(() => {
-      result.current.patchCommentLike('c1', { liked_by_me: true, likes_count: 1 }, rejected)
+      handle = result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: true, likes_count: 1 },
+        rejected,
+      )
     })
+    expect(handle).not.toBeNull()
     expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
 
     await act(async () => {
@@ -257,14 +263,125 @@ describe('useLiveGalleryComments', () => {
     })
 
     act(() => {
-      result.current.patchCommentLike(
+      handle?.revert({ liked_by_me: false, likes_count: 0 })
+    })
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
+    expect(result.current.comments?.[0]?.likes_count).toBe(0)
+  })
+
+  it('blocks overlapping like/unlike mutations on the same comment', async () => {
+    listGalleryComments.mockResolvedValue([row('c1', 'first', '2026-11-28T00:00:00Z')])
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.comments?.[0]?.id).toBe('c1'))
+
+    let resolveFirst!: () => void
+    const firstSettle = new Promise<void>((r) => {
+      resolveFirst = r
+    })
+
+    let first: ReturnType<typeof result.current.patchCommentLike> = null
+    let second: ReturnType<typeof result.current.patchCommentLike> = null
+    act(() => {
+      first = result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: true, likes_count: 1 },
+        firstSettle,
+      )
+      second = result.current.patchCommentLike(
         'c1',
         { liked_by_me: false, likes_count: 0 },
         Promise.resolve(),
       )
     })
+    expect(first).not.toBeNull()
+    expect(second).toBeNull()
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
+    expect(result.current.comments?.[0]?.likes_count).toBe(1)
+
+    await act(async () => {
+      resolveFirst()
+      await Promise.resolve()
+    })
+
+    let after: ReturnType<typeof result.current.patchCommentLike> = null
+    act(() => {
+      after = result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: false, likes_count: 0 },
+        Promise.resolve(),
+      )
+    })
+    expect(after).not.toBeNull()
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
+  })
+
+  it('ignores stale revert after a newer successful mutation', async () => {
+    listGalleryComments.mockResolvedValue([row('c1', 'first', '2026-11-28T00:00:00Z')])
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.comments?.[0]?.id).toBe('c1'))
+
+    let resolveFirst!: () => void
+    const firstSettle = new Promise<void>((r) => {
+      resolveFirst = r
+    })
+
+    let first: ReturnType<typeof result.current.patchCommentLike> = null
+    act(() => {
+      first = result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: true, likes_count: 1 },
+        firstSettle,
+      )
+    })
+    expect(first).not.toBeNull()
+
+    await act(async () => {
+      resolveFirst()
+      await Promise.resolve()
+    })
+
+    let second: ReturnType<typeof result.current.patchCommentLike> = null
+    act(() => {
+      second = result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: false, likes_count: 0 },
+        Promise.resolve(),
+      )
+    })
+    expect(second).not.toBeNull()
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
+
+    // Late failure revert from the older mutation must not clobber the newer unlike.
+    act(() => {
+      first?.revert({ liked_by_me: false, likes_count: 0 })
+    })
     expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
     expect(result.current.comments?.[0]?.likes_count).toBe(0)
+
+    act(() => {
+      first?.revert({ liked_by_me: true, likes_count: 1 })
+    })
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
+    expect(result.current.comments?.[0]?.likes_count).toBe(0)
+  })
+
+  it('syncs parent count to 0 when the first snapshot is empty', async () => {
+    listGalleryComments.mockResolvedValue([])
+    const onCountChange = vi.fn()
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({
+        galleryItemId: 'g1',
+        enabled: true,
+        onCountChange,
+      }),
+    )
+    await waitFor(() => expect(result.current.comments).toEqual([]))
+    expect(result.current.commentsCount).toBe(0)
+    expect(onCountChange).toHaveBeenCalledWith(0)
   })
 
   it('clears initial load error after a successful refresh', async () => {
