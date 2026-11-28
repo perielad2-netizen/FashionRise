@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:45 Asia/Jerusalem — iOS push nav **PHYSICALLY ACCEPTED** (TF 1.0.2/205) · #549+#551 consolidated IPA authorized · no AAB · no App Store submit
+**Last updated:** 2026-11-28 21:50 Asia/Jerusalem — iOS push **PHYSICALLY ACCEPTED** · #549+#551 on main · FE tip `2af5d36` · consolidated IPA **building** · no AAB · no App Store submit
 
 ## LIVE — iOS notification physical acceptance CLOSED (2026-11-28 Asia/Jerusalem)
 
@@ -12,9 +12,21 @@
 | Checkpoint | **CLOSED** — owner confirmed on TF **1.0.2 / build 205** |
 | Receipt | Native APNs alert received |
 | Tap navigation | Opens **correct design** + **correct comment destination** |
-| Next | Merge **#551** (explicit-field extract only) → tip latest web FE → **one** consolidated signed IPA (#549+#551) → TestFlight processing only |
+| Follow-through | **#551 MERGED** (explicit-field extract) · **#549** already on main · web FE tip **`2af5d36-live-comments-tap-dest`** · IPA Codemagic building |
 | Unchanged | Android VC **303** · APNs production · HTTP/2 · auth/signing · billing · Google reconcile APPLY=true / 300s · purchasing+credit **false** |
 | Out of scope | Further APNs investigation · Android AAB · App Store submission |
+
+## LIVE — Consolidated iOS IPA (#549 + #551) (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Commit | **`2af5d36c`** (`main` merge of #551 atop #549) |
+| Marketing | **1.0.2** |
+| Codemagic | workflow `fashionrise-ios-app-store` · build **[6b0b2f08639b7b011204916a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b2f08639b7b011204916a)** · index **39** · status **building** |
+| CFBundleVersion | `PROJECT_BUILD_NUMBER + 100` (stamp from build log when finished; must be **>205**) |
+| Publish | ASC upload for TestFlight processing · `submit_to_testflight=false` · `submit_to_app_store=false` |
+| FE tip | `/version.json`=`2af5d36` · release `2af5d36-live-comments-tap-dest` |
+| Contains | Live comments poll (**#549**) + tap-dest extract/BE defaults (**#551**) + APNs h2 (**#550**) |
 
 ## LIVE — iOS notification tap destination #551 (2026-11-28 Asia/Jerusalem)
 
@@ -4025,7 +4037,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (consolidated iOS IPA):** After #551 merge + web FE tip — start Codemagic `fashionrise-ios-app-store` on main (contains #549+#551). TestFlight processing only (`submit_to_testflight=false`, `submit_to_app_store=false`). No AAB. No App Store submit.
+0. **Exact next action (consolidated iOS IPA):** Codemagic build **6b0b2f08…** running on `main` @ `2af5d36c`. When finished: confirm CFBundleVersion >205, TestFlight processing only. No AAB. No App Store submit.
 
 1. **Exact next action (human TF):** Install new IPA; confirm live comments poll + push tap dest still OK on device. Android VC **303** unchanged.
 
