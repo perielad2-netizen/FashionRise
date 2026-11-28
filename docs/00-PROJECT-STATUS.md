@@ -3,7 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:05 Asia/Jerusalem — iOS APNs delivery fixed (missing `h2` on VPS) · Android VC **303** accepted · iOS **1.0.2** train unchanged (no new IPA)
+**Last updated:** 2026-11-28 21:25 Asia/Jerusalem — iOS tap→rankings root cause + harden (#551 path) · APNs #550 merged/deployed · live comments #549 open (coordinate docs) · **no new IPA/AAB**
+
+## LIVE — iOS notification tap destination (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Symptom | TF **1.0.2 / 205**: APNs arrives after #550; tap opens app on **Runway rankings**, not commented design + comments panel. Android VC **303** opens exact dest. |
+| Root cause (demonstrated) | Controlled `_send_apns` probes used **`url=/studio/runway`** (rankings). That destination is honored by shared sanitizer + pending nav — tap→rankings is correct for those payloads, not a Cap plugin miss. |
+| Code defect fixed | APNs/FCM builders defaulted missing `url` to **`/studio/runway`**. Contract fallback is **`/studio/fashionrise`**. APNs body now also nests `data.url` for Cap parity. |
+| Cap event shapes (verified) | **Android:** flat FCM extras → `notification.data.url`. **iOS:** `userInfo` (incl. `aps`) → `notification.data` (`PushNotificationsHandler.swift`). Do **not** assume identical bags. FE: `extractNotificationDestinationUrl`. |
+| Real comments | Producers already emit `/studio/fashionrise?item=&comments=1&comment=` · iOS devices **dest v2** · same `notify_user` path as FCM. |
+| BE deploy | Sufficient for default/nested payload + comment-URL probes — **no IPA required** for that slice. |
+| FE / IPA | `extractNotificationDestinationUrl` + #549 live comments need **one** consolidated IPA later. Build **205** already has dest-contract FE; do **not** start IPA until PM asks. |
+| Unchanged | Android FCM tap · Web/PWA · billing/finance gates · URL validation/auth · no AAB |
+| Docs coord | Preserve this block + APNs #550 block when merging **#549** live-comments PROJECT-STATUS (do not overwrite either checkpoint). |
+| iOS push status | Delivery OK after #550. Exact tap→comment dest **not** declared operational until physical-device receipt of a **real comment URL** probe (not rankings). |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
 

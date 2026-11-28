@@ -83,6 +83,15 @@ Upgraded installs **re-register the existing FCM/APNs token** with
 notification-permission change required. `app_version` is populated from Capacitor
 `App.getInfo()` (`version` + `build`) when available.
 
+## Payload builders (native)
+
+- FCM `build_fcm_message_body` and APNs `build_apns_message_body` default missing
+  `url` to **`/studio/fashionrise`** (never rankings).
+- APNs JSON sets custom `url` / `tag` at the **payload root** (Capacitor iOS
+  `notification.data` = full `userInfo`) and mirrors under `data` for nested readers.
+- Operator probes for destination QA must use a typed FashionRise URL (item/comment/
+  friends). Probing with `/studio/runway` only proves rankings navigation.
+
 ## Rollout
 
 1. **Web SPA + SW** — exact focus for browsers / PWA; SW fixtures pass.

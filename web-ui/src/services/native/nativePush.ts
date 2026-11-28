@@ -17,6 +17,7 @@ import { App } from '@capacitor/app'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
+import { extractNotificationDestinationUrl } from './notificationDestination'
 import { handleNotificationDestination } from './notificationNavigation'
 import { isNativeShell, nativePlatform } from './platform'
 
@@ -235,6 +236,13 @@ function openNotificationUrl(rawUrl: unknown): void {
   handleNotificationDestination(rawUrl)
 }
 
+function openNotificationFromAction(action: {
+  notification?: { data?: Record<string, unknown> | null; link?: unknown } | null
+}): void {
+  // Android FCM extras are flat; iOS Cap puts APNs userInfo (incl. `aps`) in data.
+  openNotificationUrl(extractNotificationDestinationUrl(action?.notification))
+}
+
 const ANDROID_CHANNEL_ID = 'fashionrise_social'
 
 async function ensureAndroidChannels(): Promise<void> {
@@ -304,8 +312,7 @@ export async function installNativePushInteractionListeners(): Promise<void> {
   })
 
   await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-    const data = (action?.notification?.data || {}) as Record<string, unknown>
-    openNotificationUrl(data.url ?? data.path)
+    openNotificationFromAction(action)
   })
 }
 

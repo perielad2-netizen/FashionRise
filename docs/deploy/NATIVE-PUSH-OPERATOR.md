@@ -92,6 +92,7 @@ Both include Associated Domains: `applinks:fashionrise.app`, `applinks:www.fashi
 | IPA | Artifact `FashionRise-3527d410-ios-1.0.2-b205.ipa` · `aps-environment=production` · team `3U3MA53L9P` · bundle `app.fashionrise.studio` · App Store distribution profile |
 | Fix | VPS-only: `pip install 'httpx[http2]…'` + API restart · **no IPA rebuild** |
 | Probe | Controlled `_send_apns` → Apple **accepted** both registered iOS tokens (`ok=True`) |
+| Follow-up (tap destination) | Early probes used `url=/studio/runway` → tap correctly opened **rankings**. Real comments use typed FashionRise URLs. APNs/FCM builders now default missing url to `/studio/fashionrise` and nest `data.url` for Cap parity. |
 
 Static repo checks do **not** replace inspecting the Codemagic-signed IPA; do that on the next authorized native build.
 
@@ -108,7 +109,7 @@ Static repo checks do **not** replace inspecting the Codemagic-signed IPA; do th
 1. Ship FE/BE with flags **false** (this PR).
 2. Operator places credentials; smoke `/push/native/capability`.
 3. Enable Android **or** iOS flag on staging; register from a signed-in native build.
-4. Trigger a Runway like; confirm delivery; tap → `/studio/runway` in-app.
+4. Trigger a Social like/comment; confirm delivery; tap → exact `/studio/fashionrise?item=…` (comments open panel). Do **not** use `/studio/runway` probes for destination QA — that path is rankings-only.
 5. Only then consider production flags — **separate authorization** from store submit.
 
 ## Stop line
