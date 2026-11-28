@@ -3,21 +3,42 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 18:20 Asia/Jerusalem — license testers synced · native social FCM confirmed · GPA.3363 recover_full would 50 · apply OFF · native/web dedupe shipping
+**Last updated:** 2026-11-28 20:00 Asia/Jerusalem — Finance CLOSED · #545 final release corrections (no account Web Push suppression)
 
-## LIVE — License testers + native FCM + GPA.3363 (2026-11-28 Asia/Jerusalem)
+## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Gates | `PURCHASING=false` · `CREDIT=false` · `RECONCILE_ENABLED=true` · **`APPLY=true`** |
+| Interval | **`IAP_GOOGLE_FINANCIAL_RECONCILE_INTERVAL_SECONDS=300`** (was 3600) · limit **50** |
+| First apply tick | **17:27:11Z** · `dry_run=false` · `stars_recovered=50` · `apply_enabled=true` |
+| GPA.3363 | status **refunded** · clawed **50** · one `iap_stars_adjustments` `CANCELED` · balance_after **999347** |
+| Peri wallet | **999347** (from 999397) |
+| Idempotent | Next tick **17:32:12Z** · `dry_run=false` · `stars_recovered=0` · counts `{ok:1}` |
+| Yaniv GPA.3387 | **active** · clawed **0** · wallet untouched |
+| Sandbox | Recovered order environment **Sandbox** · `production_scanned=0` on apply run |
+| Manual claw / RTDN / AAB | **None** |
+| Checkpoint | **CLOSED** — do not modify financial config or run further refund experiments |
+
+## LIVE — Unified notification destinations PR #545 (final corrections) (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Problem | Native comment tap opens Runway **rankings**, not the exact design/comment |
+| Contract | `docs/deploy/PUSH-DESTINATION-CONTRACT.md` — shared BE / SPA / SW + fixtures |
+| Delivery | Web Push + native both fan out; **no** account `prefer_native_push`; per-browser Settings toggle only |
+| Dest contract | Migration **048** = `destination_contract_version` only · v1 keeps `friends=1` · item/comment → Social feed · v2 full typed URLs |
+| Upgrade | Existing token re-registers `destination_contract_version=2` + `app_version` from `App.getInfo` (no logout/reinstall) |
+| Rollout | Merge #545 → web SPA/SW + BE + migrate 048 → health → **one** Android AAB VC>252 (no Play upload, no iOS IPA) |
+| Gates / billing | **Unchanged** by this PR |
+
+## LIVE — License testers + native FCM (archive note) (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | License testers (VPS) | `fashionriseapp@gmail.com`, `perielad@gmail.com`, `perielad2@gmail.com`, `yanivprbk@gmail.com` + preserved `perielad2+iap-sandbox@gmail.com` |
 | Public gates | `PURCHASING=false` · `CREDIT=false` · Sandbox credit only via allowlist |
-| Purchase protection | `perielad@` / `yanivprbk@` unlimited → shop purchasing **OFF**; `perielad2@` finite override (purchase tests) → purchasing **ON** for tester; `fashionriseapp@` finite tester |
-| Native social FCM | **Confirmed** 17:59 IL — Yaniv received real Runway **comment** as native FashionRise notification (also Chrome Web Push → duplicate) |
-| versionCode diagnostics | `native_push_devices.app_version` is **null** for Yaniv/Peri — installed VC **not** available from server diagnostics |
-| Same-device dedupe | Prefer native when active Android/iOS registration + matching mobile Web Push UA; desktop Web Push kept; subscriptions not deleted |
-| GPA.3363 | `stars_50` Sandbox · `orders.get` **REFUNDED** full · entitlement **canceled** · RTDN rows **0** · ledger outstanding **50** · wallet **999397** · dry-run **`recover_full` would 50** · blocked **only** by `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` |
-| Expected after apply | wallet **999397→999347** (50 Stars) — **do not** manual claw; validate via scheduler after PM enablement |
-| Permanent apply | **OFF** — prepared; await explicit authorization |
+| Native social FCM | **Confirmed** — Yaniv received real comment as native notification (also Chrome → duplicate; prefer-native preference addresses) |
 
 ## LIVE — Push + reconcile readiness complete for PM gate (2026-11-27 Asia/Jerusalem)
 

@@ -118,23 +118,30 @@ def test_fcm_message_omits_custom_click_action():
 
 def test_sanitize_push_url_allowlist():
     assert push_service.sanitize_push_url("/studio/runway") == "/studio/runway"
-    assert push_service.sanitize_push_url("https://fashionrise.app/studio/runway") == "/studio/runway"
-    assert push_service.sanitize_push_url("https://evil.example/phish") == "/studio/runway"
-    assert push_service.sanitize_push_url("/api/v1/auth/me") == "/studio/runway"
+    assert (
+        push_service.sanitize_push_url("https://fashionrise.app/studio/runway") == "/studio/runway"
+    )
+    assert push_service.sanitize_push_url("https://evil.example/phish") == "/studio/fashionrise"
+    assert push_service.sanitize_push_url("/api/v1/auth/me") == "/studio/fashionrise"
     # Password-reset / verify / OAuth / token-bearing URLs must never be push destinations.
-    assert push_service.sanitize_push_url("/reset-password#token=abc") == "/studio/runway"
-    assert push_service.sanitize_push_url("/verify-email#token=xyz") == "/studio/runway"
-    assert push_service.sanitize_push_url("/forgot-password") == "/studio/runway"
-    assert push_service.sanitize_push_url("/auth/google/complete#access_token=x") == "/studio/runway"
-    assert push_service.sanitize_push_url("/studio/runway?token=leak") == "/studio/runway"
+    assert push_service.sanitize_push_url("/reset-password#token=abc") == "/studio/fashionrise"
+    assert push_service.sanitize_push_url("/verify-email#token=xyz") == "/studio/fashionrise"
+    assert push_service.sanitize_push_url("/forgot-password") == "/studio/fashionrise"
+    assert (
+        push_service.sanitize_push_url("/auth/google/complete#access_token=x")
+        == "/studio/fashionrise"
+    )
+    assert push_service.sanitize_push_url("/studio/runway?token=leak") == "/studio/fashionrise"
     assert push_service.sanitize_push_url("/privacy") == "/privacy"
-    # Manage friends sheet — only friends=1 on fashionrise is allowed through.
     assert (
         push_service.sanitize_push_url("/studio/fashionrise?friends=1")
         == "/studio/fashionrise?friends=1"
     )
     assert push_service.sanitize_push_url("/studio/runway?friends=1") == "/studio/runway"
-    assert push_service.sanitize_push_url("/studio/fashionrise?friends=1&token=x") == "/studio/runway"
+    assert (
+        push_service.sanitize_push_url("/studio/fashionrise?friends=1&token=x")
+        == "/studio/fashionrise"
+    )
 
 
 def test_register_native_device_idempotent_same_token(client, db_session, monkeypatch):
@@ -219,30 +226,8 @@ def test_notify_skips_native_when_disabled(client, db_session, monkeypatch):
     _ = tokens
 
 
-def test_web_push_ua_platform_detection():
-    assert (
-        push_service.web_push_ua_platform(
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/157.0.0.0 Mobile Safari/537.36"
-        )
-        == "android"
-    )
-    assert (
-        push_service.web_push_ua_platform(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
-        )
-        == "ios"
-    )
-    assert (
-        push_service.web_push_ua_platform(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-        )
-        is None
-    )
-    assert push_service.web_push_ua_platform(None) is None
-
-
-def test_notify_prefers_native_over_same_device_web_push(client, db_session, monkeypatch):
-    """Android Chrome Web Push is skipped when an active native Android token exists."""
+def test_notify_delivers_web_and_native_without_ua_suppression(client, db_session, monkeypatch):
+    """UA matching is not reliable device association — do not suppress Web Push."""
     _enable_android_flags(monkeypatch)
     monkeypatch.setenv("VAPID_PUBLIC_KEY", "BK" + ("x" * 86))
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "private-test-key")
@@ -266,17 +251,7 @@ def test_notify_prefers_native_over_same_device_web_push(client, db_session, mon
             "(KHTML, like Gecko) Chrome/157.0.0.0 Mobile Safari/537.36"
         ),
     )
-    desktop_web = PushSubscription(
-        user_id=user.id,
-        endpoint="https://fcm.googleapis.com/fcm/send/desktop-chrome",
-        p256dh="p256dh-desktop",
-        auth="auth-desktop",
-        user_agent=(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
-    )
-    db_session.add_all([android_web, desktop_web])
+    db_session.add(android_web)
     db_session.commit()
 
     with (
@@ -284,16 +259,9 @@ def test_notify_prefers_native_over_same_device_web_push(client, db_session, mon
         patch.object(push_service, "_send_one", return_value=(True, False)) as send_web,
     ):
         n = push_service.notify_user(
-            db_session, user.id, title="New comment", body="dup check", tag="runway-comment-x"
+            db_session, user.id, title="New comment", body="dup check", tag="fr-comment-x"
         )
         assert send_fcm.call_count == 1
-        assert send_web.call_count == 1  # desktop only
-        assert send_web.call_args.args[0].endpoint.endswith("desktop-chrome")
+        assert send_web.call_count == 1
         assert n == 2
-
-    # Subscriptions retained (skip is send-time only).
-    remaining = (
-        db_session.query(PushSubscription).filter(PushSubscription.user_id == user.id).count()
-    )
-    assert remaining == 2
     _ = tokens

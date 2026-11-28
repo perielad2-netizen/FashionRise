@@ -335,7 +335,8 @@ workflows:
         # Prior Internal VC 219 (build index/project + offset 120). Next stamp must be >219.
         # Prior Internal VC 230 (offset 130). Tap-open fix AAB must be >230.
         # Prior Internal VC 241 (offset 140). Friend-alerts FE AAB must be >241.
-        ANDROID_VERSION_CODE_OFFSET: "150"
+        # Prior Internal VC 252 (friend alerts). Dest-contract AAB must be >252.
+        ANDROID_VERSION_CODE_OFFSET: "200"
       node: 22
       java: 21
 

@@ -735,11 +735,26 @@ def record_gallery_impressions(
     return recorded
 
 
-def get_gallery_item(db: Session, item_id: uuid.UUID) -> GalleryItem:
+def get_gallery_item(
+    db: Session, item_id: uuid.UUID, *, viewer: User | None = None
+) -> GalleryItem:
+    """Public gallery item with the same exclusions as normal feeds.
+
+    Hides deleted underlying Magic looks and items the viewer previously reported.
+    """
     item = db.get(GalleryItem, item_id)
     if not item:
         raise NotFoundError("Gallery item not found")
     if item.visibility != "public" or item.moderation_status != "ok":
+        raise NotFoundError("Gallery item not found")
+    # Match feed: orphan / deleted-look publishes are not navigable.
+    if item.look_id is not None:
+        from app.models.magic_look_meta import MagicLookMeta
+
+        meta = db.get(MagicLookMeta, item.look_id)
+        if meta is not None and bool(getattr(meta, "is_deleted", False)):
+            raise NotFoundError("Gallery item not found")
+    if viewer is not None and item.id in _viewer_reported_gallery_ids(db, viewer.id):
         raise NotFoundError("Gallery item not found")
     return item
 
@@ -788,7 +803,11 @@ def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> Non
     from app.services import push_service as push_service
 
     push_service.notify_runway_like(
-        db, owner_id=item.user_id, actor=user, look_title=item.title
+        db,
+        owner_id=item.user_id,
+        actor=user,
+        look_title=item.title,
+        gallery_item_id=item.id,
     )
 
 
@@ -896,6 +915,8 @@ def add_gallery_comment(
         actor=user,
         look_title=item.title,
         snippet=body,
+        gallery_item_id=item.id,
+        comment_id=row.id,
     )
     # Reload with author for Runway username chip.
     loaded = db.scalar(
@@ -924,7 +945,14 @@ def add_comment_like(db: Session, user: User, comment_id: uuid.UUID) -> GalleryC
     db.refresh(row)
     from app.services import push_service as push_service
 
-    push_service.notify_comment_like(db, author_id=row.user_id, actor=user, snippet=row.body)
+    push_service.notify_comment_like(
+        db,
+        author_id=row.user_id,
+        actor=user,
+        snippet=row.body,
+        gallery_item_id=row.gallery_item_id,
+        comment_id=row.id,
+    )
     return get_gallery_comment(db, row.id)
 
 

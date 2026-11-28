@@ -46,6 +46,7 @@ def upsert_rating(db: Session, user: User, data: RatingCreate) -> Rating:
         actor=user,
         score=int(data.score),
         look_title=item.title,
+        gallery_item_id=item.id,
     )
     return r
 

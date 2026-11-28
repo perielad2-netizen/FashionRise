@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -111,7 +112,16 @@ type Props = {
   onOwnProfileConsumed?: () => void
   /** Deep-link → open Manage friends (`?friends=1`). */
   openFriends?: boolean
+  /** Optional friends subsection from push (`section=requests|accepted`). */
+  friendsSection?: 'requests' | 'accepted' | null
+  /** Optional friendship id to highlight in Manage friends. */
+  focusFriendshipId?: string | null
   onFriendsConsumed?: () => void
+  /** Push deep-link: public GalleryItem UUID (`?item=`). Not My Looks `?look=`. */
+  focusGalleryItemId?: string | null
+  focusOpenComments?: boolean
+  focusCommentId?: string | null
+  onGalleryFocusConsumed?: () => void
   /**
    * Notify shell whether FashionRise is showing the immersive feed.
    * false → GlobalHeader (profile, Friends manage, etc.); true → full-bleed feed.
@@ -194,7 +204,13 @@ export function RunwayScreen({
   openOwnProfile = false,
   onOwnProfileConsumed,
   openFriends = false,
+  friendsSection = null,
+  focusFriendshipId = null,
   onFriendsConsumed,
+  focusGalleryItemId = null,
+  focusOpenComments = false,
+  focusCommentId = null,
+  onGalleryFocusConsumed,
   onImmersiveFeedChange,
   feedFocusToken = 0,
 }: Props) {
@@ -214,6 +230,16 @@ export function RunwayScreen({
   const [friendSearchBusy, setFriendSearchBusy] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [friendNotice, setFriendNotice] = useState<string | null>(null)
+  const [friendsPanelSection, setFriendsPanelSection] = useState<'requests' | 'accepted' | null>(
+    null,
+  )
+  const [highlightFriendshipId, setHighlightFriendshipId] = useState<string | null>(null)
+  const [pinnedFocusItem, setPinnedFocusItem] = useState<GalleryItem | null>(null)
+  const [focusNotice, setFocusNotice] = useState<string | null>(null)
+  const [cardAutoOpenComments, setCardAutoOpenComments] = useState(false)
+  const [cardFocusCommentId, setCardFocusCommentId] = useState<string | null>(null)
+  const galleryFocusGenRef = useRef(0)
+  const pinnedCardRef = useRef<HTMLLIElement | null>(null)
   const [pushOn, setPushOn] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushLocked, setPushLocked] = useState(false)
@@ -258,8 +284,64 @@ export function RunwayScreen({
     setBrowseSheet(null)
     setMenuOpen(false)
     setTab('friends')
+    setFriendsPanelSection(friendsSection)
+    setHighlightFriendshipId(focusFriendshipId)
     onFriendsConsumed?.()
-  }, [openFriends, onFriendsConsumed])
+  }, [openFriends, friendsSection, focusFriendshipId, onFriendsConsumed])
+
+  // Push / deep-link: pin exact GalleryItem and scroll it into view.
+  useEffect(() => {
+    const itemId = (focusGalleryItemId || '').trim()
+    if (!itemId) {
+      // Leaving a notification target clears pin when URL focus is gone after consume
+      // only if we are no longer on discover with an active pin from a prior gen — keep pin
+      // until a new focus or explicit removal.
+      return
+    }
+    const gen = ++galleryFocusGenRef.current
+    setViewingDesigner(null)
+    setBrowseSheet(null)
+    setMenuOpen(false)
+    setTab('discover')
+    setFocusNotice(null)
+    setCardAutoOpenComments(false)
+    setCardFocusCommentId(null)
+    setPinnedFocusItem(null)
+    let cancelled = false
+    void getGalleryItem(itemId)
+      .then((item) => {
+        if (cancelled || gen !== galleryFocusGenRef.current) return
+        setPinnedFocusItem(item)
+        setCardAutoOpenComments(Boolean(focusOpenComments))
+        setCardFocusCommentId(focusCommentId)
+        onGalleryFocusConsumed?.()
+      })
+      .catch(() => {
+        if (cancelled || gen !== galleryFocusGenRef.current) return
+        setPinnedFocusItem(null)
+        setCardAutoOpenComments(false)
+        setCardFocusCommentId(null)
+        setFocusNotice('That look is no longer available.')
+        onGalleryFocusConsumed?.()
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    focusGalleryItemId,
+    focusOpenComments,
+    focusCommentId,
+    onGalleryFocusConsumed,
+  ])
+
+  useEffect(() => {
+    if (!pinnedFocusItem) return
+    const el = pinnedCardRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
+  }, [pinnedFocusItem?.id, cardFocusCommentId, cardAutoOpenComments])
 
   const immersiveFeed = !viewingDesigner && tab !== 'friends'
   useEffect(() => {
@@ -736,6 +818,9 @@ export function RunwayScreen({
   )
 
   const patchItem = useCallback((next: GalleryItem) => {
+    setPinnedFocusItem((prev) =>
+      prev && prev.id === next.id ? { ...prev, ...next } : prev,
+    )
     setState((prev) => {
       if (prev.status !== 'ready') return prev
       const rewrite = (rows: GalleryItem[]) =>
@@ -752,6 +837,15 @@ export function RunwayScreen({
 
   /** Drop deleted/orphan publishes that fail image load (black empty reel). */
   const removeUnavailableItem = useCallback((galleryItemId: string) => {
+    setPinnedFocusItem((prev) => {
+      if (prev && prev.id === galleryItemId) {
+        setFocusNotice('That look is no longer available.')
+        setCardAutoOpenComments(false)
+        setCardFocusCommentId(null)
+        return null
+      }
+      return prev
+    })
     setState((prev) => {
       if (prev.status !== 'ready') return prev
       const drop = (rows: GalleryItem[]) => rows.filter((row) => row.id !== galleryItemId)
@@ -801,6 +895,12 @@ export function RunwayScreen({
             ? state.circle
             : state.discover
       : []
+
+  const displayFeedItems = (() => {
+    if (tab !== 'discover' || !pinnedFocusItem) return feedItems
+    const rest = feedItems.filter((row) => row.id !== pinnedFocusItem.id)
+    return [pinnedFocusItem, ...rest]
+  })()
 
   const feedLabel = 'FashionRise feed'
 
@@ -999,6 +1099,8 @@ export function RunwayScreen({
               searchBusy={friendSearchBusy}
               busy={friendBusy}
               notice={friendNotice}
+              focusSection={friendsPanelSection}
+              highlightFriendshipId={highlightFriendshipId}
               onQueryChange={setFriendQuery}
               onSearch={(e) => void onSearchFriends(e)}
               onRequest={(userId) => void onRequestFromSearch(userId)}
@@ -1024,7 +1126,7 @@ export function RunwayScreen({
               </button>
             }
           />
-        ) : feedItems.length === 0 ? (
+        ) : displayFeedItems.length === 0 && !focusNotice ? (
           <EmptyState
             title={
               tab === 'top'
@@ -1063,8 +1165,14 @@ export function RunwayScreen({
           />
         ) : (
           <>
+            {focusNotice ? (
+              <p className={styles.status} role="status" data-testid="runway-focus-notice">
+                {focusNotice}
+              </p>
+            ) : null}
+            {displayFeedItems.length === 0 ? null : (
             <ul className={`${styles.immersiveFeed} ${styles.feedSnap}`} aria-label={feedLabel}>
-              {feedItems.map((item, index) => (
+              {displayFeedItems.map((item, index) => (
                 <RunwayCard
                   key={item.id}
                   item={item}
@@ -1078,6 +1186,21 @@ export function RunwayScreen({
                   onHideReported={removeUnavailableItem}
                   onOpenDesigner={(designer) => setViewingDesigner(designer)}
                   onOpenFittingRoom={onOpenFittingRoom}
+                  autoOpenComments={
+                    Boolean(pinnedFocusItem && item.id === pinnedFocusItem.id && cardAutoOpenComments)
+                  }
+                  focusCommentId={
+                    pinnedFocusItem && item.id === pinnedFocusItem.id ? cardFocusCommentId : null
+                  }
+                  onFocusCommentsConsumed={() => {
+                    setCardAutoOpenComments(false)
+                    setCardFocusCommentId(null)
+                  }}
+                  rootRef={
+                    pinnedFocusItem && item.id === pinnedFocusItem.id
+                      ? pinnedCardRef
+                      : undefined
+                  }
                   onVisibleImpression={
                     tab === 'discover' && viewerId && item.user_id !== viewerId
                       ? reportDiscoverImpression
@@ -1100,6 +1223,7 @@ export function RunwayScreen({
                 </li>
               ) : null}
             </ul>
+            )}
           </>
         )}
       </div>
@@ -1322,6 +1446,8 @@ function FriendsPanel({
   searchBusy,
   busy,
   notice,
+  focusSection = null,
+  highlightFriendshipId = null,
   onQueryChange,
   onSearch,
   onRequest,
@@ -1338,6 +1464,8 @@ function FriendsPanel({
   searchBusy: boolean
   busy: boolean
   notice: string | null
+  focusSection?: 'requests' | 'accepted' | null
+  highlightFriendshipId?: string | null
   onQueryChange: (value: string) => void
   onSearch: (event: FormEvent) => void
   onRequest: (userId: string) => void
@@ -1352,6 +1480,15 @@ function FriendsPanel({
 }) {
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const requestsSectionRef = useRef<HTMLElement | null>(null)
+  const acceptedSectionRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!focusSection) return
+    const node =
+      focusSection === 'requests' ? requestsSectionRef.current : acceptedSectionRef.current
+    node?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focusSection, state])
 
   // Keep Find friends row visible when the soft keyboard opens.
   // Do NOT pad by visualViewport occlusion — that stacked with `--fr-vv-height`
@@ -1554,7 +1691,12 @@ function FriendsPanel({
       {ready ? (
         <>
           {state.requests.length > 0 ? (
-            <section className={styles.friendSection} aria-label="Friend requests">
+            <section
+              ref={requestsSectionRef}
+              className={styles.friendSection}
+              aria-label="Friend requests"
+              data-focus-section={focusSection === 'requests' ? '1' : undefined}
+            >
               <div className={styles.friendSectionHead}>
                 <h2 className={styles.friendSectionTitle}>Friend requests</h2>
                 <span className={styles.friendSectionCount}>{state.requests.length}</span>
@@ -1562,8 +1704,15 @@ function FriendsPanel({
               <ul className={styles.friendList} data-testid="friend-requests-list">
                 {state.requests.map((row) => {
                   const label = row.friend.display_name || row.friend.username
+                  const highlighted = highlightFriendshipId === row.id
                   return (
-                    <li key={row.id} className={`${styles.friendCard} ${styles.friendCardRequest}`}>
+                    <li
+                      key={row.id}
+                      className={`${styles.friendCard} ${styles.friendCardRequest}${
+                        highlighted ? ` ${styles.friendCardHighlight}` : ''
+                      }`}
+                      data-highlight={highlighted ? '1' : undefined}
+                    >
                       <button
                         type="button"
                         className={styles.friendOpen}
@@ -1667,7 +1816,12 @@ function FriendsPanel({
             </section>
           ) : null}
 
-          <section className={styles.friendSection} aria-label="Your friends">
+          <section
+            ref={acceptedSectionRef}
+            className={styles.friendSection}
+            aria-label="Your friends"
+            data-focus-section={focusSection === 'accepted' ? '1' : undefined}
+          >
             <div className={styles.friendSectionHead}>
               <h2 className={styles.friendSectionTitle}>Your circle</h2>
               <span className={styles.friendSectionCount}>{state.friends.length}</span>
@@ -1691,8 +1845,15 @@ function FriendsPanel({
               <ul className={styles.friendList}>
                 {state.friends.map((row) => {
                   const label = row.friend.display_name || row.friend.username
+                  const highlighted = highlightFriendshipId === row.id
                   return (
-                    <li key={row.id} className={styles.friendCard}>
+                    <li
+                      key={row.id}
+                      className={`${styles.friendCard}${
+                        highlighted ? ` ${styles.friendCardHighlight}` : ''
+                      }`}
+                      data-highlight={highlighted ? '1' : undefined}
+                    >
                       <button
                         type="button"
                         className={styles.friendOpen}
@@ -1790,6 +1951,10 @@ function RunwayCard({
   onOpenDesigner,
   onOpenFittingRoom,
   onVisibleImpression,
+  autoOpenComments = false,
+  focusCommentId = null,
+  onFocusCommentsConsumed,
+  rootRef,
 }: {
   item: GalleryItem
   rank?: number
@@ -1807,12 +1972,26 @@ function RunwayCard({
   onOpenFittingRoom?: () => void
   /** Discover: fire once when the card is meaningfully on-screen (not on API load). */
   onVisibleImpression?: (galleryItemId: string) => void
+  autoOpenComments?: boolean
+  focusCommentId?: string | null
+  onFocusCommentsConsumed?: () => void
+  /** Optional external ref (e.g. scroll pinned notification target into view). */
+  rootRef?: RefObject<HTMLLIElement | null>
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
   const mediaGone =
     Boolean(item.look_id) && !authImg.loading && !src && Boolean(authImg.error)
   const cardRef = useRef<HTMLLIElement | null>(null)
+  const setCardNode = useCallback(
+    (node: HTMLLIElement | null) => {
+      cardRef.current = node
+      if (rootRef) {
+        ;(rootRef as { current: HTMLLIElement | null }).current = node
+      }
+    },
+    [rootRef],
+  )
   const impressionSentRef = useRef(false)
   /** Immersive double-tap like — Instagram-style (like only + heart burst). */
   const tapStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1833,6 +2012,8 @@ function RunwayCard({
   const [draft, setDraft] = useState('')
   const [followingDesigner, setFollowingDesigner] = useState(false)
   const [followKnown, setFollowKnown] = useState(false)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
+  const [commentFocusNotice, setCommentFocusNotice] = useState<string | null>(null)
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
   const immersive = layout === 'immersive'
@@ -1852,6 +2033,48 @@ function RunwayCard({
   }, [item.id])
 
   useEffect(() => {
+    if (!autoOpenComments) return
+    setCommentsOpen(true)
+    setCommentFocusNotice(null)
+    let cancelled = false
+    void listGalleryComments(item.id)
+      .then((rows) => {
+        if (cancelled) return
+        setComments(rows)
+        setCommentsCount(rows.length)
+        const want = (focusCommentId || '').trim()
+        if (want) {
+          const match = rows.find((row) => row.id === want)
+          if (match) {
+            setHighlightedCommentId(match.id)
+          } else {
+            setHighlightedCommentId(null)
+            setCommentFocusNotice('That comment is no longer available.')
+          }
+        }
+        // Defer consuming focus flags so autoOpenComments stays true through this paint
+        // (parent clearing it must not cancel before comments commit).
+        queueMicrotask(() => {
+          if (cancelled) return
+          onItemChange({ ...item, comments_count: rows.length })
+          onFocusCommentsConsumed?.()
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
+        queueMicrotask(() => {
+          if (!cancelled) onFocusCommentsConsumed?.()
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+    // Intentionally keyed on autoOpenComments + ids — avoid re-running on item object churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenComments, focusCommentId, item.id])
+
+  useEffect(() => {
     if (heartBurstKey <= 0) return
     const timer = window.setTimeout(() => setHeartBurstKey(0), 780)
     return () => window.clearTimeout(timer)
@@ -1862,12 +2085,17 @@ function RunwayCard({
     onMediaUnavailable(item.id)
   }, [item.id, mediaGone, onMediaUnavailable])
 
+  const prevItemIdRef = useRef(item.id)
   useEffect(() => {
+    if (prevItemIdRef.current === item.id) return
+    prevItemIdRef.current = item.id
     setComments(null)
     setCommentsOpen(false)
     setCommentsCount(Math.max(0, Number(item.comments_count ?? 0)))
+    setHighlightedCommentId(null)
+    setCommentFocusNotice(null)
     // Only reset when the card switches looks — bumping comments_count after load must not clear rows.
-  }, [item.id])
+  }, [item.id, item.comments_count])
 
   useEffect(() => {
     if (comments != null) return
@@ -2457,7 +2685,7 @@ function RunwayCard({
 
   return (
     <li
-      ref={cardRef}
+      ref={setCardNode}
       className={cardClass}
       data-gallery-item-id={item.id}
       data-testid={onVisibleImpression ? `runway-discover-card-${item.id}` : undefined}
@@ -2697,11 +2925,30 @@ function RunwayCard({
                     <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
                   ) : (
                     <ul className={styles.commentList} aria-label="Comments">
+                      {commentFocusNotice ? (
+                        <li className={styles.commentsStatus} role="status">
+                          {commentFocusNotice}
+                        </li>
+                      ) : null}
                       {comments.map((row) => {
                         const ownComment = Boolean(viewerId && row.user_id === viewerId)
                         const commentLiked = Boolean(row.liked_by_me)
+                        const highlighted = highlightedCommentId === row.id
                         return (
-                          <li key={row.id} className={styles.commentItem}>
+                          <li
+                            key={row.id}
+                            className={`${styles.commentItem}${
+                              highlighted ? ` ${styles.commentItemHighlight}` : ''
+                            }`}
+                            data-highlight={highlighted ? '1' : undefined}
+                            ref={
+                              highlighted
+                                ? (node) => {
+                                    node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                                  }
+                                : undefined
+                            }
+                          >
                             <div className={styles.commentMain}>
                               <span className={styles.commentAuthor}>
                                 @{row.username || 'member'}

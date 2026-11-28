@@ -38,6 +38,7 @@ class NativePushDeviceCreate(BaseModel):
     platform: Literal["android", "ios"]
     device_token: str = Field(min_length=16, max_length=4096)
     app_version: str | None = Field(default=None, max_length=64)
+    destination_contract_version: int = Field(default=1, ge=1, le=10)
 
 
 class NativePushDeviceRead(BaseModel):
@@ -46,6 +47,8 @@ class NativePushDeviceRead(BaseModel):
     # Owner's own device token — required so the client can confirm backend
     # registration for the current account/device (not local cache alone).
     device_token: str
+    destination_contract_version: int = 1
+    app_version: str | None = None
     created_at: datetime
     updated_at: datetime
 

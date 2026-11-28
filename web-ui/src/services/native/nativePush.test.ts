@@ -35,6 +35,12 @@ vi.mock('@/services/auth/tokenStore', () => ({
   },
 }))
 
+vi.mock('@capacitor/app', () => ({
+  App: {
+    getInfo: vi.fn(async () => ({ id: 'app.fashionrise', name: 'FashionRise', version: '1.0', build: '253' })),
+  },
+}))
+
 vi.mock('@capacitor/push-notifications', () => ({
   PushNotifications: {
     addListener: vi.fn(async () => ({ remove: vi.fn() })),
@@ -100,7 +106,15 @@ describe('nativePush', () => {
     expect(result).toBe('granted')
     expect(apiRequest).toHaveBeenCalledWith(
       '/push/native/devices',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({
+          platform: 'android',
+          device_token: token,
+          destination_contract_version: 2,
+          app_version: '1.0 (253)',
+        }),
+      }),
     )
     expect(apiRequest).toHaveBeenCalledWith('/push/native/devices')
     expect(getLastNativePushDiagnostic()?.stage).toBe('ok')

@@ -150,3 +150,41 @@ describe('LoginPage validation', () => {
     })
   })
 })
+
+describe('LoginPage Google OAuth destination', () => {
+  const ITEM = '11111111-1111-4111-8111-111111111111'
+
+  beforeEach(() => {
+    login.mockReset()
+    authState.googleOAuthAvailable = true
+    authState.isAuthenticated = false
+    authState.bootstrapping = false
+  })
+
+  afterEach(() => {
+    authState.googleOAuthAvailable = false
+    vi.unstubAllGlobals()
+  })
+
+  it('preserves fashionrise item query in Google OAuth next path', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/login',
+            state: { from: `/studio/fashionrise?item=${ITEM}&comments=1` },
+          },
+        ]}
+      >
+        <LoginPage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Continue with Google/i }))
+    expect(assign).toHaveBeenCalled()
+    const url = String(assign.mock.calls[0][0])
+    expect(url).toContain('/auth/google/start')
+    expect(url).toContain(encodeURIComponent(`/studio/fashionrise?item=${ITEM}&comments=1`))
+  })
+})

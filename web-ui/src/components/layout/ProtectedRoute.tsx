@@ -17,7 +17,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    // Preserve query (push destinations use ?item= / ?friends=1 / ?comment=).
+    const from = `${location.pathname}${location.search || ''}`
+    return <Navigate to="/login" replace state={{ from }} />
   }
 
   return <>{children}</>

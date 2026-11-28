@@ -8,8 +8,11 @@ import { sanitizePushDestination } from './pushDestination'
 import { navigateInApp } from './urlPolicy'
 
 const PENDING_KEY = 'fr.push.pendingDestination.v1'
+/** Pending destinations expire so logout/session gaps cannot revive stale taps. */
+const PENDING_TTL_MS = 30 * 60 * 1000
 
 let pendingPath: string | null = null
+let pendingExpiresAt = 0
 let lastNavigatedPath: string | null = null
 let lastNavigatedAt = 0
 let ready = false
@@ -17,14 +20,17 @@ let ready = false
 /** Deduplicate rapid duplicate taps / retained plugin events (ms). */
 const DEDUPE_MS = 2500
 
-function persistPending(path: string | null): void {
+type PersistedPending = { path: string; exp: number }
+
+function persistPending(path: string | null, exp = 0): void {
   if (typeof window === 'undefined') return
   try {
     if (!path) {
       localStorage.removeItem(PENDING_KEY)
       return
     }
-    localStorage.setItem(PENDING_KEY, path)
+    const payload: PersistedPending = { path, exp: exp || Date.now() + PENDING_TTL_MS }
+    localStorage.setItem(PENDING_KEY, JSON.stringify(payload))
   } catch {
     /* private mode */
   }
@@ -35,10 +41,31 @@ function readPersistedPending(): string | null {
   try {
     const raw = localStorage.getItem(PENDING_KEY)
     if (!raw) return null
-    return sanitizePushDestination(raw)
+    // Legacy: bare path string
+    if (raw.startsWith('/')) {
+      const safe = sanitizePushDestination(raw)
+      persistPending(null)
+      return safe
+    }
+    const parsed = JSON.parse(raw) as PersistedPending
+    if (!parsed?.path || typeof parsed.exp !== 'number') {
+      persistPending(null)
+      return null
+    }
+    if (Date.now() > parsed.exp) {
+      persistPending(null)
+      return null
+    }
+    return sanitizePushDestination(parsed.path)
   } catch {
+    persistPending(null)
     return null
   }
+}
+
+function clearMemoryPending(): void {
+  pendingPath = null
+  pendingExpiresAt = 0
 }
 
 /** Mark SPA auth + router ready to consume a pending push destination. */
@@ -54,6 +81,7 @@ export function isNotificationNavigationReady(): boolean {
 /**
  * Queue or navigate to a sanitized push destination.
  * Rejects unsafe paths via sanitizePushDestination.
+ * Rapid taps: latest destination wins (overwrites pending / navigates anew).
  */
 export function handleNotificationDestination(rawUrl: unknown): string {
   const path = sanitizePushDestination(rawUrl)
@@ -68,11 +96,12 @@ export function handleNotificationDestination(rawUrl: unknown): string {
 
   if (!ready) {
     pendingPath = path
-    persistPending(path)
+    pendingExpiresAt = now + PENDING_TTL_MS
+    persistPending(path, pendingExpiresAt)
     return path
   }
 
-  pendingPath = null
+  clearMemoryPending()
   persistPending(null)
   lastNavigatedPath = path
   lastNavigatedAt = now
@@ -83,11 +112,15 @@ export function handleNotificationDestination(rawUrl: unknown): string {
 /** Process a stored pending destination once the shell is ready. */
 export function flushPendingNotificationDestination(): string | null {
   if (!ready) return null
+  const now = Date.now()
+  if (pendingPath && pendingExpiresAt && now > pendingExpiresAt) {
+    clearMemoryPending()
+    persistPending(null)
+  }
   const path = pendingPath || readPersistedPending()
   if (!path) return null
-  pendingPath = null
+  clearMemoryPending()
   persistPending(null)
-  const now = Date.now()
   if (lastNavigatedPath === path && now - lastNavigatedAt < DEDUPE_MS) {
     return path
   }
@@ -98,12 +131,30 @@ export function flushPendingNotificationDestination(): string | null {
 }
 
 export function peekPendingNotificationDestination(): string | null {
-  return pendingPath || readPersistedPending()
+  const now = Date.now()
+  if (pendingPath) {
+    if (pendingExpiresAt && now > pendingExpiresAt) {
+      clearMemoryPending()
+      persistPending(null)
+    } else {
+      return pendingPath
+    }
+  }
+  return readPersistedPending()
+}
+
+/**
+ * Drop queued destinations on logout / account switch so the next user cannot
+ * inherit another account's notification target.
+ */
+export function clearPendingNotificationDestination(): void {
+  clearMemoryPending()
+  persistPending(null)
 }
 
 /** Test helper — clear module state between unit tests. */
 export function _resetNotificationNavigationForTests(): void {
-  pendingPath = null
+  clearMemoryPending()
   lastNavigatedPath = null
   lastNavigatedAt = 0
   ready = false

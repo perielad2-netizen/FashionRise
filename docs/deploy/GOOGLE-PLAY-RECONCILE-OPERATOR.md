@@ -1,21 +1,21 @@
 # Google Play financial reconcile — operator readiness
 
-**Persistent apply stays OFF** until separate PM approval. This document is the
-activation and safety runbook for unattended hourly recovery.
+**Persistent apply is ON** (PM-authorized 2026-11-28). Purchasing/credit stay OFF.
+This document remains the activation and safety runbook for unattended recovery.
 
 ## Feature gates (production)
 
-| Env | Required state until PM enablement |
+| Env | Live state (2026-11-28) |
 | --- | --- |
-| `IAP_GOOGLE_FINANCIAL_RECONCILE_ENABLED` | `true` (detection / dry-run ticks) |
-| `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY` | **`false`** |
+| `IAP_GOOGLE_FINANCIAL_RECONCILE_ENABLED` | `true` |
+| `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY` | **`true`** |
 | `IAP_GOOGLE_PURCHASING_ENABLED` | **`false`** |
 | `IAP_GOOGLE_CREDIT_ENABLED` | **`false`** |
 | `IAP_GOOGLE_FINANCIAL_RECONCILE_LIMIT` | `50` (bounded batch) |
-| `IAP_GOOGLE_FINANCIAL_RECONCILE_INTERVAL_SECONDS` | `3600` |
+| `IAP_GOOGLE_FINANCIAL_RECONCILE_INTERVAL_SECONDS` | **`300`** (5 minutes) |
 
-Emergency disable: set `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` (already)
-and/or `IAP_GOOGLE_FINANCIAL_RECONCILE_ENABLED=false`, then restart API workers.
+Emergency disable: set `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false`
+and/or `IAP_GOOGLE_FINANCIAL_RECONCILE_ENABLED=false`, then restart API + AI workers.
 
 ## Architecture
 

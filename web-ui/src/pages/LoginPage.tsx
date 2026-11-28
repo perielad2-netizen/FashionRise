@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { canAdvertiseRegistration } from '@/config/registrationUi'
@@ -9,7 +9,24 @@ import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { openAndroidGoogleOAuth } from '@/services/native/googleOAuthReturn'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
+import { sanitizePushDestination } from '@/services/native/pushDestination'
+import { peekPendingNotificationDestination } from '@/services/native/notificationNavigation'
 import styles from './LoginPage.module.css'
+
+function safePostLoginPath(candidate: unknown): string {
+  if (typeof candidate !== 'string' || !candidate.trim()) return '/studio/home'
+  const raw = candidate.trim()
+  // Push destinations (and other studio deep links) — never auth/token routes.
+  if (raw.startsWith('/studio') || raw.startsWith('/privacy')) {
+    // Reuse push sanitizer for studio query allowlist; plain /studio/home stays.
+    if (raw === '/studio/home' || raw.startsWith('/studio/home?')) return '/studio/home'
+    if (raw.startsWith('/studio/fashionrise') || raw.startsWith('/studio/runway')) {
+      return sanitizePushDestination(raw)
+    }
+    if (raw.startsWith('/studio/') && !raw.includes('?') && !raw.includes('#')) return raw
+  }
+  return '/studio/home'
+}
 
 export function LoginPage() {
   const {
@@ -21,6 +38,7 @@ export function LoginPage() {
     passwordResetAvailable,
   } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,13 +51,20 @@ export function LoginPage() {
     registrationStatus?.registration_available ?? null,
   )
 
+  const postLoginPath = useMemo(() => {
+    const fromState = (location.state as { from?: string } | null)?.from
+    const pending = peekPendingNotificationDestination()
+    // Prefer an explicit protected-route return, then a queued push destination.
+    return safePostLoginPath(fromState || pending || '/studio/home')
+  }, [location.state])
+
   useEffect(() => {
     const err = searchParams.get('error')
     if (err) setFormError(err)
   }, [searchParams])
 
   if (bootstrapping) return null
-  if (isAuthenticated) return <Navigate to="/studio/home" replace />
+  if (isAuthenticated) return <Navigate to={postLoginPath} replace />
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -56,7 +81,7 @@ export function LoginPage() {
     setBusy(true)
     try {
       await login({ email: validated.email, password: validated.password })
-      navigate('/studio/home', { replace: true })
+      navigate(postLoginPath, { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
         setFormError(err.message)
@@ -71,7 +96,10 @@ export function LoginPage() {
   function onGoogle() {
     if (busy) return
     const androidNative = isNativeShell() && nativePlatform() === 'android'
-    const startUrl = getGoogleOAuthStartUrl('/studio/home', {
+    // Preserve the full validated destination (incl. typed FashionRise query) in
+    // signed OAuth state. Backend re-sanitizes `next` before minting state.
+    const nextPath = safePostLoginPath(postLoginPath)
+    const startUrl = getGoogleOAuthStartUrl(nextPath, {
       client: androidNative ? 'android' : 'web',
     })
     if (androidNative) {

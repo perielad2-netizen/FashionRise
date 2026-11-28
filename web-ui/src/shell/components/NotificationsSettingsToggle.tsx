@@ -18,6 +18,9 @@ import styles from './GlobalHeader.module.css'
  * Preference / visibility — not a mandatory second activation.
  * If OS permission is already granted and the user has not opted out,
  * auto-register FCM/APNs and confirm backend registration.
+ *
+ * Browser toggle is per-browser (local + that subscription only).
+ * Native toggle is per installed app. Neither suppresses the other channel.
  */
 export function NotificationsSettingsToggle() {
   const [on, setOn] = useState(false)
@@ -142,7 +145,7 @@ export function NotificationsSettingsToggle() {
           <p className={styles.notifHint}>
             {native
               ? 'Likes, comments, and friend alerts on this device'
-              : 'Likes, comments, and friend alerts in this browser'}
+              : 'Likes, comments, and friend alerts in this browser only — other browsers and the app keep their own setting'}
           </p>
         </div>
         <button
