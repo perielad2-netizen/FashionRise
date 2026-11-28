@@ -3,7 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:05 Asia/Jerusalem — iOS APNs delivery fixed (missing `h2` on VPS) · Android VC **303** accepted · iOS **1.0.2** train unchanged (no new IPA)
+**Last updated:** 2026-11-28 21:30 Asia/Jerusalem — Live comments #549 bounded like-guards + empty-count sync · merge + FE tip · APNs #550 preserved · iOS tap-dest #551 independent · no AAB/IPA
+
+## LIVE — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| PR | **#549** · merge + **web FE tip** (no AAB/IPA) |
+| Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
+| Prior PM corrections | Authoritative snapshots · like protect until settle · lifecycle abort · pure updaters · Cap cleanup |
+| Bounded pre-merge | Per-comment like/unlike **in-flight guard** · seq-aware **revert** (stale failure cannot clobber newer success) · empty snapshot **force-syncs** parent `comments_count` → 0 |
+| Verify | `tsc -b` · targeted live-comments/Runway tests **53** · `npm run build` **PASS** |
+| Independent | iOS tap destination **#551** · APNs delivery **#550** — do not couple or overwrite |
+| Unchanged | Finance/billing/wallets/schema · Android VC **303** · iOS TF **1.0.2 / 205** · no new AAB/IPA |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
 
@@ -18,9 +30,9 @@
 | Signed IPA | `/var/www/fashionrise/artifacts/ios/FashionRise-3527d410-ios-1.0.2-b205.ipa` · `aps-environment=production` · App Store distribution · bundle/team match |
 | VPS fix | `pip install 'httpx[http2]>=0.26.0,<0.28.0'` → installed `h2`/`hpack`/`hyperframe` · `systemctl restart fashionrise-api` |
 | Controlled probe | `_send_apns` to both iOS tokens → **Apple accepted** (`ok=True`, `gone=False`) — confirm on-device banner next |
-| Repo harden | `requirements.txt` now pins `httpx[http2]`; `_send_apns` logs `apns_http2_unavailable` + Apple `reason` |
+| Repo harden | `requirements.txt` now pins `httpx[http2]`; `_send_apns` logs `apns_http2_unavailable` + Apple `reason` · **#550 MERGED** |
 | Unchanged | Android FCM · Web Push · finance/reconcile gates · no new IPA/AAB |
-| Next | Human confirm both TestFlight phones show the controlled probe + a real comment; then resume normal social QA |
+| Next | Human confirm both TestFlight phones show the controlled probe + a real comment; then resume normal social QA · tap-dest follow-up on **#551** (independent) |
 
 ## LIVE — iOS TestFlight IPA — marketing train 1.0.2 (2026-11-28 Asia/Jerusalem)
 
@@ -3995,17 +4007,17 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (iOS APNs):** On both TestFlight iPhones confirm receipt of the controlled “FashionRise push test” banner, then exchange a real comment and confirm native alert. No IPA rebuild unless on-device still fails after Apple-accepted sends. Merge APNs `httpx[http2]` harden PR when ready (docs + requirements + logging only).
+0. **Exact next action (Live social comments #549):** Merge #549 → **FE tip deploy only**. Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post + like guard). No AAB/IPA.
 
-1. **Exact next action (Live social comments):** PM review of live comments poll PR (#549). After merge: **FE tip only** (no Android AAB, no iOS IPA).
+1. **Exact next action (iOS tap destination #551):** Independent of #549 — human TF tap of **comment-URL** probe (not rankings). Keep APNs #550 delivery checkpoint. No IPA until PM asks.
 
-2. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic unless a concrete defect.
+2. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
 
 3. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
-3. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
-4. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
-5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
-6. **Operator residual:** expired Access session test (still PENDING).
+4. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
+5. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
+6. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
+7. **Operator residual:** expired Access session test (still PENDING).
 
 ---
 
