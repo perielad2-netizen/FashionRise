@@ -8,7 +8,7 @@ set -euo pipefail
 IPA_PATH="${1:-${CM_BUILD_DIR:-}/web-ui/ios/App/build/ios/ipa/App.ipa}"
 EXPECTED_FILE="${2:-/tmp/fr-ios-cfbundle-version.txt}"
 EXPECTED_BUNDLE_ID="${EXPECTED_IOS_BUNDLE_ID:-app.fashionrise.studio}"
-EXPECTED_MARKETING="${EXPECTED_IOS_MARKETING_VERSION:-${IOS_MARKETING_VERSION:-1.0.1}}"
+EXPECTED_MARKETING="${EXPECTED_IOS_MARKETING_VERSION:-${IOS_MARKETING_VERSION:-1.0.2}}"
 
 
 if [ ! -f "$IPA_PATH" ]; then
