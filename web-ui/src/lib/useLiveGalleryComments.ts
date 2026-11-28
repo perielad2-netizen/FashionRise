@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/client'
 import {
   listGalleryComments,
@@ -16,6 +16,23 @@ import {
 import { useAppIsActive } from '@/lib/useAppIsActive'
 
 type LoadMode = 'initial' | 'silent'
+
+/** While a like mutation is in flight, protect against every poll response. */
+const LIKE_PENDING_BARRIER = Number.MAX_SAFE_INTEGER
+
+type ProtectedLikeEntry = ProtectedCommentLike & {
+  /**
+   * Retain optimistic like against responses from requests with gen <= barrierGen.
+   * Uses LIKE_PENDING_BARRIER until the mutation settles, then gen at settle time.
+   */
+  barrierGen: number
+  seq: number
+}
+
+type PendingLocalEntry = {
+  /** Retain local-only row against responses from requests with gen <= barrierGen. */
+  barrierGen: number
+}
 
 export type UseLiveGalleryCommentsOptions = {
   galleryItemId: string
@@ -47,6 +64,13 @@ export type UseLiveGalleryCommentsResult = {
   clearNewCommentsIndicator: () => void
 }
 
+function bumpBackoff(current: number): number {
+  return Math.min(
+    LIVE_COMMENTS_BACKOFF_MAX_MS,
+    Math.max(LIVE_COMMENTS_POLL_MS, current * 2),
+  )
+}
+
 /**
  * Shared gallery comment list + 3s live poll for Web / PWA / native shells.
  * Does not own draft text or input focus.
@@ -62,52 +86,103 @@ export function useLiveGalleryComments(
     onFocusCommentResolved,
   } = options
 
-  const appActive = useAppIsActive()
+  const appActive = useAppIsActive({ enabled })
   const [comments, setComments] = useState<GalleryComment[] | null>(null)
   const [commentsError, setCommentsError] = useState<string | null>(null)
   const [commentsCount, setCommentsCount] = useState(0)
   const [newCommentsBelow, setNewCommentsBelow] = useState(0)
 
   const listRef = useRef<HTMLDivElement | null>(null)
+  const commentsRef = useRef<GalleryComment[] | null>(null)
+  const commentsCountRef = useRef(0)
   const inFlightRef = useRef(false)
   const genRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
-  const protectLikesRef = useRef(new Map<string, ProtectedCommentLike>())
+  const protectLikesRef = useRef(new Map<string, ProtectedLikeEntry>())
+  const pendingLocalRef = useRef(new Map<string, PendingLocalEntry>())
+  const likeSeqRef = useRef(new Map<string, number>())
   const backoffMsRef = useRef(LIVE_COMMENTS_POLL_MS)
   const wasActiveRef = useRef(appActive)
   const hasLoadedRef = useRef(false)
   const focusHandledRef = useRef(false)
+  const scrollAfterRenderRef = useRef(false)
   const onCountChangeRef = useRef(onCountChange)
   const onFocusResolvedRef = useRef(onFocusCommentResolved)
   onCountChangeRef.current = onCountChange
   onFocusResolvedRef.current = onFocusCommentResolved
 
-  const applyRows = useCallback((remote: GalleryComment[], mode: LoadMode) => {
-    setComments((prev) => {
+  const invalidateInFlight = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    inFlightRef.current = false
+    genRef.current += 1
+  }, [])
+
+  const publishCount = useCallback((count: number) => {
+    if (commentsCountRef.current === count) return
+    commentsCountRef.current = count
+    setCommentsCount(count)
+    onCountChangeRef.current?.(count)
+  }, [])
+
+  const applyRows = useCallback(
+    (remote: GalleryComment[], mode: LoadMode, requestGen: number) => {
+      const prev = commentsRef.current
       const nearBottom =
         mode === 'silent' && listRef.current
           ? isScrollNearBottom(listRef.current)
           : mode !== 'silent'
       const incoming = mode === 'silent' ? countNewCommentIds(prev, remote) : 0
-      const next = mergeGalleryComments(prev, remote, protectLikesRef.current)
-      setCommentsCount(next.length)
-      onCountChangeRef.current?.(next.length)
+
+      const protectForRequest = new Map<string, ProtectedCommentLike>()
+      for (const [id, entry] of protectLikesRef.current) {
+        if (entry.barrierGen >= requestGen) {
+          protectForRequest.set(id, {
+            liked_by_me: entry.liked_by_me,
+            likes_count: entry.likes_count,
+          })
+        } else {
+          protectLikesRef.current.delete(id)
+        }
+      }
+
+      const retainLocalIds = new Set<string>()
+      for (const [id, entry] of pendingLocalRef.current) {
+        if (entry.barrierGen >= requestGen) {
+          retainLocalIds.add(id)
+        } else {
+          pendingLocalRef.current.delete(id)
+        }
+      }
+
+      const next = mergeGalleryComments(prev, remote, {
+        protectLikes: protectForRequest,
+        retainLocalIds,
+      })
+
+      const remoteIdSet = new Set(remote.map((r) => r.id).filter(Boolean))
+      for (const [id, entry] of [...pendingLocalRef.current]) {
+        if (remoteIdSet.has(id) || entry.barrierGen < requestGen) {
+          pendingLocalRef.current.delete(id)
+        }
+      }
+
+      commentsRef.current = next
+      setComments(next)
+      publishCount(next.length)
+      setCommentsError(null)
 
       if (mode === 'silent' && incoming > 0) {
         if (nearBottom || prev == null) {
-          queueMicrotask(() => {
-            const el = listRef.current
-            if (!el) return
-            el.scrollTop = el.scrollHeight
-          })
+          scrollAfterRenderRef.current = true
           setNewCommentsBelow(0)
         } else {
           setNewCommentsBelow((n) => n + incoming)
         }
       }
-      return next
-    })
-  }, [])
+    },
+    [publishCount],
+  )
 
   const fetchComments = useCallback(
     async (mode: LoadMode) => {
@@ -124,9 +199,8 @@ export function useLiveGalleryComments(
       try {
         const rows = await listGalleryComments(galleryItemId, ac.signal)
         if (gen !== genRef.current) return
-        if (mode === 'initial') setCommentsError(null)
         hasLoadedRef.current = true
-        applyRows(rows, mode)
+        applyRows(rows, mode, gen)
         backoffMsRef.current = LIVE_COMMENTS_POLL_MS
 
         const want = (focusCommentId || '').trim()
@@ -137,7 +211,8 @@ export function useLiveGalleryComments(
         }
       } catch (err) {
         if (ac.signal.aborted || gen !== genRef.current) return
-        if (mode === 'initial') {
+        backoffMsRef.current = bumpBackoff(backoffMsRef.current)
+        if (mode === 'initial' && !hasLoadedRef.current) {
           setCommentsError(
             err instanceof ApiError ? err.message : 'Could not load comments.',
           )
@@ -146,11 +221,6 @@ export function useLiveGalleryComments(
             focusHandledRef.current = true
             onFocusResolvedRef.current?.({ found: false, commentId: want })
           }
-        } else {
-          backoffMsRef.current = Math.min(
-            LIVE_COMMENTS_BACKOFF_MAX_MS,
-            Math.max(LIVE_COMMENTS_POLL_MS, backoffMsRef.current * 2),
-          )
         }
       } finally {
         if (gen === genRef.current) inFlightRef.current = false
@@ -163,31 +233,40 @@ export function useLiveGalleryComments(
     await fetchComments(hasLoadedRef.current ? 'silent' : 'initial')
   }, [fetchComments])
 
+  useLayoutEffect(() => {
+    if (!scrollAfterRenderRef.current) return
+    scrollAfterRenderRef.current = false
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [comments])
+
   // Reset list state when the look changes (not when the modal merely closes).
   useEffect(() => {
     focusHandledRef.current = false
     hasLoadedRef.current = false
+    commentsRef.current = null
+    commentsCountRef.current = 0
     setComments(null)
     setCommentsError(null)
     setCommentsCount(0)
     setNewCommentsBelow(0)
     protectLikesRef.current.clear()
+    pendingLocalRef.current.clear()
+    likeSeqRef.current.clear()
     backoffMsRef.current = LIVE_COMMENTS_POLL_MS
-    abortRef.current?.abort()
-    inFlightRef.current = false
-  }, [galleryItemId])
+    invalidateInFlight()
+  }, [galleryItemId, invalidateInFlight])
 
-  // Load / silent refresh when the modal opens.
+  // Load / silent refresh when the modal opens; abort when closed.
   useEffect(() => {
     if (!enabled) {
-      abortRef.current?.abort()
-      inFlightRef.current = false
+      invalidateInFlight()
       setNewCommentsBelow(0)
       return
     }
     focusHandledRef.current = false
     void fetchComments(hasLoadedRef.current ? 'silent' : 'initial')
-  }, [enabled, fetchComments, galleryItemId])
+  }, [enabled, fetchComments, galleryItemId, invalidateInFlight])
 
   // Poll while open + foreground + authenticated.
   useEffect(() => {
@@ -213,71 +292,101 @@ export function useLiveGalleryComments(
     }
   }, [appActive, enabled, fetchComments, galleryItemId])
 
-  // Immediate refresh when returning to foreground with modal open.
+  // Abort when backgrounded; refresh immediately on foreground return.
   useEffect(() => {
     const was = wasActiveRef.current
     wasActiveRef.current = appActive
     if (!enabled) return
+    if (!appActive) {
+      invalidateInFlight()
+      return
+    }
     if (!was && appActive) {
       backoffMsRef.current = LIVE_COMMENTS_POLL_MS
       void fetchComments('silent')
     }
-  }, [appActive, enabled, fetchComments])
+  }, [appActive, enabled, fetchComments, invalidateInFlight])
 
   // Abort in-flight work if the session ends while open.
   useEffect(() => {
     if (!enabled) return
     const id = window.setInterval(() => {
       if (!tokenStore.get()?.accessToken) {
-        abortRef.current?.abort()
-        inFlightRef.current = false
+        invalidateInFlight()
       }
     }, 1000)
     return () => window.clearInterval(id)
-  }, [enabled])
+  }, [enabled, invalidateInFlight])
 
   useEffect(() => {
     return () => {
-      abortRef.current?.abort()
+      invalidateInFlight()
     }
-  }, [])
+  }, [invalidateInFlight])
 
-  const upsertLocalComment = useCallback((row: GalleryComment) => {
-    setComments((prev) => {
-      const next = mergeGalleryComments(prev, [row], protectLikesRef.current)
-      setCommentsCount(next.length)
-      onCountChangeRef.current?.(next.length)
-      return next
-    })
-    hasLoadedRef.current = true
-    queueMicrotask(() => {
-      const el = listRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    })
-    setNewCommentsBelow(0)
-  }, [])
+  const upsertLocalComment = useCallback(
+    (row: GalleryComment) => {
+      if (!row?.id) return
+      pendingLocalRef.current.set(row.id, { barrierGen: genRef.current })
+      const byId = new Map<string, GalleryComment>()
+      for (const r of commentsRef.current ?? []) {
+        if (r?.id) byId.set(r.id, r)
+      }
+      byId.set(row.id, row)
+      const merged = mergeGalleryComments(null, [...byId.values()])
+      commentsRef.current = merged
+      setComments(merged)
+      publishCount(merged.length)
+      setCommentsError(null)
+      hasLoadedRef.current = true
+      scrollAfterRenderRef.current = true
+      setNewCommentsBelow(0)
+    },
+    [publishCount],
+  )
 
   const patchCommentLike = useCallback(
     (commentId: string, next: ProtectedCommentLike, settle: Promise<unknown>) => {
-      protectLikesRef.current.set(commentId, next)
-      setComments((prev) =>
-        (prev ?? []).map((row) =>
-          row.id === commentId
-            ? { ...row, liked_by_me: next.liked_by_me, likes_count: next.likes_count }
-            : row,
-        ),
-      )
-      void settle.finally(() => {
-        protectLikesRef.current.delete(commentId)
+      const seq = (likeSeqRef.current.get(commentId) ?? 0) + 1
+      likeSeqRef.current.set(commentId, seq)
+      protectLikesRef.current.set(commentId, {
+        ...next,
+        barrierGen: LIKE_PENDING_BARRIER,
+        seq,
       })
+      const prev = commentsRef.current
+      const merged = (prev ?? []).map((row) =>
+        row.id === commentId
+          ? { ...row, liked_by_me: next.liked_by_me, likes_count: next.likes_count }
+          : row,
+      )
+      commentsRef.current = merged
+      setComments(merged)
+
+      void Promise.resolve(settle).then(
+        () => {
+          if (likeSeqRef.current.get(commentId) !== seq) return
+          const cur = protectLikesRef.current.get(commentId)
+          if (!cur || cur.seq !== seq) return
+          // Polls that already started before settle must not clobber this result.
+          protectLikesRef.current.set(commentId, {
+            ...cur,
+            barrierGen: genRef.current,
+          })
+        },
+        () => {
+          // Rejection is handled by the caller (revert via another patch) or ignored.
+        },
+      )
     },
     [],
   )
 
   const scrollToLatest = useCallback(() => {
+    scrollAfterRenderRef.current = true
+    setNewCommentsBelow(0)
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-    setNewCommentsBelow(0)
   }, [])
 
   const clearNewCommentsIndicator = useCallback(() => setNewCommentsBelow(0), [])

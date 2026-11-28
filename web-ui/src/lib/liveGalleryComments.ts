@@ -6,6 +6,15 @@ export type ProtectedCommentLike = {
   likes_count: number
 }
 
+export type MergeGalleryCommentsOptions = {
+  protectLikes?: ReadonlyMap<string, ProtectedCommentLike>
+  /**
+   * Local-only ids to keep when missing from an authoritative remote snapshot
+   * (e.g. own post still absent from a poll that started before the post).
+   */
+  retainLocalIds?: ReadonlySet<string>
+}
+
 export function sortCommentsChronologically(rows: GalleryComment[]): GalleryComment[] {
   return [...rows].sort((a, b) => {
     const byTime = (a.created_at || '').localeCompare(b.created_at || '')
@@ -15,20 +24,27 @@ export function sortCommentsChronologically(rows: GalleryComment[]): GalleryComm
 }
 
 /**
- * Merge remote rows into local by stable comment id.
- * Preserves chronological order; optional protected likes win over remote until settled.
+ * Apply an authoritative remote comment list.
+ * Remote is the source of truth (deleted/moderated rows disappear).
+ * Optional local-only ids may be retained; protected likes win over remote fields.
  */
 export function mergeGalleryComments(
   local: GalleryComment[] | null | undefined,
   remote: GalleryComment[],
-  protectLikes?: ReadonlyMap<string, ProtectedCommentLike>,
+  options?: MergeGalleryCommentsOptions | ReadonlyMap<string, ProtectedCommentLike>,
 ): GalleryComment[] {
+  const opts: MergeGalleryCommentsOptions =
+    options instanceof Map || options === undefined
+      ? { protectLikes: options }
+      : options
+  const protectLikes = opts.protectLikes
+  const retainLocalIds = opts.retainLocalIds
+
+  const remoteIds = new Set<string>()
   const map = new Map<string, GalleryComment>()
-  for (const row of local ?? []) {
-    if (row?.id) map.set(row.id, row)
-  }
   for (const row of remote) {
     if (!row?.id) continue
+    remoteIds.add(row.id)
     const protectedLike = protectLikes?.get(row.id)
     if (protectedLike) {
       map.set(row.id, {
@@ -40,6 +56,14 @@ export function mergeGalleryComments(
       map.set(row.id, row)
     }
   }
+
+  for (const row of local ?? []) {
+    if (!row?.id || remoteIds.has(row.id)) continue
+    if (retainLocalIds?.has(row.id)) {
+      map.set(row.id, row)
+    }
+  }
+
   return sortCommentsChronologically([...map.values()])
 }
 

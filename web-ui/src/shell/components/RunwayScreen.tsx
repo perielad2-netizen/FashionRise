@@ -2413,7 +2413,7 @@ function RunwayCard({
           setActionError(
             err instanceof ApiError ? err.message : 'Could not update comment like.',
           )
-          throw err
+          // Do not rethrow — patchCommentLike swallows settle rejection; avoid unhandled rejection.
         }
       })()
       patchCommentLike(comment.id, next, settle)

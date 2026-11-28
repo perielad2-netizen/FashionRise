@@ -23,17 +23,43 @@ function c(
 }
 
 describe('liveGalleryComments helpers', () => {
-  it('dedupes by id and sorts chronologically', () => {
-    const local = [c({ id: 'b', created_at: '2026-11-28T00:02:00Z', body: 'old-b' })]
+  it('uses remote as authoritative snapshot (drops deleted/moderated local rows)', () => {
+    const local = [
+      c({ id: 'a', created_at: '2026-11-28T00:01:00Z', body: 'a' }),
+      c({ id: 'gone', created_at: '2026-11-28T00:02:00Z', body: 'deleted' }),
+      c({ id: 'b', created_at: '2026-11-28T00:03:00Z', body: 'old-b' }),
+    ]
     const remote = [
       c({ id: 'a', created_at: '2026-11-28T00:01:00Z', body: 'a' }),
-      c({ id: 'b', created_at: '2026-11-28T00:02:00Z', body: 'new-b', likes_count: 3 }),
-      c({ id: 'c', created_at: '2026-11-28T00:03:00Z', body: 'c' }),
+      c({ id: 'b', created_at: '2026-11-28T00:03:00Z', body: 'new-b', likes_count: 3 }),
+      c({ id: 'c', created_at: '2026-11-28T00:04:00Z', body: 'c' }),
     ]
     const merged = mergeGalleryComments(local, remote)
     expect(merged.map((r) => r.id)).toEqual(['a', 'b', 'c'])
+    expect(merged.some((r) => r.id === 'gone')).toBe(false)
     expect(merged[1]?.body).toBe('new-b')
     expect(merged[1]?.likes_count).toBe(3)
+  })
+
+  it('retains pending local-only ids against an older authoritative poll', () => {
+    const local = [
+      c({ id: 'a', created_at: '2026-11-28T00:01:00Z' }),
+      c({ id: 'mine', created_at: '2026-11-28T00:05:00Z', body: 'just posted' }),
+    ]
+    const remote = [c({ id: 'a', created_at: '2026-11-28T00:01:00Z' })]
+    const merged = mergeGalleryComments(local, remote, {
+      retainLocalIds: new Set(['mine']),
+    })
+    expect(merged.map((r) => r.id)).toEqual(['a', 'mine'])
+  })
+
+  it('does not retain local-only ids without retainLocalIds', () => {
+    const local = [
+      c({ id: 'a', created_at: '2026-11-28T00:01:00Z' }),
+      c({ id: 'mine', created_at: '2026-11-28T00:05:00Z' }),
+    ]
+    const remote = [c({ id: 'a', created_at: '2026-11-28T00:01:00Z' })]
+    expect(mergeGalleryComments(local, remote).map((r) => r.id)).toEqual(['a'])
   })
 
   it('preserves protected likes over remote poll values', () => {

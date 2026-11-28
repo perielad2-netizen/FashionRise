@@ -46,6 +46,10 @@ describe('useLiveGalleryComments', () => {
   beforeEach(() => {
     listGalleryComments.mockReset()
     vi.useFakeTimers({ shouldAdvanceTime: true })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    })
   })
 
   afterEach(() => {
@@ -88,6 +92,53 @@ describe('useLiveGalleryComments', () => {
     unmount()
   })
 
+  it('removes moderated/deleted comments from authoritative polls', async () => {
+    listGalleryComments
+      .mockResolvedValueOnce([
+        row('c1', 'keep', '2026-11-28T00:00:00Z'),
+        row('c2', 'gone-soon', '2026-11-28T00:01:00Z'),
+      ])
+      .mockResolvedValue([row('c1', 'keep', '2026-11-28T00:00:00Z')])
+
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.comments?.map((c) => c.id)).toEqual(['c1', 'c2']))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVE_COMMENTS_POLL_MS + 50)
+    })
+    await waitFor(() => expect(result.current.comments?.map((c) => c.id)).toEqual(['c1']))
+    expect(result.current.commentsCount).toBe(1)
+  })
+
+  it('keeps own post against a poll that started before the post completed', async () => {
+    let resolvePoll!: (rows: GalleryComment[]) => void
+    const slowPoll = new Promise<GalleryComment[]>((r) => {
+      resolvePoll = r
+    })
+    listGalleryComments.mockImplementationOnce(() => slowPoll)
+
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+
+    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      result.current.upsertLocalComment(row('mine', 'hello', '2026-11-28T00:02:00Z'))
+    })
+    expect(result.current.comments?.map((c) => c.id)).toEqual(['mine'])
+
+    await act(async () => {
+      resolvePoll([row('older', 'pre-existing', '2026-11-28T00:00:00Z')])
+    })
+
+    await waitFor(() =>
+      expect(result.current.comments?.map((c) => c.id)).toEqual(['older', 'mine']),
+    )
+  })
+
   it('upserts own comment immediately without waiting for poll', async () => {
     listGalleryComments.mockResolvedValue([])
     const { result } = renderHook(() =>
@@ -113,10 +164,8 @@ describe('useLiveGalleryComments', () => {
     )
   })
 
-  it('protects optimistic likes against stale poll values', async () => {
-    listGalleryComments.mockResolvedValue([
-      row('c1', 'first', '2026-11-28T00:00:00Z'),
-    ])
+  it('protects likes against polls that arrive before the mutation settled', async () => {
+    listGalleryComments.mockResolvedValue([row('c1', 'first', '2026-11-28T00:00:00Z')])
     const { result } = renderHook(() =>
       useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
     )
@@ -131,6 +180,7 @@ describe('useLiveGalleryComments', () => {
     })
     expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
 
+    // Poll may start after optimistic like but before settle — still protected.
     listGalleryComments.mockResolvedValueOnce([
       { ...row('c1', 'first', '2026-11-28T00:00:00Z'), liked_by_me: false, likes_count: 0 },
     ])
@@ -144,9 +194,97 @@ describe('useLiveGalleryComments', () => {
     await act(async () => {
       resolveLike()
     })
+    // Still liked after settle; later authoritative polls may sync remote.
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
   })
 
-  it('stops polling when disabled (modal closed)', async () => {
+  it('protects likes against an in-flight poll that resolves after settle', async () => {
+    let resolvePoll!: (rows: GalleryComment[]) => void
+    const slowPoll = new Promise<GalleryComment[]>((r) => {
+      resolvePoll = r
+    })
+    listGalleryComments
+      .mockResolvedValueOnce([row('c1', 'first', '2026-11-28T00:00:00Z')])
+      .mockImplementationOnce(() => slowPoll)
+
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.comments?.[0]?.id).toBe('c1'))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVE_COMMENTS_POLL_MS + 50)
+    })
+    await waitFor(() => expect(listGalleryComments.mock.calls.length).toBeGreaterThanOrEqual(2))
+
+    act(() => {
+      result.current.patchCommentLike('c1', { liked_by_me: true, likes_count: 1 }, Promise.resolve())
+    })
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      resolvePoll([
+        { ...row('c1', 'first', '2026-11-28T00:00:00Z'), liked_by_me: false, likes_count: 0 },
+      ])
+    })
+
+    await waitFor(() => expect(result.current.comments?.[0]?.liked_by_me).toBe(true))
+    expect(result.current.comments?.[0]?.likes_count).toBe(1)
+  })
+
+  it('handles failed like mutation without unhandled rejection', async () => {
+    listGalleryComments.mockResolvedValue([row('c1', 'first', '2026-11-28T00:00:00Z')])
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.comments?.[0]?.id).toBe('c1'))
+
+    const rejected = Promise.reject(new Error('like failed'))
+    // Prevent Vitest from treating this as an unhandled rejection before the hook attaches.
+    rejected.catch(() => undefined)
+
+    act(() => {
+      result.current.patchCommentLike('c1', { liked_by_me: true, likes_count: 1 }, rejected)
+    })
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(true)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.patchCommentLike(
+        'c1',
+        { liked_by_me: false, likes_count: 0 },
+        Promise.resolve(),
+      )
+    })
+    expect(result.current.comments?.[0]?.liked_by_me).toBe(false)
+    expect(result.current.comments?.[0]?.likes_count).toBe(0)
+  })
+
+  it('clears initial load error after a successful refresh', async () => {
+    listGalleryComments.mockRejectedValueOnce(new Error('network'))
+    const { result } = renderHook(() =>
+      useLiveGalleryComments({ galleryItemId: 'g1', enabled: true }),
+    )
+    await waitFor(() => expect(result.current.commentsError).toBeTruthy())
+
+    listGalleryComments.mockResolvedValue([row('c1', 'ok', '2026-11-28T00:00:00Z')])
+    await act(async () => {
+      await result.current.refreshComments()
+    })
+    await waitFor(() => {
+      expect(result.current.commentsError).toBeNull()
+      expect(result.current.comments?.map((c) => c.id)).toEqual(['c1'])
+    })
+  })
+
+  it('stops polling when disabled (modal closed) and aborts work', async () => {
     listGalleryComments.mockResolvedValue([])
     const { result, rerender } = renderHook(
       ({ enabled }: { enabled: boolean }) =>
@@ -209,7 +347,6 @@ describe('useLiveGalleryComments', () => {
       { initialProps: { id: 'g1' } },
     )
 
-    // Switch item — aborts/supersedes in-flight gen for g1.
     rerender({ id: 'g2' })
     await waitFor(() => expect(listGalleryComments.mock.calls.length).toBeGreaterThanOrEqual(2))
 

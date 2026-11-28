@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 20:55 Asia/Jerusalem — Live social comments poll (shared React) ready for PM review · Android VC **303** accepted · iOS **1.0.2** train unchanged
+**Last updated:** 2026-11-28 21:15 Asia/Jerusalem — Live comments PR #549 PM corrections done · merge + FE tip authorized · APNs #550 independent · no AAB/IPA
 
-## READY FOR PM — Live social comments sync (shared React poll) (2026-11-28 Asia/Jerusalem)
+## AUTHORIZED — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
-| Problem | Comments modal did not refresh while open — Peri/Yaniv device testing: peer comments only appeared after close/reopen |
-| Fix | Shared `useLiveGalleryComments` + `listGalleryComments` **3s** poll while modal open + app active (Web / PWA / Android / iOS shells) |
-| Scope | FE-only · no WebSockets / Redis / migrations · no native rebuilds |
-| Behaviors | Dedupe by comment id · chrono order · protect optimistic likes · own post upsert · silent poll (no spinner/flicker) · near-bottom auto-scroll else new-comments hint · abort + backoff on failure · stop on close / background / logout · immediate refresh on foreground |
-| Tests | `liveGalleryComments.test.ts` · `useLiveGalleryComments.test.tsx` · Runway deep-link + chat popup regression |
-| Preserved | Moderation/auth · notification comment highlight · draft/focus/scroll · finance gates · Android VC **303** · iOS release process (no new IPA/AAB) |
-| Next | PM review → merge → FE tip only |
+| PR | **#549** · head after PM corrections (authoritative merge, like barriers, lifecycle, pure updaters) |
+| Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
+| PM corrections | Authoritative snapshots drop deleted/moderated · retain own post only vs older requests · like protect until settle + in-flight gens · no unhandled reject · clear errors on success · backoff on initial fail · Cap listener cleanup · pure state + scroll after render · count notify only when changed |
+| Tests | `liveGalleryComments` · `useLiveGalleryComments` · `useAppIsActive` · Runway deep-link/chat regression — **50** targeted pass |
+| Deploy | **PM authorized** merge + **web FE tip only** |
+| Independent | iOS APNs investigation / #550 — do not block or couple |
+| Unchanged | Finance/billing/wallets/schema · Android VC **303** · no new AAB/IPA |
 
 ## LIVE — iOS TestFlight IPA — marketing train 1.0.2 (2026-11-28 Asia/Jerusalem)
 
@@ -3990,7 +3990,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Live social comments):** PM review of live comments poll PR. After merge: **FE tip only** (no Android AAB, no iOS IPA). Verify Peri↔Yaniv comments appear while the modal stays open on Web/PWA and native shells. Do **not** start native builds or change finance/push gates.
+0. **Exact next action (Live social comments #549):** Merge #549 → **FE tip deploy only**. Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post). No AAB/IPA. Keep APNs #550 independent.
 
 1. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
 2. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
