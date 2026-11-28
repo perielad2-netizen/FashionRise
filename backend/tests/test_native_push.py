@@ -226,6 +226,46 @@ def test_notify_skips_native_when_disabled(client, db_session, monkeypatch):
     _ = tokens
 
 
+def test_send_apns_reports_http2_unavailable(monkeypatch, tmp_path, caplog):
+    """Missing h2 (httpx[http2]) must fail closed before contacting Apple."""
+    key = tmp_path / "AuthKey_TEST.p8"
+    key.write_text("-----BEGIN PRIVATE KEY-----\nMIGH\n-----END PRIVATE KEY-----\n")
+    monkeypatch.setenv("NATIVE_PUSH_IOS_ENABLED", "true")
+    monkeypatch.setenv("NATIVE_PUSH_APNS_KEY_PATH", str(key))
+    monkeypatch.setenv("NATIVE_PUSH_APNS_KEY_ID", "ABCD123456")
+    monkeypatch.setenv("NATIVE_PUSH_APNS_TEAM_ID", "TEAM123456")
+    monkeypatch.setenv("NATIVE_PUSH_APNS_TOPIC", "app.fashionrise.studio")
+    monkeypatch.setenv("NATIVE_PUSH_APNS_USE_SANDBOX", "false")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    device = NativePushDevice(
+        user_id="00000000-0000-4000-8000-000000000001",
+        platform="ios",
+        device_token="a" * 64,
+    )
+
+    class _BoomClient:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("Using http2=True, but the 'h2' package is not installed.")
+
+    import httpx
+
+    with (
+        patch.object(httpx, "Client", _BoomClient),
+        patch("jose.jwt.encode", return_value="fake.jwt.token"),
+        caplog.at_level("WARNING"),
+    ):
+        ok, gone = push_service._send_apns(
+            device, {"title": "t", "body": "b", "url": "/studio/runway", "tag": "t"}
+        )
+    assert ok is False
+    assert gone is False
+    assert any("apns_http2_unavailable" in r.message for r in caplog.records)
+    get_settings.cache_clear()
+
+
 def test_notify_delivers_web_and_native_without_ua_suppression(client, db_session, monkeypatch):
     """UA matching is not reliable device association — do not suppress Web Push."""
     _enable_android_flags(monkeypatch)

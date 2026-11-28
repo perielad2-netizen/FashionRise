@@ -78,7 +78,20 @@ Both include Associated Domains: `applinks:fashionrise.app`, `applinks:www.fashi
 2. Codemagic / Xcode signing for **Release / App Store IPA** must use a **distribution** provisioning profile that includes those capabilities (not a development-only profile).
 3. Confirm the signed IPA’s embedded entitlements show `aps-environment = production` (TestFlight and App Store use production APNs).
 4. Create APNs Auth Key (`.p8`); store outside repo; set env paths/IDs above. Set `NATIVE_PUSH_APNS_USE_SANDBOX=false` for TestFlight/production delivery.
-5. Publish `apple-app-site-association` at `https://fashionrise.app/.well-known/apple-app-site-association` (no redirect, `application/json`).
+5. Install **`httpx[http2]`** (provides `h2`) in the API venv before enabling iOS delivery. APNs requires HTTP/2; without `h2`, `_send_apns` fails closed with `apns_http2_unavailable` / `ImportError` and **never contacts Apple**. Android FCM is unaffected.
+6. Publish `apple-app-site-association` at `https://fashionrise.app/.well-known/apple-app-site-association` (no redirect, `application/json`).
+
+### Prod incident — TestFlight no native alerts (2026-11-28 Asia/Jerusalem)
+
+| Check | Result |
+| --- | --- |
+| Runtime flags | `NATIVE_PUSH_IOS_ENABLED=true` · `NATIVE_PUSH_APNS_USE_SANDBOX=false` · topic `app.fashionrise.studio` · `.p8` readable by `fashionriseapp` |
+| Capability | `ios_enabled:true` · `android_enabled:true` |
+| Registration | 2 iOS rows (Peri accounts) · app **1.0.2 (205)** · dest contract **v2** · nginx CORS allows `capacitor://localhost` / `https://localhost` · same-account Android rows retained |
+| Delivery failure | Journal `apns_send_failed err=ImportError` — venv had `httpx` **without** `h2` |
+| IPA | Artifact `FashionRise-3527d410-ios-1.0.2-b205.ipa` · `aps-environment=production` · team `3U3MA53L9P` · bundle `app.fashionrise.studio` · App Store distribution profile |
+| Fix | VPS-only: `pip install 'httpx[http2]…'` + API restart · **no IPA rebuild** |
+| Probe | Controlled `_send_apns` → Apple **accepted** both registered iOS tokens (`ok=True`) |
 
 Static repo checks do **not** replace inspecting the Codemagic-signed IPA; do that on the next authorized native build.
 
