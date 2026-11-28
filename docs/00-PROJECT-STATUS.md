@@ -17,7 +17,7 @@
 | Capability | `android_enabled=true` · `ios_enabled=true` · VAPID public key served · nginx devices allowlist **PASS** |
 | Finance | **UNCHANGED / CLOSED** · PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
 | Android AAB | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** (index **65**) · **versionCode=303** · versionName **1.0** · offset **200** · **no Play upload** |
-| AAB artifact | [app-release.aab](https://api.codemagic.io/artifacts/da7d712b-4263-4ab5-ab87-ed1261377442/ac64d183-be85-49bc-b36a-ad099d087f0d/app-release.aab) · VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
+| AAB artifact | [public download (expires 2026-12-05 20:02 Asia/Jerusalem)](https://api.codemagic.io/artifacts/.eJwVwcGSgiAAANB_6e5MFrV46CChpCHWhKZeGjEl2zA1c7Gvb_a9mbT_oX6rr6goUhF0xiBvlv5EJ-gdc6hjUzh-qNhe7pv8c1r5gdALRFpt_aooWb7rBdHkbQdraTd0jGNnFPPAP9TUEmN5JR6W3djwgsU7uvOeNxaK58ksYIrbvAWXx6WCynXRJUna5eGYg6z2j2cG19d7zDXLhL21QCQpnOKMt3jLOsjXbfU8mEkw73HvRTypfV7vgeEC8uBnmpnDqlOP1w9VrykbcjEB6qEeVY7hexEoK-xO91IAhxhyuC2cFJ-TsrsP6Sd0QoxzgptaqRKV2viDBTPlZjP7AoE5YdM.OJdqTEsYsWggGjoP8nd3rBZzMhE) · VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
 | iOS IPA | **Not built** — published iOS remains on v1 destination compatibility · stop for physical-device acceptance |
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
