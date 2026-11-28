@@ -51,12 +51,14 @@ Entity-scoped collapse keys (examples): `fr-like-<item>`, `fr-comment-<comment>`
 
 Web Push and native both fan out when registered. **Physical same-device dedupe is
 not automatic** — UA/OS/IP/fingerprint matching is unreliable and must not delete
-subscriptions.
+subscriptions or suppress unrelated channels.
 
-**User-controlled preference:** `PUT /api/v1/push/delivery-preference`
-`{ "prefer_native_push": true }` — when the account has ≥1 native device, Web Push
-fan-out is skipped; subscriptions remain. Desktop / other browsers keep their own
-local notification toggle. Settings UI exposes this on the native shell.
+**Per-browser opt-out:** Settings → Notifications toggles **this browser’s** Web Push
+subscription only (`deletePushSubscription` for the current endpoint). Desktop and
+other devices keep their own subscriptions. Native Settings toggle affects only the
+installed app token. There is **no** account-wide `prefer_native_push` preference.
+
+Automatic physical-device Web Push ↔ native deduplication is a **future** improvement.
 
 ## Auth / lifecycle
 
@@ -69,24 +71,24 @@ local notification toggle. Settings UI exposes this on the native shell.
 
 ## Capability negotiation (native)
 
-`native_push_devices.destination_contract_version`:
+`native_push_devices.destination_contract_version` (migration **048**):
 
 | Version | Payload URL |
 | --- | --- |
-| **1** (default / installed clients without this PR) | `/studio/fashionrise` only — preserves open + FCM/APNs; no typed query |
-| **2** (this FE registers) | Full typed FashionRise query destinations |
+| **1** (default / existing installs before this FE) | Keep `/studio/fashionrise?friends=1…` (already supported). Item/comment social deep-links → `/studio/fashionrise` Social feed. Other sanitized `/studio…` / `/privacy` paths preserved (operator / rankings). |
+| **2** (this FE registers on upsert) | Full typed FashionRise query destinations |
 
-New clients POST `destination_contract_version: 2` on device upsert. This avoids
-backend-first regressions on older Android/iOS builds whose sanitizers strip queries.
+Upgraded installs **re-register the existing FCM/APNs token** with
+`destination_contract_version=2` after login/resume — no logout, reinstall, or
+notification-permission change required. `app_version` is populated from Capacitor
+`App.getInfo()` (`version` + `build`) when available.
 
-## Rollout (PM-gated — do not merge/deploy until authorized)
+## Rollout
 
-1. **Web SPA + SW first** — exact focus for browsers / PWA; SW fixtures pass.
-2. **Backend** — producers emit typed FashionRise URLs; `notify_user` sends **v1**
-   devices the root path only; **v2** devices get full URLs; migration `048`
-   (`prefer_native_push`, `destination_contract_version`).
-3. **Native AAB / IPA after PM approval** — bundled FE registers v2 + pending-nav;
-   preserves FCM tap-open, APNs, R8, signing. **No AAB/IPA until notification PM OK.**
+1. **Web SPA + SW** — exact focus for browsers / PWA; SW fixtures pass.
+2. **Backend** — producers emit typed FashionRise URLs; `notify_user` maps per
+   `destination_contract_version`; migration `048` adds the column only.
+3. **Native AAB** — bundled FE registers v2 + pending-nav; preserves FCM tap-open,
+   R8, signing. **No Play upload / no iOS IPA** in this release — published iOS stays
+   on the v1 compatibility contract until a later IPA.
 4. Ordinary Runway rankings navigation and billing / Stars / reconcile gates **unchanged**.
-
-Do **not** merge/deploy this PR until PM authorization.

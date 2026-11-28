@@ -3,9 +3,7 @@ import {
   disableRunwayPush,
   enableRunwayPush,
   ensureDefaultRunwayPush,
-  getPushDeliveryPreference,
   runwayPushIsEnabled,
-  setPushDeliveryPreference,
 } from '@/services/pushApi'
 import { isNativeShell } from '@/services/native/platform'
 import {
@@ -20,13 +18,15 @@ import styles from './GlobalHeader.module.css'
  * Preference / visibility — not a mandatory second activation.
  * If OS permission is already granted and the user has not opted out,
  * auto-register FCM/APNs and confirm backend registration.
+ *
+ * Browser toggle is per-browser (local + that subscription only).
+ * Native toggle is per installed app. Neither suppresses the other channel.
  */
 export function NotificationsSettingsToggle() {
   const [on, setOn] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [osDenied, setOsDenied] = useState(false)
-  const [preferNative, setPreferNative] = useState(false)
   const native = isNativeShell()
 
   const refresh = useCallback(async () => {
@@ -36,12 +36,6 @@ export function NotificationsSettingsToggle() {
       if (native) {
         const perm = await nativePushPermissionState()
         setOsDenied(perm === 'denied')
-        try {
-          const pref = await getPushDeliveryPreference()
-          setPreferNative(Boolean(pref.prefer_native_push))
-        } catch {
-          /* preference endpoint may be undeployed */
-        }
       } else {
         setOsDenied(
           typeof Notification !== 'undefined' && Notification.permission === 'denied',
@@ -98,17 +92,9 @@ export function NotificationsSettingsToggle() {
       if (result === 'granted') {
         setOn(true)
         setOsDenied(false)
-        if (native) {
-          try {
-            await setPushDeliveryPreference(true)
-            setPreferNative(true)
-          } catch {
-            /* non-fatal */
-          }
-        }
         setNotice(
           native
-            ? 'App notifications on — browser alerts skipped while this preference is set'
+            ? 'Notifications on — FashionRise will alert you on this device'
             : 'Notifications on — we’ll alert you in this browser',
         )
         return
@@ -159,7 +145,7 @@ export function NotificationsSettingsToggle() {
           <p className={styles.notifHint}>
             {native
               ? 'Likes, comments, and friend alerts on this device'
-              : 'Likes, comments, and friend alerts in this browser'}
+              : 'Likes, comments, and friend alerts in this browser only — other browsers and the app keep their own setting'}
           </p>
         </div>
         <button
@@ -184,29 +170,6 @@ export function NotificationsSettingsToggle() {
         >
           Open system notification settings
         </button>
-      ) : null}
-      {native && on ? (
-        <label className={styles.notifHint} data-testid="settings-prefer-native-push">
-          <input
-            type="checkbox"
-            checked={preferNative}
-            disabled={busy}
-            onChange={(e) => {
-              const next = e.target.checked
-              setPreferNative(next)
-              void setPushDeliveryPreference(next)
-                .then(() =>
-                  setNotice(
-                    next
-                      ? 'Preferring FashionRise app alerts over browser push'
-                      : 'Browser push can also deliver when subscribed',
-                  ),
-                )
-                .catch(() => setNotice('Could not update delivery preference'))
-            }}
-          />{' '}
-          Prefer FashionRise app alerts over Chrome/browser push (desktop & other browsers keep their own setting)
-        </label>
       ) : null}
       {notice ? (
         <p className={styles.notifNotice} role="status">

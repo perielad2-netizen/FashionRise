@@ -187,6 +187,34 @@ def list_user_native_devices(db: Session, user_id: uuid.UUID) -> list[NativePush
     return list(db.scalars(select(NativePushDevice).where(NativePushDevice.user_id == user_id)).all())
 
 
+def native_url_for_contract(safe_url: str, *, contract_version: int) -> str:
+    """Map a sanitized destination to what a native client of ``contract_version`` can open.
+
+    v2+: full typed FashionRise query destinations.
+    v1: preserve ``/studio/fashionrise?friends=1…`` (already supported); item/comment
+    social deep-links fall back to Social feed root; other studio/privacy paths keep
+    their sanitized form (operator / rankings).
+    """
+    ver = max(1, int(contract_version or 1))
+    if ver >= 2:
+        return safe_url
+    path = (safe_url or "").split("?", 1)[0] or "/studio/fashionrise"
+    query = (safe_url.split("?", 1)[1] if "?" in (safe_url or "") else "") or ""
+    if path == "/studio/fashionrise":
+        if not query:
+            return path
+        # Existing v1 clients already open Manage friends with friends=1.
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query, keep_blank_values=True)
+        if params.get("friends") == ["1"]:
+            return safe_url
+        # item / comment / unknown FashionRise queries → safe Social feed.
+        return "/studio/fashionrise"
+    # Legacy operator / rankings / privacy paths (no free-form item query).
+    return path if path.startswith(("/studio", "/privacy")) else "/studio/fashionrise"
+
+
 def notify_user(
     db: Session,
     user_id: uuid.UUID,
@@ -202,16 +230,12 @@ def notify_user(
     Duplicate prevention: same ``tag`` collapses OS notifications per device channel;
     use entity-scoped tags so unrelated designs/comments do not replace each other.
 
-    Cross-channel note: Web Push and native FCM/APNs both deliver when registered
-    unless the user opts into ``prefer_native_push`` (then Web Push is skipped
-    while at least one native device remains — subscriptions are not deleted).
-    UA/platform matching is **not** reliable physical-device association.
+    Cross-channel note: Web Push and native FCM/APNs both deliver when registered.
+    UA/platform matching is **not** reliable physical-device association — do not
+    suppress Web Push merely because a native token exists. Browser-specific opt-out
+    remains the per-subscription Settings toggle.
     """
     safe_url = sanitize_push_url(url)
-    # Legacy-safe base for installed clients that strip typed queries.
-    legacy_url = safe_url.split("?", 1)[0] or "/studio/fashionrise"
-    if not legacy_url.startswith("/studio"):
-        legacy_url = "/studio/fashionrise"
     payload = {
         "title": title[:120],
         "body": body[:240],
@@ -220,11 +244,7 @@ def notify_user(
     }
     sent = 0
 
-    devices = list_user_native_devices(db, user_id)
-    user = db.get(User, user_id)
-    prefer_native = bool(user and getattr(user, "prefer_native_push", False) and devices)
-
-    if push_enabled() and not prefer_native:
+    if push_enabled():
         rows = list_user_subscriptions(db, user_id)
         stale: list[PushSubscription] = []
         for row in rows:
@@ -241,6 +261,7 @@ def notify_user(
                 db.rollback()
                 logger.exception("push_subscription_cleanup_failed id=%s", row.id)
 
+    devices = list_user_native_devices(db, user_id)
     stale_native: list[NativePushDevice] = []
     for device in devices:
         if device.platform == "android" and not native_android_enabled():
@@ -249,10 +270,7 @@ def notify_user(
             continue
         dest_ver = int(getattr(device, "destination_contract_version", 1) or 1)
         device_payload = dict(payload)
-        if dest_ver < 2:
-            # Backward compatible: open FashionRise Social without typed queries
-            # so old sanitizers cannot land on rankings or strip into a dead path.
-            device_payload["url"] = legacy_url if legacy_url == "/studio/fashionrise" else "/studio/fashionrise"
+        device_payload["url"] = native_url_for_contract(safe_url, contract_version=dest_ver)
         ok, gone = _send_native(device, device_payload)
         if ok:
             sent += 1

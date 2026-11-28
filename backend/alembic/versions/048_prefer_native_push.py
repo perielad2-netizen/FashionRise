@@ -1,11 +1,15 @@
-"""User preference: prefer native push over Web Push when both exist.
+"""Native push destination contract version (per device).
 
 Revision ID: 048
 Revises: 047
 Create Date: 2026-11-28
 
-When true and the user has at least one active native device, notify_user
-skips Web Push fan-out. Subscriptions are not deleted.
+``destination_contract_version`` on ``native_push_devices``:
+- 1 (default / existing installs): legacy-safe URLs (friends=1 preserved;
+  item/comment → Social feed root)
+- 2 (this FE registers on upsert): full typed FashionRise destinations
+
+Account-wide Web Push suppression was deliberately NOT added.
 """
 
 from __future__ import annotations
@@ -23,15 +27,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column(
-        "users",
-        sa.Column(
-            "prefer_native_push",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("false"),
-        ),
-    )
-    op.add_column(
         "native_push_devices",
         sa.Column(
             "destination_contract_version",
@@ -44,4 +39,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("native_push_devices", "destination_contract_version")
-    op.drop_column("users", "prefer_native_push")

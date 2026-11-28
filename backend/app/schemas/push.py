@@ -48,20 +48,11 @@ class NativePushDeviceRead(BaseModel):
     # registration for the current account/device (not local cache alone).
     device_token: str
     destination_contract_version: int = 1
+    app_version: str | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-class PushDeliveryPreference(BaseModel):
-    """Account-level: when native is registered, optionally skip Web Push fan-out."""
-
-    prefer_native_push: bool
-
-
-class PushDeliveryPreferenceUpdate(BaseModel):
-    prefer_native_push: bool
 
 
 class NativePushDeviceDelete(BaseModel):

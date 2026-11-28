@@ -13,11 +13,26 @@
  * Auto (bootstrap / Settings mount) and manual (Settings toggle) share
  * `syncNativePushAfterAuth` / `enableNativePush` — do not fork paths.
  */
+import { App } from '@capacitor/app'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { handleNotificationDestination } from './notificationNavigation'
 import { isNativeShell, nativePlatform } from './platform'
+
+/** Marketing version + build for native_push_devices.app_version diagnostics (≤64). */
+async function readNativeAppVersionLabel(): Promise<string | undefined> {
+  if (!isNativeShell()) return undefined
+  try {
+    const info = await App.getInfo()
+    const version = (info?.version || '').trim()
+    const build = (info?.build || '').trim()
+    const label = [version, build ? `(${build})` : ''].filter(Boolean).join(' ').trim()
+    return label.slice(0, 64) || undefined
+  } catch {
+    return undefined
+  }
+}
 
 export type NativePushCapability = {
   android_enabled: boolean
@@ -262,14 +277,19 @@ export async function installNativePushInteractionListeners(): Promise<void> {
     writeStoredToken(value, platform)
     resolveTokenWaiters(value)
     if (!tokenStore.get()?.accessToken || !platform) return
-    void registerNativePushDevice({
-      platform,
-      device_token: value,
-      app_version: undefined,
-      destination_contract_version: 2,
-    }).catch(() => {
-      /* server may be fail-closed — resume sync retries */
-    })
+    void (async () => {
+      try {
+        const app_version = await readNativeAppVersionLabel()
+        await registerNativePushDevice({
+          platform,
+          device_token: value,
+          app_version,
+          destination_contract_version: 2,
+        })
+      } catch {
+        /* server may be fail-closed — resume sync retries */
+      }
+    })()
   })
 
   await PushNotifications.addListener('registrationError', (err) => {
@@ -450,7 +470,13 @@ async function syncNativePushAfterAuthInner(): Promise<NativePushSyncResult> {
   if (!token) return 'registration_failed'
 
   try {
-    await registerNativePushDevice({ platform, device_token: token })
+    const app_version = await readNativeAppVersionLabel()
+    await registerNativePushDevice({
+      platform,
+      device_token: token,
+      app_version,
+      destination_contract_version: 2,
+    })
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0
     const detail =

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 19:40 Asia/Jerusalem — GPA.3363 auto-recovered · push #545 PM corrections in progress (stop for approval)
+**Last updated:** 2026-11-28 20:00 Asia/Jerusalem — Finance CLOSED · #545 final release corrections (no account Web Push suppression)
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
 
@@ -18,16 +18,18 @@
 | Yaniv GPA.3387 | **active** · clawed **0** · wallet untouched |
 | Sandbox | Recovered order environment **Sandbox** · `production_scanned=0` on apply run |
 | Manual claw / RTDN / AAB | **None** |
+| Checkpoint | **CLOSED** — do not modify financial config or run further refund experiments |
 
-## LIVE — Unified notification destinations PR #545 (awaiting PM) (2026-11-28 Asia/Jerusalem)
+## LIVE — Unified notification destinations PR #545 (final corrections) (2026-11-28 Asia/Jerusalem)
 
 | Field | Value |
 | --- | --- |
 | Problem | Native comment tap opens Runway **rankings**, not the exact design/comment |
 | Contract | `docs/deploy/PUSH-DESTINATION-CONTRACT.md` — shared BE / SPA / SW + fixtures |
-| PM corrections | OAuth preserves typed `next` · hardened sanitizers · pinned lifecycle · prefer-native preference · dest contract v1/v2 · UI/SW tests · staged rollout |
-| Cross-channel | No UA dedupe; **`prefer_native_push`** skips Web Push while native registered (subs kept) |
-| Rollout | Web → BE (v1 natives get `/studio/fashionrise` only) → AAB/IPA after PM · **no merge/deploy/AAB/IPA yet** |
+| Delivery | Web Push + native both fan out; **no** account `prefer_native_push`; per-browser Settings toggle only |
+| Dest contract | Migration **048** = `destination_contract_version` only · v1 keeps `friends=1` · item/comment → Social feed · v2 full typed URLs |
+| Upgrade | Existing token re-registers `destination_contract_version=2` + `app_version` from `App.getInfo` (no logout/reinstall) |
+| Rollout | Merge #545 → web SPA/SW + BE + migrate 048 → health → **one** Android AAB VC>252 (no Play upload, no iOS IPA) |
 | Gates / billing | **Unchanged** by this PR |
 
 ## LIVE — License testers + native FCM (archive note) (2026-11-28 Asia/Jerusalem)

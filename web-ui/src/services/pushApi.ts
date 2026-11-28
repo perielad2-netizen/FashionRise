@@ -166,20 +166,6 @@ export async function runwayPushIsEnabled(): Promise<boolean> {
  * Default-on path: subscribe when the user hasn't opted out.
  * Returns whether push is active after the attempt.
  */
-/** Account preference: skip Web Push fan-out when a native device is registered. */
-export async function getPushDeliveryPreference(): Promise<{ prefer_native_push: boolean }> {
-  return apiRequest<{ prefer_native_push: boolean }>('/push/delivery-preference')
-}
-
-export async function setPushDeliveryPreference(
-  preferNative: boolean,
-): Promise<{ prefer_native_push: boolean }> {
-  return apiRequest<{ prefer_native_push: boolean }>('/push/delivery-preference', {
-    method: 'PUT',
-    body: { prefer_native_push: preferNative },
-  })
-}
-
 export async function ensureDefaultRunwayPush(): Promise<{
   on: boolean
   result:

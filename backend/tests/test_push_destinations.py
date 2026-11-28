@@ -66,3 +66,33 @@ def test_push_service_reexports_sanitize():
     assert push_service.sanitize_push_url("/studio/fashionrise?friends=1") == (
         "/studio/fashionrise?friends=1"
     )
+
+
+def test_native_url_for_contract_v1_preserves_friends_falls_back_item():
+    friends = f"/studio/fashionrise?friends=1&section=requests&friendship={FRIENDSHIP}"
+    assert push_service.native_url_for_contract(friends, contract_version=1) == friends
+    assert push_service.native_url_for_contract(
+        "/studio/fashionrise?friends=1", contract_version=1
+    ) == "/studio/fashionrise?friends=1"
+
+    item = f"/studio/fashionrise?item={ITEM}"
+    assert push_service.native_url_for_contract(item, contract_version=1) == (
+        "/studio/fashionrise"
+    )
+    comment = f"/studio/fashionrise?item={ITEM}&comments=1&comment={COMMENT}"
+    assert push_service.native_url_for_contract(comment, contract_version=1) == (
+        "/studio/fashionrise"
+    )
+    assert push_service.native_url_for_contract("/studio/runway", contract_version=1) == (
+        "/studio/runway"
+    )
+    assert push_service.native_url_for_contract("/privacy", contract_version=1) == "/privacy"
+
+
+def test_native_url_for_contract_v2_keeps_full_destination():
+    item = f"/studio/fashionrise?item={ITEM}"
+    comment = f"/studio/fashionrise?item={ITEM}&comments=1&comment={COMMENT}"
+    friends = f"/studio/fashionrise?friends=1&section=accepted&friendship={FRIENDSHIP}"
+    assert push_service.native_url_for_contract(item, contract_version=2) == item
+    assert push_service.native_url_for_contract(comment, contract_version=2) == comment
+    assert push_service.native_url_for_contract(friends, contract_version=2) == friends

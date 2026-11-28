@@ -75,10 +75,6 @@ class User(Base):
     ai_stars_unlimited: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="false"
     )
-    # When true and a native device is registered, skip Web Push fan-out (do not delete subs).
-    prefer_native_push: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False, server_default="false"
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
