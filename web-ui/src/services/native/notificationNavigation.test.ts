@@ -59,4 +59,43 @@ describe('notificationNavigation', () => {
     expect(flushPendingNotificationDestination()).toBeNull()
     expect(navigateInApp).not.toHaveBeenCalled()
   })
+
+  it('cold start: queues comment destination then flushes after auth ready', () => {
+    const ITEM = '11111111-1111-4111-8111-111111111111'
+    const COMMENT = '22222222-2222-4222-8222-222222222222'
+    const url = `/studio/fashionrise?item=${ITEM}&comments=1&comment=${COMMENT}`
+    handleNotificationDestination(url)
+    expect(navigateInApp).not.toHaveBeenCalled()
+    expect(peekPendingNotificationDestination()).toBe(url)
+    setNotificationNavigationReady(true)
+    expect(navigateInApp).toHaveBeenCalledWith(url)
+  })
+
+  it('warm start: six event types navigate immediately when ready', () => {
+    const ITEM = '11111111-1111-4111-8111-111111111111'
+    const COMMENT = '22222222-2222-4222-8222-222222222222'
+    const FRIENDSHIP = '33333333-3333-4333-8333-333333333333'
+    const urls = [
+      `/studio/fashionrise?item=${ITEM}`,
+      `/studio/fashionrise?item=${ITEM}`,
+      `/studio/fashionrise?item=${ITEM}&comments=1&comment=${COMMENT}`,
+      `/studio/fashionrise?item=${ITEM}&comments=1&comment=${COMMENT}`,
+      `/studio/fashionrise?friends=1&section=requests&friendship=${FRIENDSHIP}`,
+      `/studio/fashionrise?friends=1&section=accepted&friendship=${FRIENDSHIP}`,
+    ]
+    setNotificationNavigationReady(true)
+    for (const url of urls) {
+      navigateInApp.mockClear()
+      _resetNotificationNavigationForTests()
+      setNotificationNavigationReady(true)
+      handleNotificationDestination(url)
+      expect(navigateInApp).toHaveBeenCalledWith(url)
+    }
+  })
+
+  it('does not weaken auth routes into push destinations', () => {
+    setNotificationNavigationReady(true)
+    handleNotificationDestination('/auth/google/complete#access_token=x')
+    expect(navigateInApp).toHaveBeenCalledWith('/studio/fashionrise')
+  })
 })

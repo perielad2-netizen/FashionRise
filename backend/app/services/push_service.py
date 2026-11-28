@@ -469,8 +469,8 @@ def build_fcm_message_body(device_token: str, payload: dict[str, Any]) -> dict[s
     MAIN/LAUNCHER + VIEW deep links. A custom action (historically OPEN_URI)
     made notification taps fail to open the app while FCM still accepted the send.
     """
-    tag = str(payload.get("tag") or "fashionrise-runway")
-    url = str(payload.get("url") or "/studio/runway")
+    tag = str(payload.get("tag") or "fashionrise-social")
+    url = str(payload.get("url") or "/studio/fashionrise")
     android_notification: dict[str, Any] = {
         "channel_id": "fashionrise_social",
     }
@@ -488,6 +488,28 @@ def build_fcm_message_body(device_token: str, payload: dict[str, Any]) -> dict[s
                 "notification": android_notification,
             },
         }
+    }
+
+
+def build_apns_message_body(payload: dict[str, Any]) -> dict[str, Any]:
+    """APNs HTTP/2 JSON body for iOS.
+
+    Custom destination keys are set both at the payload root (APNs userInfo /
+    Capacitor ``notification.data.url``) and under ``data`` for clients that
+    expect an FCM-like nested bag. Default fallback matches the destination
+    contract (``/studio/fashionrise``), not rankings.
+    """
+    tag = str(payload.get("tag") or "fashionrise-social")[:64]
+    url = str(payload.get("url") or "/studio/fashionrise")
+    return {
+        "aps": {
+            "alert": {"title": payload["title"], "body": payload["body"]},
+            "sound": "default",
+            "thread-id": tag,
+        },
+        "url": url,
+        "tag": tag,
+        "data": {"url": url, "tag": tag},
     }
 
 
@@ -567,15 +589,8 @@ def _send_apns(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool,
             if settings.native_push_apns_use_sandbox
             else "api.push.apple.com"
         )
-        apns_body = {
-            "aps": {
-                "alert": {"title": payload["title"], "body": payload["body"]},
-                "sound": "default",
-                "thread-id": str(payload.get("tag") or "fashionrise-runway")[:64],
-            },
-            "url": str(payload.get("url") or "/studio/runway"),
-            "tag": str(payload.get("tag") or "fashionrise-runway"),
-        }
+        apns_body = build_apns_message_body(payload)
+        collapse_id = str(apns_body.get("tag") or "fashionrise-social")[:64]
         try:
             client = httpx.Client(http2=True, timeout=12.0)
         except ImportError:
@@ -591,7 +606,7 @@ def _send_apns(device: NativePushDevice, payload: dict[str, Any]) -> tuple[bool,
                     "apns-topic": topic,
                     "apns-push-type": "alert",
                     "apns-priority": "10",
-                    "apns-collapse-id": str(payload.get("tag") or "fashionrise-runway")[:64],
+                    "apns-collapse-id": collapse_id,
                     "content-type": "application/json",
                 },
             )

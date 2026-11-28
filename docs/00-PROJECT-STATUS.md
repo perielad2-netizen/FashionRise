@@ -3,7 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:35 Asia/Jerusalem — Live comments **#549 MERGED** + FE tip `af94b28` · APNs #550 preserved · iOS tap-dest #551 independent · no AAB/IPA
+**Last updated:** 2026-11-28 21:45 Asia/Jerusalem — iOS push nav **PHYSICALLY ACCEPTED** (TF 1.0.2/205) · #549+#551 consolidated IPA authorized · no AAB · no App Store submit
+
+## LIVE — iOS notification physical acceptance CLOSED (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Checkpoint | **CLOSED** — owner confirmed on TF **1.0.2 / build 205** |
+| Receipt | Native APNs alert received |
+| Tap navigation | Opens **correct design** + **correct comment destination** |
+| Next | Merge **#551** (explicit-field extract only) → tip latest web FE → **one** consolidated signed IPA (#549+#551) → TestFlight processing only |
+| Unchanged | Android VC **303** · APNs production · HTTP/2 · auth/signing · billing · Google reconcile APPLY=true / 300s · purchasing+credit **false** |
+| Out of scope | Further APNs investigation · Android AAB · App Store submission |
+
+## LIVE — iOS notification tap destination #551 (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Root cause (demonstrated) | Controlled probes used `url=/studio/runway`; builders defaulted missing url to rankings |
+| Fix | Default `/studio/fashionrise` · nest APNs `data.url` · FE `extractNotificationDestinationUrl` **explicit fields only** (`url`/`path`/`link` + nested `data.*`) — no arbitrary userInfo scan |
+| Cap shapes | Android flat FCM extras ≠ iOS `userInfo`/`aps` bag — verified in Cap plugin source |
+| Physical | Owner acceptance on build **205** closes the nav checkpoint (IPA still ships harden + #549 together) |
 
 ## LIVE — Live social comments sync PR #549 (2026-11-28 Asia/Jerusalem)
 
@@ -11,11 +31,9 @@
 | --- | --- |
 | PR | **#549 MERGED** `af94b280` · **web FE tip** `af94b28-live-comments` · `/version.json`=`af94b28` |
 | Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
-| Prior PM corrections | Authoritative snapshots · like protect until settle · lifecycle abort · pure updaters · Cap cleanup |
-| Bounded pre-merge | Per-comment like/unlike **in-flight guard** · seq-aware **revert** (stale failure cannot clobber newer success) · empty snapshot **force-syncs** parent `comments_count` → 0 |
-| Verify | `tsc -b` · targeted live-comments/Runway tests **53** · `npm run build` **PASS** |
-| Independent | iOS tap destination **#551** · APNs delivery **#550** — do not couple or overwrite · VPS kept tap-dest `build_apns_message_body` on API while tipping #549 FE |
-| Unchanged | Finance/billing/wallets/schema · Android VC **303** · iOS TF **1.0.2 / 205** · no new AAB/IPA |
+| Bounded corrections | Per-comment like in-flight guard · seq-aware revert · empty snapshot force-syncs parent count |
+| Coexist | Bundled with **#551** into one consolidated IPA after #551 merge |
+| Unchanged | Finance/billing/wallets/schema · Android VC **303** · no AAB |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
 
@@ -4007,11 +4025,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-0. **Exact next action (Live social comments #549):** **MERGED + FE tip `af94b28` live.** Verify Peri↔Yaniv comments appear while the modal stays open (incl. moderated removal + own post + like guard). No AAB/IPA.
+0. **Exact next action (consolidated iOS IPA):** After #551 merge + web FE tip — start Codemagic `fashionrise-ios-app-store` on main (contains #549+#551). TestFlight processing only (`submit_to_testflight=false`, `submit_to_app_store=false`). No AAB. No App Store submit.
 
-1. **Exact next action (iOS tap destination #551):** Independent of #549 — human TF tap of **comment-URL** probe (not rankings). Keep APNs #550 delivery checkpoint. No IPA until PM asks.
+1. **Exact next action (human TF):** Install new IPA; confirm live comments poll + push tap dest still OK on device. Android VC **303** unchanged.
 
-2. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No Codemagic/push/purchasing unless a concrete defect.
+2. **Exact next action (FashionRise Social):** Monitor LIVE Social; keep weekly/streak rewards **OFF** until further PM OK. No purchasing/credit enablement.
 
 3. **Exact next action (owner / Android techpack, parallel track):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
 4. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).

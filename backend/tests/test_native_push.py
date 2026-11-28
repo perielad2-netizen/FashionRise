@@ -116,6 +116,41 @@ def test_fcm_message_omits_custom_click_action():
     assert "click_action" not in json.dumps(body)
 
 
+def test_fcm_and_apns_default_url_is_fashionrise_not_rankings():
+    """Missing url must fall back to Social feed, never Runway rankings."""
+    fcm = push_service.build_fcm_message_body(
+        "fcm-token-example",
+        {"title": "t", "body": "b", "tag": "operator"},
+    )
+    assert fcm["message"]["data"]["url"] == "/studio/fashionrise"
+    assert "/studio/runway" not in json.dumps(fcm)
+
+    item = "11111111-1111-4111-8111-111111111111"
+    comment = "22222222-2222-4222-8222-222222222222"
+    comment_url = (
+        f"/studio/fashionrise?item={item}&comments=1&comment={comment}"
+    )
+    apns = push_service.build_apns_message_body(
+        {
+            "title": "New comment on FashionRise",
+            "body": "@friend on look: hi",
+            "url": comment_url,
+            "tag": f"fr-comment-{comment}",
+        }
+    )
+    assert apns["url"] == comment_url
+    assert apns["data"]["url"] == comment_url
+    assert apns["tag"] == f"fr-comment-{comment}"
+    assert apns["aps"]["alert"]["title"] == "New comment on FashionRise"
+    # Nested bag mirrors root so Cap Android-like clients still see data.url.
+    assert apns["data"]["tag"] == apns["tag"]
+
+    defaulted = push_service.build_apns_message_body({"title": "t", "body": "b"})
+    assert defaulted["url"] == "/studio/fashionrise"
+    assert defaulted["data"]["url"] == "/studio/fashionrise"
+    assert "/studio/runway" not in json.dumps(defaulted)
+
+
 def test_sanitize_push_url_allowlist():
     assert push_service.sanitize_push_url("/studio/runway") == "/studio/runway"
     assert (
