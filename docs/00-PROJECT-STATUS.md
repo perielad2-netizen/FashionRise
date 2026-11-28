@@ -3,7 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-28 21:50 Asia/Jerusalem — iOS push **PHYSICALLY ACCEPTED** · #549+#551 on main · FE tip `2af5d36` · consolidated IPA **building** · no AAB · no App Store submit
+**Last updated:** 2026-11-28 22:00 Asia/Jerusalem — Android AAB **VC 308** ready (no Play upload) · iOS TF **1.0.2 / 206** · #549+#551 on `2af5d36c` · finance gates unchanged
+
+## LIVE — Android AAB VC 308 (#549 + #551) (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Commit | **`2af5d36c`** (`main` — live comments **#549** + tap-dest harden **#551**) |
+| Codemagic | workflow `fashionrise-android-play-internal` · build **[6b0b30f1ac831da2867f025a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b30f1ac831da2867f025a)** · index **67** · **finished** |
+| versionCode | **308** (`PROJECT_BUILD_NUMBER=108` + offset **200**) · versionName **1.0** · package `app.fashionrise.studio` |
+| AAB artifact | [app-release.aab](https://api.codemagic.io/artifacts/3f973d20-37d2-43eb-8635-31f7e658073f/e06e12cb-bb1a-4766-8774-6ed1fbf5ae33/app-release.aab) · ~21 MB · R8 `mapping.txt` also published |
+| Preserved | Signing · R8 · FCM · Google Play Billing · native permissions · validated VC **303** functionality |
+| Play upload | **Not done** (artifact only — no `google_play` publish block) |
+| Finance | Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
+| Parallel | Built alongside iOS IPA **206** without interrupting it |
 
 ## LIVE — iOS notification physical acceptance CLOSED (2026-11-28 Asia/Jerusalem)
 
@@ -12,9 +25,9 @@
 | Checkpoint | **CLOSED** — owner confirmed on TF **1.0.2 / build 205** |
 | Receipt | Native APNs alert received |
 | Tap navigation | Opens **correct design** + **correct comment destination** |
-| Follow-through | **#551 MERGED** (explicit-field extract) · **#549** already on main · web FE tip **`2af5d36-live-comments-tap-dest`** · IPA Codemagic building |
-| Unchanged | Android VC **303** · APNs production · HTTP/2 · auth/signing · billing · Google reconcile APPLY=true / 300s · purchasing+credit **false** |
-| Out of scope | Further APNs investigation · Android AAB · App Store submission |
+| Follow-through | **#551 MERGED** · **#549** on main · FE tip **`2af5d36-live-comments-tap-dest`** · consolidated IPA **206** TF · Android AAB **VC 308** |
+| Unchanged | APNs production · HTTP/2 · auth/signing · billing · Google reconcile APPLY=true / 300s · purchasing+credit **false** |
+| Out of scope | Further APNs investigation · Play Console upload · App Store submission |
 
 ## LIVE — Consolidated iOS IPA (#549 + #551) (2026-11-28 Asia/Jerusalem)
 
@@ -22,8 +35,9 @@
 | --- | --- |
 | Commit | **`2af5d36c`** (`main` merge of #551 atop #549) |
 | Marketing | **1.0.2** |
-| Codemagic | workflow `fashionrise-ios-app-store` · build **[6b0b2f08639b7b011204916a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b2f08639b7b011204916a)** · index **39** · status **building** |
-| CFBundleVersion | `PROJECT_BUILD_NUMBER + 100` (stamp from build log when finished; must be **>205**) |
+| Codemagic | workflow `fashionrise-ios-app-store` · build **[6b0b2f08639b7b011204916a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b2f08639b7b011204916a)** · index **39** · **finished** |
+| CFBundleVersion | **206** (`PROJECT_BUILD_NUMBER=106` + offset **100**) |
+| IPA artifact | [App.ipa](https://api.codemagic.io/artifacts/34bbbf25-dde1-4e3c-ae33-fc1c59fa6300/8657702a-f901-4ee1-b910-1a8e5632e7a2/App.ipa) |
 | Publish | ASC upload for TestFlight processing · `submit_to_testflight=false` · `submit_to_app_store=false` |
 | FE tip | `/version.json`=`2af5d36` · release `2af5d36-live-comments-tap-dest` |
 | Contains | Live comments poll (**#549**) + tap-dest extract/BE defaults (**#551**) + APNs h2 (**#550**) |
@@ -44,8 +58,8 @@
 | PR | **#549 MERGED** `af94b280` · **web FE tip** `af94b28-live-comments` · `/version.json`=`af94b28` |
 | Architecture | Shared React **3s** poll via `listGalleryComments` — Web / PWA / Android / iOS shells |
 | Bounded corrections | Per-comment like in-flight guard · seq-aware revert · empty snapshot force-syncs parent count |
-| Coexist | Bundled with **#551** into one consolidated IPA after #551 merge |
-| Unchanged | Finance/billing/wallets/schema · Android VC **303** · no AAB |
+| Coexist | Bundled with **#551** into consolidated IPA **206** + Android AAB **VC 308** |
+| Unchanged | Finance/billing/wallets/schema · Google purchasing/credit **false** |
 
 ## LIVE — iOS APNs delivery root cause + VPS fix (2026-11-28 Asia/Jerusalem)
 
@@ -79,9 +93,9 @@
 | Field | Value |
 | --- | --- |
 | Checkpoint | **COMPLETE** — PM confirmed **all 10** Android physical-device notification acceptance checks **passed** |
-| Tested build | **versionCode=303** · versionName **1.0** · Codemagic build **`6b0b151bb8635dd0d8dee1b5`** (index **65**) |
+| Accepted build | **versionCode=303** · versionName **1.0** · Codemagic build **`6b0b151bb8635dd0d8dee1b5`** (index **65**) |
+| Latest AAB | **versionCode=308** on commit **`2af5d36c`** (#549+#551) — see LIVE Android AAB VC 308 · **no Play upload** |
 | Contract | Unified destinations from **#545** / `e1256d48` (no account Web Push suppression) |
-| Next Android | **No further Android builds or notification development** unless a concrete defect is found |
 | Play upload | **Not done** (sideload / internal artifact only) |
 
 ## LIVE — Web/PWA notification acceptance verification (2026-11-28 Asia/Jerusalem)
@@ -107,9 +121,11 @@
 | Delivery | Web Push + native both fan out · per-browser toggle only · no UA/#544 suppress · no account prefer-native |
 | Capability | `android_enabled=true` · `ios_enabled=true` · VAPID public key served · nginx devices allowlist **PASS** |
 | Finance | **UNCHANGED / CLOSED** · Google PURCHASING/CREDIT **false** · RECONCILE/APPLY **true** · INTERVAL **300** |
-| Android AAB | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** · **versionCode=303** · **PM acceptance PASS** · **no Play upload** · **no more Android builds** |
-| AAB artifact | VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
-| iOS IPA | Build **`6b0b1ae8…`** failed ASC publish (**90186** / closed **1.0.1**) · IPA existed as 1.0.1/(204) · **rebuilding on train 1.0.2** — no App Store submit |
+| Android AAB (accepted) | Codemagic **[build 6b0b151bb8635dd0d8dee1b5](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b151bb8635dd0d8dee1b5)** · **versionCode=303** · **PM acceptance PASS** · **no Play upload** |
+| Android AAB (latest) | Codemagic **[build 6b0b30f1ac831da2867f025a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b30f1ac831da2867f025a)** · **versionCode=308** · commit **`2af5d36c`** · **no Play upload** |
+| AAB artifact (303) | VPS `/var/www/fashionrise/artifacts/android/FashionRise-e1256d48-vc303-internal.aab` |
+| AAB artifact (308) | [app-release.aab](https://api.codemagic.io/artifacts/3f973d20-37d2-43eb-8635-31f7e658073f/e06e12cb-bb1a-4766-8774-6ed1fbf5ae33/app-release.aab) |
+| iOS IPA | Consolidated TF **1.0.2 / CFBundleVersion 206** · build **[6b0b2f08639b7b011204916a](https://codemagic.io/app/6af02a273091aee27fc6ea0d/build/6b0b2f08639b7b011204916a)** · commit **`2af5d36c`** · no App Store submit |
 
 ## LIVE — Google Play financial reconcile APPLY on + GPA.3363 recovered (2026-11-28 Asia/Jerusalem)
 
