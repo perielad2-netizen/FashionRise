@@ -3,7 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-27 16:12 Asia/Jerusalem — #540/#541/#542 MERGED+deployed · tap opens · friend alerts · apply OFF
+**Last updated:** 2026-11-28 18:20 Asia/Jerusalem — license testers synced · native social FCM confirmed · GPA.3363 recover_full would 50 · apply OFF · native/web dedupe shipping
+
+## LIVE — License testers + native FCM + GPA.3363 (2026-11-28 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| License testers (VPS) | `fashionriseapp@gmail.com`, `perielad@gmail.com`, `perielad2@gmail.com`, `yanivprbk@gmail.com` + preserved `perielad2+iap-sandbox@gmail.com` |
+| Public gates | `PURCHASING=false` · `CREDIT=false` · Sandbox credit only via allowlist |
+| Purchase protection | `perielad@` / `yanivprbk@` unlimited → shop purchasing **OFF**; `perielad2@` finite override (purchase tests) → purchasing **ON** for tester; `fashionriseapp@` finite tester |
+| Native social FCM | **Confirmed** 17:59 IL — Yaniv received real Runway **comment** as native FashionRise notification (also Chrome Web Push → duplicate) |
+| versionCode diagnostics | `native_push_devices.app_version` is **null** for Yaniv/Peri — installed VC **not** available from server diagnostics |
+| Same-device dedupe | Prefer native when active Android/iOS registration + matching mobile Web Push UA; desktop Web Push kept; subscriptions not deleted |
+| GPA.3363 | `stars_50` Sandbox · `orders.get` **REFUNDED** full · entitlement **canceled** · RTDN rows **0** · ledger outstanding **50** · wallet **999397** · dry-run **`recover_full` would 50** · blocked **only** by `IAP_GOOGLE_FINANCIAL_RECONCILE_APPLY=false` |
+| Expected after apply | wallet **999397→999347** (50 Stars) — **do not** manual claw; validate via scheduler after PM enablement |
+| Permanent apply | **OFF** — prepared; await explicit authorization |
 
 ## LIVE — Push + reconcile readiness complete for PM gate (2026-11-27 Asia/Jerusalem)
 

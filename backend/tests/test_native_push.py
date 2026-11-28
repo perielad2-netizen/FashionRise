@@ -217,3 +217,83 @@ def test_notify_skips_native_when_disabled(client, db_session, monkeypatch):
         assert send.call_count == 0
 
     _ = tokens
+
+
+def test_web_push_ua_platform_detection():
+    assert (
+        push_service.web_push_ua_platform(
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/157.0.0.0 Mobile Safari/537.36"
+        )
+        == "android"
+    )
+    assert (
+        push_service.web_push_ua_platform(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
+        )
+        == "ios"
+    )
+    assert (
+        push_service.web_push_ua_platform(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        )
+        is None
+    )
+    assert push_service.web_push_ua_platform(None) is None
+
+
+def test_notify_prefers_native_over_same_device_web_push(client, db_session, monkeypatch):
+    """Android Chrome Web Push is skipped when an active native Android token exists."""
+    _enable_android_flags(monkeypatch)
+    monkeypatch.setenv("VAPID_PUBLIC_KEY", "BK" + ("x" * 86))
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "private-test-key")
+    from app.core.config import get_settings
+    from app.models.push_subscription import PushSubscription
+
+    get_settings.cache_clear()
+
+    tokens = register_with_invite(client, db_session, "np.dedupe@example.com", "npDedupe")
+    user = db_session.query(User).filter(User.email == "np.dedupe@example.com").one()
+    db_session.add(
+        NativePushDevice(user_id=user.id, platform="android", device_token="n" * 40)
+    )
+    android_web = PushSubscription(
+        user_id=user.id,
+        endpoint="https://fcm.googleapis.com/fcm/send/android-chrome",
+        p256dh="p256dh-android",
+        auth="auth-android",
+        user_agent=(
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/157.0.0.0 Mobile Safari/537.36"
+        ),
+    )
+    desktop_web = PushSubscription(
+        user_id=user.id,
+        endpoint="https://fcm.googleapis.com/fcm/send/desktop-chrome",
+        p256dh="p256dh-desktop",
+        auth="auth-desktop",
+        user_agent=(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+    )
+    db_session.add_all([android_web, desktop_web])
+    db_session.commit()
+
+    with (
+        patch.object(push_service, "_send_fcm", return_value=(True, False)) as send_fcm,
+        patch.object(push_service, "_send_one", return_value=(True, False)) as send_web,
+    ):
+        n = push_service.notify_user(
+            db_session, user.id, title="New comment", body="dup check", tag="runway-comment-x"
+        )
+        assert send_fcm.call_count == 1
+        assert send_web.call_count == 1  # desktop only
+        assert send_web.call_args.args[0].endpoint.endswith("desktop-chrome")
+        assert n == 2
+
+    # Subscriptions retained (skip is send-time only).
+    remaining = (
+        db_session.query(PushSubscription).filter(PushSubscription.user_id == user.id).count()
+    )
+    assert remaining == 2
+    _ = tokens
